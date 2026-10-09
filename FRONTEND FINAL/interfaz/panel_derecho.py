@@ -150,7 +150,7 @@ class PanelDerecho(ctk.CTkFrame):
         # 2. Medidores circulares (Trace y Total) con tarjeta blanca y borde 2px
         top_gauges = ctk.CTkFrame(self, fg_color="transparent")
         top_gauges.pack(side="top", fill="x", pady=(2, 4))
-        ctk.CTkLabel(top_gauges, text="PROGRESO DE CORTE", font=self.f_head, text_color=COLOR_TEXT, anchor="w").pack(fill="x")
+        ctk.CTkLabel(top_gauges, text="CUTTING PROGRESS", font=self.f_head, text_color=COLOR_TEXT, anchor="w").pack(fill="x")
 
         self.card_gauges = ctk.CTkFrame(
             self,
@@ -184,7 +184,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.lbl_daq_tiempo = ctk.CTkLabel(
             daq_row1,
-            text="⏱ T. EST.: 0.000 s",
+            text="⏱ EST. TIME: 0.000 s",
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
@@ -221,7 +221,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.box_trace = ctk.CTkFrame(self, fg_color="transparent")
         self.box_trace.pack(side="top", fill="both", expand=True, pady=(2, 4))
 
-        self.lbl_trace = ctk.CTkLabel(self.box_trace, text="SEGUIMIENTO LÁSER (ZOOM 4X)", font=self.f_head, text_color=COLOR_TEXT, anchor="w")
+        self.lbl_trace = ctk.CTkLabel(self.box_trace, text="LASER TRACKING (4X ZOOM)", font=self.f_head, text_color=COLOR_TEXT, anchor="w")
         self.lbl_trace.pack(side="top", fill="x", pady=(0, 4))
 
         self.card_trace = ctk.CTkFrame(
@@ -315,7 +315,7 @@ class PanelDerecho(ctk.CTkFrame):
         # Botón para centrar y aplicar
         self.btn_set_home = ctk.CTkButton(
             self.card_home_popup,
-            text="Centrar",
+            text="Center",
             command=self._cb_aplicar_centro,
             fg_color=COLOR_CARD,
             text_color=COLOR_TEXT,
@@ -394,7 +394,7 @@ class PanelDerecho(ctk.CTkFrame):
 
     def set_metricas_estimadas(self, tiempo_s: float, n_muestras: int, max_vx: float, max_vy: float):
         """Actualiza las métricas analíticas del monitor DAQ (tiempo exacto y voltajes máx)."""
-        self.lbl_daq_tiempo.configure(text=f"⏱ T. EST.: {tiempo_s:.3f} s")
+        self.lbl_daq_tiempo.configure(text=f"⏱ EST. TIME: {tiempo_s:.3f} s")
         self.lbl_daq_muestras.configure(text=f"[ {n_muestras:,} pts @ 100kS/s ]")
         v_max = max(max_vx, max_vy)
         self.lbl_daq_voltaje_max.configure(text=f"|V|_max: ±{v_max:.2f} V")
@@ -404,11 +404,27 @@ class PanelDerecho(ctk.CTkFrame):
         self.lbl_daq_voltaje_live.configure(text=f"⚡ AO: Vx = {vx:+.2f} V | Vy = {vy:+.2f} V")
 
     # Renderizado de medidores
-    def dibujar_gauges(self, pct_trace: Optional[float] = None, pct_total: Optional[float] = None):
+    def dibujar_gauges(self, pct_trace: Optional[float] = None, pct_total: Optional[float] = None, forzar: bool = False):
         if pct_trace is not None:
             self.pct_trace = pct_trace
         if pct_total is not None:
             self.pct_total = pct_total
+
+        if not hasattr(self, "_last_drawn_pct_trace"):
+            self._last_drawn_pct_trace = -1.0
+            self._last_drawn_pct_total = -1.0
+
+        cambio = forzar
+        if abs(self._last_drawn_pct_trace - self.pct_trace) >= 0.5 or self.pct_trace in (0.0, 100.0):
+            cambio = True
+        if abs(self._last_drawn_pct_total - self.pct_total) >= 0.5 or self.pct_total in (0.0, 100.0):
+            cambio = True
+
+        if not cambio:
+            return
+
+        self._last_drawn_pct_trace = self.pct_trace
+        self._last_drawn_pct_total = self.pct_total
 
         c = self.canvas_gauges
         c.delete("all")
@@ -423,11 +439,11 @@ class PanelDerecho(ctk.CTkFrame):
 
         c1_x = w * 0.28
         c1_y = h * 0.56
-        self._dibujar_un_gauge(c, c1_x, c1_y, r, grosor, self.pct_trace, "Trazo Actual")
+        self._dibujar_un_gauge(c, c1_x, c1_y, r, grosor, self.pct_trace, "Current Stroke")
 
         c2_x = w * 0.72
         c2_y = h * 0.56
-        self._dibujar_un_gauge(c, c2_x, c2_y, r, grosor, self.pct_total, "Total Acumulado")
+        self._dibujar_un_gauge(c, c2_x, c2_y, r, grosor, self.pct_total, "Total Progress")
 
     def _dibujar_un_gauge(self, c: tk.Canvas, cx: float, cy: float, r: float, grosor: float, pct: float, titulo: str):
         c.create_text(cx, cy - r - 10, text=titulo, font=(FONT_TEACHERS, 10, "bold"), fill=COLOR_TEXT)
@@ -447,7 +463,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         c.create_text(cx, cy, text=f"{int(round(pct))} %", font=(FONT_TEACHERS, 12, "bold"), fill=COLOR_TEXT)
 
-    # Renderizado Trace Point (Zoom 4x)
+    # Renderizado Trace Point (Zoom 4x con Viewport Culling)
     def redibujar_trace(
         self,
         trazos: Optional[List[List[Tuple[float, float]]]] = None,
@@ -475,9 +491,22 @@ class PanelDerecho(ctk.CTkFrame):
         lx, ly = self.pos_laser_actual
         zoom_factor = 45.0
 
+        # Límites del Viewport en cm con margen de seguridad
+        half_w_cm = (cx / zoom_factor) + 0.4
+        half_h_cm = (cy / zoom_factor) + 0.4
+        min_x = lx - half_w_cm
+        max_x = lx + half_w_cm
+        min_y = ly - half_h_cm
+        max_y = ly + half_h_cm
+
         if self.trazos_actuales:
+            # 1. Trazos base con culling por bounding box
             for ruta in self.trazos_actuales:
                 if len(ruta) < 2:
+                    continue
+                xs = [pt[0] for pt in ruta]
+                ys = [pt[1] for pt in ruta]
+                if max(xs) < min_x or min(xs) > max_x or max(ys) < min_y or min(ys) > max_y:
                     continue
                 coords = []
                 for pt in ruta:
@@ -486,7 +515,13 @@ class PanelDerecho(ctk.CTkFrame):
                     coords.extend([px, py])
                 c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=3.0, capstyle="round")
 
+            # 2. Trazos completados con culling de segmentos individuales
             for p1, p2 in self.trazos_completados:
+                if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x):
+                    continue
+                if (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
+                    continue
+
                 px1 = cx + (p1[0] - lx) * zoom_factor
                 py1 = cy - (p1[1] - ly) * zoom_factor
                 px2 = cx + (p2[0] - lx) * zoom_factor

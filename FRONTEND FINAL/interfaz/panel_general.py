@@ -39,6 +39,13 @@ class PanelGeneral(ctk.CTkFrame):
         self.ancho_base_cm = 10.0
         self.alto_base_cm = 10.0
 
+        # Parámetros de transformación a píxeles para renderizado incremental rápido
+        self._escala_pixel: float = 1.0
+        self._base_x0: float = 0.0
+        self._base_y0: float = 0.0
+        self._base_h_px: float = 0.0
+        self._cursor_id: Optional[int] = None
+
         self._crear_widgets()
 
     def _crear_widgets(self):
@@ -48,7 +55,7 @@ class PanelGeneral(ctk.CTkFrame):
 
         self.lbl_title = ctk.CTkLabel(
             top_header,
-            text="CANVAS VECTORIAL (ISOMÉTRICO 1:1)",
+            text="VECTOR CANVAS (1:1 ISOMETRIC)",
             font=self.f_head,
             text_color=COLOR_TEXT,
             anchor="w"
@@ -61,14 +68,14 @@ class PanelGeneral(ctk.CTkFrame):
 
         ctk.CTkLabel(
             legend_frame,
-            text="― Marcado (Láser ON)",
+            text="― Marking (Laser ON)",
             font=self.f_legend,
             text_color="#475569"
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkLabel(
             legend_frame,
-            text="┄ Salto rápido (Láser OFF)",
+            text="┄ Rapid Move (Laser OFF)",
             font=self.f_legend,
             text_color="#D97706"
         ).pack(side="left")
@@ -77,7 +84,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.footer_area = ctk.CTkFrame(self, fg_color="transparent", height=34)
         self.footer_area.pack(side="bottom", fill="x", pady=(6, 0))
 
-        lbl_area = ctk.CTkLabel(self.footer_area, text="CAMPO DE TRABAJO:", font=self.f_bold, text_color=COLOR_TEXT)
+        lbl_area = ctk.CTkLabel(self.footer_area, text="WORKING FIELD:", font=self.f_bold, text_color=COLOR_TEXT)
         lbl_area.pack(side="left", padx=(2, 6))
 
         # Píldora editable X
@@ -219,40 +226,37 @@ class PanelGeneral(ctk.CTkFrame):
         rango_w = max(0.1, self.ancho_base_cm)
         rango_h = max(0.1, self.alto_base_cm)
 
-        escala_pixel = min(draw_w / rango_w, draw_h / rango_h) * 0.92
+        self._escala_pixel = min(draw_w / rango_w, draw_h / rango_h) * 0.92
 
-        base_w_px = rango_w * escala_pixel
-        base_h_px = rango_h * escala_pixel
-        base_x0 = mx + (draw_w - base_w_px) / 2
-        base_y0 = 15 + (draw_h - base_h_px) / 2
+        base_w_px = rango_w * self._escala_pixel
+        base_h_px = rango_h * self._escala_pixel
+        self._base_x0 = mx + (draw_w - base_w_px) / 2
+        self._base_y0 = 15 + (draw_h - base_h_px) / 2
+        self._base_h_px = base_h_px
+        self._cursor_id = None
 
         # Rectángulo del campo óptico F-Theta
         c.create_rectangle(
-            base_x0, base_y0,
-            base_x0 + base_w_px, base_y0 + base_h_px,
+            self._base_x0, self._base_y0,
+            self._base_x0 + base_w_px, self._base_y0 + base_h_px,
             outline="#94A3B8", width=1.5, dash=(6, 4)
         )
 
         # Cruz del centro óptico nativo (0, 0)
-        cx_px = base_x0 + base_w_px / 2.0
-        cy_px = base_y0 + base_h_px / 2.0
+        cx_px = self._base_x0 + base_w_px / 2.0
+        cy_px = self._base_y0 + base_h_px / 2.0
         c.create_line(cx_px - 8, cy_px, cx_px + 8, cy_px, fill="#CBD5E1", width=1.5)
         c.create_line(cx_px, cy_px - 8, cx_px, cy_px + 8, fill="#CBD5E1", width=1.5)
 
         if not self.trazos_actuales and not self.saltos_actuales:
-            c.create_text(w // 2, h // 2, text="Sin archivo cargado (DXF / G-code)", font=(FONT_TEACHERS, 14), fill="#94A3B8")
+            c.create_text(w // 2, h // 2, text="No file loaded (DXF / G-code)", font=(FONT_TEACHERS, 14), fill="#94A3B8")
             return
-
-        def to_px(x_cm, y_cm):
-            px = base_x0 + x_cm * escala_pixel
-            py = (base_y0 + base_h_px) - (y_cm * escala_pixel)
-            return px, py
 
         # 1. Dibujar saltos rápidos en vacío (G0 / láser OFF) con línea discontinua ámbar
         for salto in self.saltos_actuales:
             p1, p2 = salto
-            px1, py1 = to_px(p1[0], p1[1])
-            px2, py2 = to_px(p2[0], p2[1])
+            px1, py1 = self.to_px(p1[0], p1[1])
+            px2, py2 = self.to_px(p2[0], p2[1])
             c.create_line(px1, py1, px2, py2, fill="#F59E0B", width=1.2, dash=(4, 4), capstyle="round")
 
         # 2. Dibujar geometría de corte base completa (láser ON) en línea sólida gris oscuro
@@ -261,16 +265,57 @@ class PanelGeneral(ctk.CTkFrame):
                 continue
             coords = []
             for pt in ruta:
-                px, py = to_px(pt[0], pt[1])
+                px, py = self.to_px(pt[0], pt[1])
                 coords.extend([px, py])
             c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=2.5, capstyle="round", joinstyle="round")
 
         # 3. Dibujar segmentos completados durante ejecución activa en azul eléctrico
         for segmento in self.trazos_completados:
             p1, p2 = segmento
-            px1, py1 = to_px(p1[0], p1[1])
-            px2, py2 = to_px(p2[0], p2[1])
-            c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=3.5, capstyle="round")
+            px1, py1 = self.to_px(p1[0], p1[1])
+            px2, py2 = self.to_px(p2[0], p2[1])
+            c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=3.5, capstyle="round", tags="trazos_completados")
+
+    def to_px(self, x_cm: float, y_cm: float) -> Tuple[float, float]:
+        """Convierte coordenadas físicas [cm] a coordenadas en píxeles del Canvas."""
+        px = self._base_x0 + x_cm * self._escala_pixel
+        py = (self._base_y0 + self._base_h_px) - (y_cm * self._escala_pixel)
+        return px, py
+
+    def agregar_segmento_progreso(self, p1: Tuple[float, float], p2: Tuple[float, float]):
+        """Dibuja de forma incremental el nuevo micro-segmento cortado sin redibujar todo el Canvas (O(1))."""
+        if self._escala_pixel <= 0:
+            return
+        px1, py1 = self.to_px(p1[0], p1[1])
+        px2, py2 = self.to_px(p2[0], p2[1])
+        self.canvas.create_line(
+            px1, py1, px2, py2,
+            fill=COLOR_BLUE, width=3.5, capstyle="round",
+            tags="trazos_completados"
+        )
+        self.actualizar_cursor_laser(p2[0], p2[1])
+
+    def actualizar_cursor_laser(self, x_cm: float, y_cm: float):
+        """Mueve el cursor del cabezal láser en el canvas general con sobrecarga mínima."""
+        if self._escala_pixel <= 0:
+            return
+        px, py = self.to_px(x_cm, y_cm)
+        r = 4.0
+        if self._cursor_id is None or not self.canvas.find_withtag("cursor_laser"):
+            self._cursor_id = self.canvas.create_oval(
+                px - r, py - r, px + r, py + r,
+                fill="#EF4444", outline="#FFFFFF", width=1.5,
+                tags="cursor_laser"
+            )
+        else:
+            self.canvas.coords("cursor_laser", px - r, py - r, px + r, py + r)
+            self.canvas.tag_raise("cursor_laser")
+
+    def limpiar_progreso(self):
+        """Elimina únicamente los trazos completados y el cursor láser del canvas general."""
+        self.canvas.delete("trazos_completados")
+        self.canvas.delete("cursor_laser")
+        self._cursor_id = None
 
     def _dibujar_reglas(self, c: tk.Canvas, mx: int, draw_h: int, draw_w: int):
         c.create_line(mx, 15, mx, draw_h + 15, fill=COLOR_BORDER, width=BRUTAL_BORDER)

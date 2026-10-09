@@ -218,10 +218,15 @@ class ControladorThorlabsGVS:
             f"  |Vy|_max          : {float(np.max(np.abs(M[1]))):.3f} V"
         )
 
-        # Simular retardo realista de ejecucion (limitado a 2 s para no bloquear la GUI)
+        # Simular retardo realista de ejecucion (fraccionado para responder al instante a cancelaciones)
         retardo_sim = min(tiempo_total_s, 2.0)
-        time.sleep(retardo_sim)
-        print("[Thorlabs GVS112/M] [SIM] Barrido simulado completado.")
+        t_inicio_sim = time.time()
+        while (time.time() - t_inicio_sim) < retardo_sim:
+            if not self._ejecutando:
+                break
+            time.sleep(0.02)
+        if self._ejecutando:
+            print("[Thorlabs GVS112/M] [SIM] Barrido simulado completado.")
 
     # ------------------------------------------------------------------
     # API de compatibilidad con el flujo DXF existente

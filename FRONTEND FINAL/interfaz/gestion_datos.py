@@ -35,9 +35,9 @@ class GestionDatosMixin:
         modo = getattr(self.puente.controlador_hardware, 'modo', 'SIMULACION')
         self.barra_superior.set_modo_thorlabs(modo)
         if self.puente.esta_conectado_fisico():
-            self.terminal.log(f"[HARDWARE] Thorlabs GVS112/M conectado físicamente (PXI-6229 REAL)")
+            self.terminal.log(f"[HARDWARE] Thorlabs GVS112/M physically connected (REAL PXI-6229)")
         else:
-            self.terminal.log(f"[HARDWARE] Thorlabs GVS112/M en MODO: SIMULACIÓN VIRTUAL")
+            self.terminal.log(f"[HARDWARE] Thorlabs GVS112/M in VIRTUAL SIMULATION MODE")
 
         # 3. Archivos DXF / G-code
         dxfs = self.puente.listar_archivos_dxf()
@@ -71,14 +71,14 @@ class GestionDatosMixin:
 
             tipo_archivo = "G-CODE" if self.puente.es_gcode else "DXF"
             self.terminal.log(
-                f"[{tipo_archivo}] Cargado: {res['archivo']} "
-                f"({res['num_trazos']} trazos, {res['num_waypoints']} waypoints | "
-                f"T.Est: {t_est:.3f}s | |V|_max: ±{max(max_vx, max_vy):.2f}V)"
+                f"[{tipo_archivo}] Loaded: {res['archivo']} "
+                f"({res['num_trazos']} strokes, {res['num_waypoints']} waypoints | "
+                f"Est. Time: {t_est:.3f}s | |V|_max: ±{max(max_vx, max_vy):.2f}V)"
             )
 
             self.trazos_completados.clear()
             self._aplicar_limites_hardware()
             self._actualizar_vistas_canvases()
-            self.panel_derecho.dibujar_gauges(0.0, 0.0)
+            self.panel_derecho.dibujar_gauges(0.0, 0.0, forzar=True)
         except Exception as e:
-            messagebox.showerror("Error de Archivo", f"No se pudo cargar el archivo: {e}")
+            messagebox.showerror("File Error", f"Could not load file: {e}")

@@ -73,7 +73,7 @@ class AppLaserCTk(
         super().__init__()
 
         # Configuración de ventana Cyber-Brutalism
-        self.title("UFE Laser — Estación de Trabajo Vectorial")
+        self.title("UFE Laser — Vector Workstation")
         self.geometry("1280x760")
         self.minsize(1150, 700)
         ctk.set_appearance_mode("light")
@@ -110,17 +110,40 @@ class AppLaserCTk(
         self.protocol("WM_DELETE_WINDOW", self._on_cerrar_aplicacion)
 
     def _on_cerrar_aplicacion(self):
-        """Libera de forma segura los recursos del hardware y cierra la aplicación."""
+        """Libera de forma segura los recursos del hardware y cierra la aplicación inmediatamente."""
+        self._cerrando = True
+        if hasattr(self, "puente") and self.puente:
+            self.puente.cerrando = True
+
+        # 1. Cancelar bucle de temporizador
+        if hasattr(self, "_timer_loop_id") and self._timer_loop_id:
+            try:
+                self.after_cancel(self._timer_loop_id)
+            except Exception:
+                pass
+            self._timer_loop_id = None
+
+        # 2. Detener ejecución de hardware en curso
         try:
-            if self.puente.en_ejecucion:
+            if self.puente and self.puente.en_ejecucion:
                 self.puente.detener_ejecucion()
-            if self.puente.esta_conectado_fisico():
-                self.puente.apagar_laser()
-                if self.puente.controlador_hardware:
-                    self.puente.controlador_hardware.cerrar()
         except Exception:
             pass
-        self.destroy()
+
+        # 3. Apagar láser y cerrar recursos DAQ
+        try:
+            if self.puente and self.puente.controlador_hardware:
+                if hasattr(self.puente.controlador_hardware, "abortar_inmediato"):
+                    self.puente.controlador_hardware.abortar_inmediato()
+                self.puente.controlador_hardware.cerrar()
+        except Exception:
+            pass
+
+        # 4. Destruir ventana de forma limpia
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     # =========================================================================
     # CONSTRUCCIÓN DE LAYOUT Y COMPONENTES

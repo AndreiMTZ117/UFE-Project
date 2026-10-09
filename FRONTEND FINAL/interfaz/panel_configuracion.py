@@ -64,7 +64,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         header_container = ctk.CTkFrame(self, fg_color="transparent")
         header_container.pack(side="top", fill="x", padx=6, pady=(2, 4))
 
-        lbl_sec = ctk.CTkLabel(header_container, text="RECETA & PARÁMETROS", font=self.f_head, text_color=COLOR_TEXT, anchor="w")
+        lbl_sec = ctk.CTkLabel(header_container, text="RECIPE & PARAMETERS", font=self.f_head, text_color=COLOR_TEXT, anchor="w")
         lbl_sec.pack(fill="x", pady=(0, 2))
 
         header_frame = ctk.CTkFrame(header_container, fg_color="transparent")
@@ -83,7 +83,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         self.opt_receta = BrutalOptionMenu(
             receta_box,
-            values=["Acrílico — Estándar"],
+            values=["Acrylic — Standard"],
             command=self._cb_receta_seleccionada,
             fg_color=COLOR_CARD,
             text_color=COLOR_TEXT,
@@ -157,17 +157,17 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.scroll_params.pack(side="top", fill="both", expand=True, padx=2, pady=2)
 
         campos = [
-            ("Velocidad trazado", "velocidad_trazado", "mm/s", "2.0"),
-            ("Velocidad viaje", "velocidad_viaje", "mm/s", "3.5"),
-            ("Duración mín. seg", "duracion_min_segmento_ms", "ms", "50"),
-            ("Duración mín. viaje", "duracion_min_viaje_ms", "ms", "300"),
+            ("Marking speed", "velocidad_trazado", "mm/s", "2.0"),
+            ("Travel speed", "velocidad_viaje", "mm/s", "3.5"),
+            ("Min segment duration", "duracion_min_segmento_ms", "ms", "50"),
+            ("Min travel duration", "duracion_min_viaje_ms", "ms", "300"),
             ("Laser ON delay", "laser_on_delay_ms", "ms", "50"),
             ("Laser OFF delay", "laser_off_delay_ms", "ms", "30"),
             ("Mark delay", "mark_delay_ms", "ms", "20"),
             ("Jump delay", "jump_delay_ms", "ms", "100"),
-            ("Tolerancia RDP", "tolerancia_rdp", "mm", "0.005"),
-            ("Tolerancia unión", "tolerancia_union", "mm", "0.08"),
-            ("Escala dibujo", "escala_dibujo", "ratio", "0.78"),
+            ("RDP tolerance", "tolerancia_rdp", "mm", "0.005"),
+            ("Join tolerance", "tolerancia_union", "mm", "0.08"),
+            ("Drawing scale", "escala_dibujo", "ratio", "0.78"),
         ]
 
         for label_text, key, unit, val_def in campos:
@@ -216,7 +216,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         top_rot = ctk.CTkFrame(card_rot, fg_color="transparent")
         top_rot.pack(fill="x", padx=6, pady=(3, 1))
-        ctk.CTkLabel(top_rot, text="Rotación", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
+        ctk.CTkLabel(top_rot, text="Rotation", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
         # Entry editable para ángulo exacto
         self.entry_rot = ctk.CTkEntry(

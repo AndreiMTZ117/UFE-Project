@@ -86,7 +86,7 @@ class BarraSuperior(ctk.CTkFrame):
         # Etiqueta de modo
         self.lbl_modo = ctk.CTkLabel(
             self.estado_frame,
-            text="MODO: SIMULACIÓN",
+            text="MODE: SIMULATION",
             font=self.f_badge,
             text_color=COLOR_TEXT,
             width=190,
@@ -101,7 +101,7 @@ class BarraSuperior(ctk.CTkFrame):
         # ── 2b. Selector de archivo DXF / G-code ──────────────────────────────
         self.opt_dxf = BrutalOptionMenu(
             self.capsule_box,
-            values=["Cargando..."],
+            values=["Loading..."],
             command=self._cb_dxf,
             fg_color=COLOR_CARD,
             text_color=COLOR_TEXT,
@@ -151,16 +151,16 @@ class BarraSuperior(ctk.CTkFrame):
         Parámetros
         ----------
         modo : str
-            'SIMULACION' → LED gris + etiqueta «MODO: SIMULACIÓN»
-            'REAL'       → LED verde + etiqueta «MODO: PXI-6229 REAL»
+            'SIMULACION' → LED gris + etiqueta «MODE: SIMULATION»
+            'REAL'       → LED verde + etiqueta «MODE: PXI-6229 REAL»
         """
         if modo.upper() == 'REAL':
             color_led   = COLOR_GREEN
-            texto_modo  = "MODO: PXI-6229 REAL"
+            texto_modo  = "MODE: PXI-6229 REAL"
             color_texto = COLOR_GREEN
         else:
             color_led   = "#64748B"
-            texto_modo  = "MODO: SIMULACIÓN"
+            texto_modo  = "MODE: SIMULATION"
             color_texto = "#64748B"
 
         self.led_canvas.itemconfig(self._led_circle, fill=color_led)

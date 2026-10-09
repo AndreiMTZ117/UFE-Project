@@ -648,7 +648,7 @@ class PuenteLaser:
         trazos = self.trazos_calibrados
         if not trazos:
             self._en_ejecucion = False
-            on_finished("ERROR", "No hay trayectorias calculadas para ejecutar", 0)
+            on_finished("ERROR", "No calculated toolpaths to execute", 0)
             return
 
         v_trazado = float(params.get("velocidad_trazado", VELOCIDAD_MARCADO_MM_S))
@@ -659,11 +659,11 @@ class PuenteLaser:
         total_trazos = len(trazos)
         total_puntos = sum(len(t) for t in trazos)
 
-        on_log(f"=== INICIO DE CORTE / TRAZADO: {self.nombre_dxf_actual} ===")
-        on_log(f"Hardware: {self.obtener_nombre_hardware()} | Modo: {'HARDWARE ACTIVO (PXI-6229)' if self.esta_conectado_fisico() else 'SIMULACIÓN VIRTUAL'}")
-        on_log(f"Trazos: {total_trazos} | Waypoints totales: {total_puntos}")
-        on_log(f"Tiempo analitico estimado: {self.tiempo_estimado_s:.4f} s ({self.n_muestras_daq:,} muestras)")
-        on_log(f"Velocidad marcado: {v_trazado} mm/s | Salto rápido: {v_viaje} mm/s")
+        on_log(f"=== STARTING CUT / MARKING: {self.nombre_dxf_actual} ===")
+        on_log(f"Hardware: {self.obtener_nombre_hardware()} | Mode: {'ACTIVE HARDWARE (PXI-6229)' if self.esta_conectado_fisico() else 'VIRTUAL SIMULATION'}")
+        on_log(f"Strokes: {total_trazos} | Total Waypoints: {total_puntos}")
+        on_log(f"Estimated analytical time: {self.tiempo_estimado_s:.4f} s ({self.n_muestras_daq:,} samples)")
+        on_log(f"Marking speed: {v_trazado} mm/s | Rapid jump: {v_viaje} mm/s")
 
         try:
             # 1. Construir waypoints de telemetría para GUI
@@ -732,14 +732,14 @@ class PuenteLaser:
                             velocidad_salto=v_viaje
                         )
                 except Exception as e_drv:
-                    on_log(f"[Thorlabs GVS] Excepcion en driver: {e_drv}")
+                    on_log(f"[Thorlabs GVS] Driver exception: {e_drv}")
 
             hilo_tx = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
             hilo_tx.start()
 
             # 3. Telemetría visual en tiempo real sincronizada a ~35 fps
             for wp in waypoints:
-                if self._evento_detener.is_set():
+                if self._evento_detener.is_set() or getattr(self, "cerrando", False):
                     estado = "DETENIDO"
                     break
 
@@ -747,12 +747,12 @@ class PuenteLaser:
                 t_seg_start = time.time()
 
                 while True:
-                    if self._evento_detener.is_set():
+                    if self._evento_detener.is_set() or getattr(self, "cerrando", False):
                         estado = "DETENIDO"
                         break
 
                     while not self._evento_pausa.is_set():
-                        if self._evento_detener.is_set():
+                        if self._evento_detener.is_set() or getattr(self, "cerrando", False):
                             estado = "DETENIDO"
                             break
                         time.sleep(0.05)
@@ -785,26 +785,29 @@ class PuenteLaser:
                 if wp["es_corte"]:
                     puntos_corte_acum += 1
 
-            # 4. Esperar finalización del hilo de hardware
+            # 4. Esperar finalización del hilo de hardware (tiempo de espera no bloqueante)
             if hilo_tx and hilo_tx.is_alive():
-                timeout_join = 1.0 if self._evento_detener.is_set() else 100.0
+                timeout_join = 0.2 if (self._evento_detener.is_set() or getattr(self, "cerrando", False)) else 10.0
                 hilo_tx.join(timeout=timeout_join)
 
             # 5. Manejo de fin o parada de emergencia
-            if self._evento_detener.is_set():
+            if self._evento_detener.is_set() or getattr(self, "cerrando", False):
                 estado = "DETENIDO"
-                on_log("[STOP] Parada de emergencia ejecutada.")
+                if not getattr(self, "cerrando", False):
+                    on_log("[STOP] Emergency stop executed.")
                 self.apagar_laser()
                 if hasattr(self.controlador_hardware, "abortar_inmediato"):
                     self.controlador_hardware.abortar_inmediato()
-                on_log("[STOP] Cabezal Thorlabs GVS en reposo seguro.")
+                if not getattr(self, "cerrando", False):
+                    on_log("[STOP] Thorlabs GVS galvo head in safe park position.")
             else:
-                on_log("¡Ciclo de trabajo completado con éxito!")
+                on_log("Work cycle completed successfully!")
 
         except Exception as e:
             estado = "ERROR"
             error_msg = str(e)
-            on_log(f"[ERROR] Excepcion durante ejecucion: {e}")
+            if not getattr(self, "cerrando", False):
+                on_log(f"[ERROR] Exception during execution: {e}")
             self.apagar_laser()
 
         finally:
@@ -812,28 +815,29 @@ class PuenteLaser:
             self._en_ejecucion = False
             self._esta_pausado = False
 
-            try:
-                receta_id = params.get("_receta_id")
-                receta_nom = params.get("_receta_nombre", "Manual")
-                self.gestor_trazabilidad.registrar_ciclo({
-                    "operador": "Operador",
-                    "archivo_dxf": self.nombre_dxf_actual or "Desconocido",
-                    "hardware_usado": self.hal_actual,
-                    "receta_id": receta_id,
-                    "receta_nombre": receta_nom,
-                    "velocidad_trazado": v_trazado,
-                    "velocidad_viaje": v_viaje,
-                    "escala_dibujo": float(params.get("escala_dibujo", 0.9)),
-                    "tolerancia_rdp": float(params.get("tolerancia_rdp", 0.005)),
-                    "tolerancia_union": float(params.get("tolerancia_union", 0.08)),
-                    "trazos_totales": total_trazos,
-                    "waypoints_totales": total_puntos,
-                    "estado": estado,
-                    "mensaje_error": error_msg,
-                    "duracion_segundos": duracion_s
-                })
-                on_log(f"[BD] Ciclo registrado en historial_produccion: Estado={estado}, Duración={duracion_s}s")
-            except Exception as e_bd:
-                on_log(f"[BD] Aviso: no se pudo guardar trazabilidad: {e_bd}")
+            if not getattr(self, "cerrando", False):
+                try:
+                    receta_id = params.get("_receta_id")
+                    receta_nom = params.get("_receta_nombre", "Manual")
+                    self.gestor_trazabilidad.registrar_ciclo({
+                        "operador": "Operator",
+                        "archivo_dxf": self.nombre_dxf_actual or "Unknown",
+                        "hardware_usado": self.hal_actual,
+                        "receta_id": receta_id,
+                        "receta_nombre": receta_nom,
+                        "velocidad_trazado": v_trazado,
+                        "velocidad_viaje": v_viaje,
+                        "escala_dibujo": float(params.get("escala_dibujo", 0.9)),
+                        "tolerancia_rdp": float(params.get("tolerancia_rdp", 0.005)),
+                        "tolerancia_union": float(params.get("tolerancia_union", 0.08)),
+                        "trazos_totales": total_trazos,
+                        "waypoints_totales": total_puntos,
+                        "estado": estado,
+                        "mensaje_error": error_msg,
+                        "duracion_segundos": duracion_s
+                    })
+                    on_log(f"[DB] Cycle logged in production history: Status={estado}, Duration={duracion_s}s")
+                except Exception as e_bd:
+                    on_log(f"[DB] Warning: could not save traceability: {e_bd}")
 
-            on_finished(estado, error_msg, duracion_s)
+                on_finished(estado, error_msg, duracion_s)

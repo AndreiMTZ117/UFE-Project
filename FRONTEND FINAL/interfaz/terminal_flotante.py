@@ -108,7 +108,7 @@ class TerminalFlotante(ctk.CTkFrame):
             bd=0
         )
         self.txt_terminal.pack(fill="both", expand=True, padx=12, pady=(4, 12))
-        self.txt_terminal.insert("end", "[UFE Laser Console Initialized]\nSistema listo.\n")
+        self.txt_terminal.insert("end", "[UFE Laser Console Initialized]\nSystem ready.\n")
 
         # 3. Frame de historial (oculto por defecto)
         self.frame_historial = ctk.CTkFrame(self, fg_color=COLOR_TERMINAL_BG)
@@ -145,7 +145,7 @@ class TerminalFlotante(ctk.CTkFrame):
         if not registros:
             lbl_empty = ctk.CTkLabel(
                 self.frame_historial,
-                text="No hay registros de producción aún.",
+                text="No production records yet.",
                 font=self.f_bold,
                 text_color="#94A3B8"
             )
@@ -165,7 +165,7 @@ class TerminalFlotante(ctk.CTkFrame):
         header_frame.pack(fill="x", pady=(0, 4))
         header_frame.pack_propagate(False)
 
-        columnas = ["#", "Fecha", "DXF", "Receta", "Estado", "Duración"]
+        columnas = ["#", "Date", "File", "Recipe", "Status", "Duration"]
         anchos = [30, 130, 120, 120, 80, 70]
         for col, ancho in zip(columnas, anchos):
             ctk.CTkLabel(
@@ -186,7 +186,7 @@ class TerminalFlotante(ctk.CTkFrame):
             row_frame.pack_propagate(False)
 
             estado = reg.get("estado", "?")
-            color_estado = COLOR_GREEN if estado == "COMPLETADO" else "#FF6B6B" if estado == "ABORTADO" else "#FFB200"
+            color_estado = COLOR_GREEN if estado == "COMPLETADO" else "#FF6B6B" if estado in ("ABORTADO", "DETENIDO") else "#FFB200"
 
             timestamp = reg.get("timestamp", "")
             if len(timestamp) > 16:
@@ -222,17 +222,17 @@ class TerminalFlotante(ctk.CTkFrame):
 
         registros = self.obtener_historial()
         if not registros:
-            self.log("[Export] No hay registros para exportar.")
+            self.log("[Export] No records to export.")
             return
 
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        ruta_default = f"historial_produccion_{fecha_str}.csv"
+        ruta_default = f"production_history_{fecha_str}.csv"
 
         ruta = filedialog.asksaveasfilename(
-            title="Exportar Historial de Producción",
+            title="Export Production History",
             defaultextension=".csv",
             initialfile=ruta_default,
-            filetypes=[("Archivos CSV", "*.csv"), ("Todos los archivos", "*.*")]
+            filetypes=[("CSV Files (*.csv)", "*.csv"), ("All Files", "*.*")]
         )
 
         if not ruta:
@@ -276,9 +276,9 @@ class TerminalFlotante(ctk.CTkFrame):
                     }
                     writer.writerow(fila)
 
-            self.log(f"[Export] Historial exportado exitosamente a: {os.path.basename(ruta)} ({len(registros)} registros)")
+            self.log(f"[Export] History successfully exported to: {os.path.basename(ruta)} ({len(registros)} records)")
         except Exception as e:
-            self.log(f"[Export] Error al exportar: {e}")
+            self.log(f"[Export] Error exporting history: {e}")
 
     def toggle(self):
         if self.visible:

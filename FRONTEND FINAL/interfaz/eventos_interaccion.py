@@ -12,12 +12,12 @@ import os
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
-# Nombres de las recetas predeterminadas que no pueden eliminarse
+# Nombres de las recetas predeterminadas que no pueden eliminarse (español e inglés)
 _RECETAS_PREDETERMINADAS = {
-    "Acrílico — Estándar",
-    "Policarbonato — Alta Precisión",
-    "Nylon — Grabado Suave",
-    "Thorlabs — Prueba Vectorial",
+    "Acrílico — Estándar", "Acrylic — Standard",
+    "Policarbonato — Alta Precisión", "Polycarbonate — High Precision",
+    "Nylon — Grabado Suave", "Nylon — Soft Engraving",
+    "Thorlabs — Prueba Vectorial", "Thorlabs — Vector Test",
 }
 
 
@@ -46,12 +46,12 @@ class EventosInteraccionMixin:
         """Carga un DXF/G-code existente o abre el explorador del sistema."""
         if val == "[ Open Explorer... ]":
             ruta = filedialog.askopenfilename(
-                title="Seleccionar archivo DXF o G-code",
+                title="Select DXF or G-code File",
                 filetypes=[
-                    ("Archivos Vectoriales y G-code", "*.dxf *.gcode *.nc *.ngc"),
-                    ("Archivos DXF (*.dxf)", "*.dxf"),
-                    ("Archivos G-code (*.gcode, *.nc, *.ngc)", "*.gcode *.nc *.ngc"),
-                    ("Todos los archivos", "*.*")
+                    ("Vector and G-code Files", "*.dxf *.gcode *.nc *.ngc"),
+                    ("DXF Files (*.dxf)", "*.dxf"),
+                    ("G-code Files (*.gcode, *.nc, *.ngc)", "*.gcode *.nc *.ngc"),
+                    ("All Files", "*.*")
                 ]
             )
             if ruta:
@@ -86,7 +86,7 @@ class EventosInteraccionMixin:
                 if self.puente.ruta_dxf_actual:
                     self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
                     self._actualizar_vistas_canvases()
-                self.terminal.log(f"[Receta] Seleccionada: {nombre_receta}")
+                self.terminal.log(f"[Recipe] Selected: {nombre_receta}")
                 break
 
     def _on_rotacion_cambiada(self, angulo: float):
@@ -103,21 +103,21 @@ class EventosInteraccionMixin:
         receta_id = self.receta_activa.get("id")
         try:
             self.puente.guardar_o_actualizar_receta(datos, receta_id)
-            messagebox.showinfo("Receta", f"Receta '{self.receta_activa['nombre']}' actualizada con éxito.")
-            self.terminal.log(f"[Recetas] Receta ID={receta_id} guardada en SQLite3.")
+            messagebox.showinfo("Recipe", f"Recipe '{self.receta_activa['nombre']}' updated successfully.")
+            self.terminal.log(f"[Recipes] Recipe ID={receta_id} saved to SQLite3.")
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar la receta: {e}")
+            messagebox.showerror("Error", f"Could not save recipe: {e}")
 
     def _on_crear_receta(self):
         """Solicita nombre y crea una nueva receta en la base de datos."""
-        dialog = ctk.CTkInputDialog(text="Introduce el nombre de la nueva receta:", title="Nueva Receta")
+        dialog = ctk.CTkInputDialog(text="Enter the name for the new recipe:", title="New Recipe")
         nombre = dialog.get_input()
         if not nombre or not nombre.strip():
             return
 
         datos = self.panel_config.obtener_datos_formulario()
         datos["nombre"] = nombre.strip()
-        datos["polimero"] = "Polímero Personalizado"
+        datos["polimero"] = "Custom Polymer"
 
         try:
             nuevo_id = self.puente.guardar_o_actualizar_receta(datos)
@@ -126,9 +126,9 @@ class EventosInteraccionMixin:
             self.panel_config.set_recetas(nombres, seleccionada=nombre.strip())
             self.receta_activa = self.puente.obtener_receta_por_id(nuevo_id)
             self.panel_config.set_delete_visible(True)
-            messagebox.showinfo("Nueva Receta", f"Receta '{nombre}' creada con éxito.")
+            messagebox.showinfo("New Recipe", f"Recipe '{nombre}' created successfully.")
         except Exception as e:
-            messagebox.showerror("Error", f"Error al crear receta: {e}")
+            messagebox.showerror("Error", f"Error creating recipe: {e}")
 
     def _on_eliminar_receta(self):
         """Elimina la receta activa de la base de datos SQLite3 (solo personalizadas)."""
@@ -139,15 +139,15 @@ class EventosInteraccionMixin:
 
         if nombre in _RECETAS_PREDETERMINADAS:
             messagebox.showwarning(
-                "Receta Protegida",
-                f"La receta '{nombre}' es una receta de fábrica y no puede eliminarse.\n\n"
-                "Solo las recetas personalizadas creadas por el usuario pueden ser eliminadas."
+                "Protected Recipe",
+                f"Recipe '{nombre}' is a factory preset and cannot be deleted.\n\n"
+                "Only custom user-created recipes can be deleted."
             )
             return
 
         receta_id = self.receta_activa.get("id")
 
-        confirma = messagebox.askyesno("Confirmar eliminación", f"¿Eliminar la receta '{nombre}' de la base de datos?")
+        confirma = messagebox.askyesno("Confirm Deletion", f"Delete recipe '{nombre}' from the database?")
         if confirma:
             exito = self.puente.eliminar_receta(receta_id)
             if exito:
@@ -156,7 +156,7 @@ class EventosInteraccionMixin:
                 self.panel_config.set_recetas(nombres)
                 if self.lista_recetas:
                     self._on_receta_seleccionada(self.lista_recetas[0]["nombre"])
-                messagebox.showinfo("Eliminada", f"Receta '{nombre}' eliminada.")
+                messagebox.showinfo("Deleted", f"Recipe '{nombre}' deleted.")
 
     def _on_centro_cambiado(self, x: float, y: float):
         """Actualiza el centro de reposo de la máquina y posiciona los espejos."""
@@ -165,7 +165,7 @@ class EventosInteraccionMixin:
         self.panel_derecho.actualizar_coordenadas(x, y)
         if not self.puente.en_ejecucion:
             self.puente.centrar_espejos()
-        self.terminal.log(f"[HOME] Centro manual definido a: ({x:.2f}, {y:.2f}) cm")
+        self.terminal.log(f"[HOME] Manual center set to: ({x:.2f}, {y:.2f}) cm")
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
         self._actualizar_vistas_canvases()
@@ -182,10 +182,10 @@ class EventosInteraccionMixin:
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Campo] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro: ({cx:.2f}, {cy:.2f}) cm. Trazos actualizados.")
+            self.terminal.log(f"[Field] Dimensions: {ancho_cm:.1f} x {alto_cm:.1f} cm | Center: ({cx:.2f}, {cy:.2f}) cm. Toolpaths updated.")
         else:
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Campo] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro: ({cx:.2f}, {cy:.2f}) cm.")
+            self.terminal.log(f"[Field] Dimensions: {ancho_cm:.1f} x {alto_cm:.1f} cm | Center: ({cx:.2f}, {cy:.2f}) cm.")
 
     def _aplicar_limites_hardware(self):
         """Aplica los límites dinámicos de la máquina al panel general para renderizado correcto."""
