@@ -3,9 +3,9 @@
 interfaz/eventos_interaccion.py — EVENTOS DE INTERACCIÓN
 
 Módulo encargado de responder a las acciones del usuario en la interfaz:
-cambios de HAL, selección de puerto COM, selección y apertura de DXF,
-visibilidad del terminal flotante, cambios de recetas, sliders de rotación,
-definición interactiva del centro (Home) y edición del tamaño de base (Area size).
+selección y apertura de DXF / G-code, visibilidad del terminal flotante,
+cambios de recetas, sliders de rotación, definición interactiva del centro (Home)
+y edición del tamaño de base (Area size).
 """
 
 import os
@@ -17,25 +17,20 @@ _RECETAS_PREDETERMINADAS = {
     "Acrílico — Estándar",
     "Policarbonato — Alta Precisión",
     "Nylon — Grabado Suave",
-    "Maqueta — Prueba Vectorial",
+    "Thorlabs — Prueba Vectorial",
 }
 
 
 class EventosInteraccionMixin:
     """Mixin que procesa los eventos y callbacks de la interfaz de usuario."""
 
-    def _on_hal_cambiado(self, val: str):
-        """Maneja la selección de HAL (Servos / Galvo)."""
-        self.puente.cambiar_hardware(val)
-        self.terminal.log(f"Hardware Abstraction Layer cambiado a: {val}")
-        if self.puente.hal_actual == "thorlabs_galvo":
-            self.puente.conectar_puerto("Thorlabs GVS")
-            self.barra_superior.set_estado_com(self.puente.esta_conectado_fisico())
-        else:
-            self.barra_superior.set_estado_com(self.puente.esta_conectado_fisico())
-        # Recargar límites cinemáticos en canvas
+    def _on_hal_cambiado(self, val: str = "thorlabs_galvo"):
+        """Maneja la selección de HAL (Thorlabs GVS112/M nativo)."""
+        self.puente.cambiar_hardware("thorlabs_galvo")
+        self.barra_superior.set_modo_thorlabs(
+            'REAL' if self.puente.esta_conectado_fisico() else 'SIMULACION'
+        )
         self._aplicar_limites_hardware()
-        # Sincronizar inputs en la UI
         self.panel_derecho.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_derecho.actualizar_coordenadas(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_general.actualizar_dimensiones(self.puente.ancho_base_cm, self.puente.alto_base_cm)
@@ -44,21 +39,20 @@ class EventosInteraccionMixin:
             self._actualizar_vistas_canvases()
 
     def _on_com_seleccionado(self, val: str):
-        """Maneja la selección o re-escaneo de puertos COM."""
-        if val == "Escanear...":
-            puertos = self.puente.listar_puertos_com()
-            if puertos:
-                self.barra_superior.set_puertos_com(puertos, seleccionado=puertos[0])
-                self._conectar_com(puertos[0])
-        else:
-            self._conectar_com(val)
+        """Stub de compatibilidad."""
+        pass
 
     def _on_dxf_seleccionado(self, val: str):
-        """Carga un DXF existente o abre el explorador del sistema."""
+        """Carga un DXF/G-code existente o abre el explorador del sistema."""
         if val == "[ Open Explorer... ]":
             ruta = filedialog.askopenfilename(
-                title="Seleccionar archivo DXF",
-                filetypes=[("Archivos DXF", "*.dxf"), ("Todos los archivos", "*.*")]
+                title="Seleccionar archivo DXF o G-code",
+                filetypes=[
+                    ("Archivos Vectoriales y G-code", "*.dxf *.gcode *.nc *.ngc"),
+                    ("Archivos DXF (*.dxf)", "*.dxf"),
+                    ("Archivos G-code (*.gcode, *.nc, *.ngc)", "*.gcode *.nc *.ngc"),
+                    ("Todos los archivos", "*.*")
+                ]
             )
             if ruta:
                 dxfs = self.puente.listar_archivos_dxf()
@@ -86,7 +80,6 @@ class EventosInteraccionMixin:
                 self.receta_activa = r
                 self.panel_config.poblar_formulario(r)
 
-                # Protección de recetas predeterminadas: ocultar/mostrar botón eliminar
                 es_default = nombre_receta in _RECETAS_PREDETERMINADAS
                 self.panel_config.set_delete_visible(not es_default)
 
@@ -132,7 +125,6 @@ class EventosInteraccionMixin:
             nombres = [r["nombre"] for r in self.lista_recetas]
             self.panel_config.set_recetas(nombres, seleccionada=nombre.strip())
             self.receta_activa = self.puente.obtener_receta_por_id(nuevo_id)
-            # Mostrar botón de eliminar para recetas personalizadas
             self.panel_config.set_delete_visible(True)
             messagebox.showinfo("Nueva Receta", f"Receta '{nombre}' creada con éxito.")
         except Exception as e:
@@ -145,7 +137,6 @@ class EventosInteraccionMixin:
 
         nombre = self.receta_activa.get("nombre", "")
 
-        # Proteger recetas predeterminadas
         if nombre in _RECETAS_PREDETERMINADAS:
             messagebox.showwarning(
                 "Receta Protegida",
@@ -168,22 +159,19 @@ class EventosInteraccionMixin:
                 messagebox.showinfo("Eliminada", f"Receta '{nombre}' eliminada.")
 
     def _on_centro_cambiado(self, x: float, y: float):
-        """Actualiza el centro de reposo de la máquina y posiciona el puntero (alteración manual)."""
+        """Actualiza el centro de reposo de la máquina y posiciona los espejos."""
         self.puente.set_centro_cm(x, y)
         self.pos_laser_actual = (x, y)
         self.panel_derecho.actualizar_coordenadas(x, y)
-        if self.puente.esta_conectado_fisico() and not self.puente.en_ejecucion:
-            try:
-                self.puente._enviar_seguro(f"P {self.puente.centro_x:.2f},{self.puente.centro_y:.2f},400,0", timeout=5.0)
-            except Exception:
-                pass
+        if not self.puente.en_ejecucion:
+            self.puente.centrar_espejos()
         self.terminal.log(f"[HOME] Centro manual definido a: ({x:.2f}, {y:.2f}) cm")
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
         self._actualizar_vistas_canvases()
 
     def _on_dimensiones_cambiadas(self, ancho_cm: float, alto_cm: float):
-        """Actualiza las dimensiones de la base física de trabajo, recalcula el centro automáticamente y trazos."""
+        """Actualiza las dimensiones del campo óptico de trabajo, recalcula centro y trazos."""
         self.puente.set_dimensiones_base(ancho_cm, alto_cm)
         cx = self.puente.centro_cm_x
         cy = self.puente.centro_cm_y
@@ -194,10 +182,10 @@ class EventosInteraccionMixin:
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Base] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro automático: ({cx:.2f}, {cy:.2f}) cm. Trazos recalculados.")
+            self.terminal.log(f"[Campo] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro: ({cx:.2f}, {cy:.2f}) cm. Trazos actualizados.")
         else:
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Base] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro automático: ({cx:.2f}, {cy:.2f}) cm.")
+            self.terminal.log(f"[Campo] Dimensiones: {ancho_cm:.1f} x {alto_cm:.1f} cm | Centro: ({cx:.2f}, {cy:.2f}) cm.")
 
     def _aplicar_limites_hardware(self):
         """Aplica los límites dinámicos de la máquina al panel general para renderizado correcto."""
@@ -207,4 +195,3 @@ class EventosInteraccionMixin:
             self.puente.y_min_limit,
             self.puente.y_max_limit
         )
-

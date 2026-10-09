@@ -248,7 +248,7 @@ class GestorRecetas:
         de parámetros que espera transformar_y_escalar_dxf() y principal.py.
 
         Returns:
-            dict con claves compatibles con las variables de config_maqueta.py,
+            dict con claves compatibles con las variables de config_galvo.py,
             o {} si la receta no existe.
         """
         receta = self.obtener_receta(receta_id)

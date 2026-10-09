@@ -3,10 +3,10 @@
 interfaz/logica_ejecucion.py — LÓGICA DE EJECUCIÓN: START, PAUSE/RESUME, STOP
 
 Módulo encargado de controlar el ciclo de vida de ejecución del corte/grabado:
-- Validación previa de hardware (físico o simulación virtual).
-- Validación de archivos DXF y parámetros cinemáticos.
+- Validación previa de hardware Thorlabs (físico o simulación virtual).
+- Validación de archivos vectoriales (DXF / G-code) y parámetros cinemáticos.
 - Control de estados: Inicio, Pausa, Reanudación y Parada de emergencia.
-- Hilos de telemetría, callbacks asíncronos y actualización del cronómetro LCD.
+- Hilos de telemetría, callbacks asíncronos y actualización del monitor de voltajes y cronómetro LCD.
 """
 
 import time
@@ -22,15 +22,15 @@ class LogicaEjecucionMixin:
         if not self.puente.esta_conectado_fisico():
             proceder = messagebox.askyesno(
                 "Aviso de Hardware",
-                "No se detectó un microcontrolador ESP32 conectado en el puerto seleccionado.\n\n"
+                "El sistema Thorlabs GVS112/M está configurado en MODO SIMULACIÓN.\n\n"
                 "¿Deseas iniciar la ejecución en MODO SIMULACIÓN VIRTUAL?"
             )
             if not proceder:
                 return
 
-        # 2. Validación de archivo DXF
+        # 2. Validación de archivo vectorial cargado
         if not self.puente.trazos_calibrados:
-            messagebox.showwarning("Falta DXF", "Debes cargar un archivo DXF con trayectorias válidas antes de iniciar.")
+            messagebox.showwarning("Falta Archivo", "Debes cargar un archivo DXF o G-code con trayectorias válidas antes de iniciar.")
             return
 
         # 3. Validación de parámetros cinemáticos
@@ -83,12 +83,13 @@ class LogicaEjecucionMixin:
         self.after(0, self._actualizar_progreso_gui, x, y, trace_pct, total_pct, laser_on)
 
     def _actualizar_progreso_gui(self, x: float, y: float, trace_pct: float, total_pct: float, laser_on: bool = True):
-        """Actualiza en el hilo principal de la GUI las coordenadas y gauges en tiempo real."""
-        # Convertir coordenada de hardware a posición física métrica (cm) para el Canvas
+        """Actualiza en el hilo principal de la GUI las coordenadas, voltajes live y gauges."""
         from .conexion_interfaz import HARDWARE_CONFIG
-        cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["maqueta_servos"])
-        cal_ancho = cfg.get("marco_ancho_cm", 28.0)
-        cal_alto = cfg.get("marco_alto_cm", 25.0)
+        from hardware_thorlabs_galvo.config_galvo import ESCALA_VX_POR_MM, ESCALA_VY_POR_MM, OFFSET_VX, OFFSET_VY
+
+        cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
+        cal_ancho = cfg.get("marco_ancho_cm", 10.0)
+        cal_alto = cfg.get("marco_alto_cm", 10.0)
         rango_x = self.puente.x_max_limit - self.puente.x_min_limit
         rango_y = self.puente.y_max_limit - self.puente.y_min_limit
         kx = cal_alto / rango_x if rango_x > 0 else 1.0
@@ -102,6 +103,11 @@ class LogicaEjecucionMixin:
         if laser_on:
             self.trazos_completados.append(((prev_x, prev_y), (cm_x, cm_y)))
 
+        # Actualizar voltajes instantáneos en el monitor DAQ
+        vx_live = ESCALA_VX_POR_MM * (x - self.puente.centro_x) + OFFSET_VX
+        vy_live = ESCALA_VY_POR_MM * (y - self.puente.centro_y) + OFFSET_VY
+        self.panel_derecho.actualizar_voltajes_live(vx_live, vy_live)
+
         self.panel_derecho.actualizar_coordenadas(cm_x, cm_y)
         self.panel_derecho.dibujar_gauges(trace_pct, total_pct)
         self._actualizar_vistas_canvases()
@@ -112,7 +118,6 @@ class LogicaEjecucionMixin:
 
     def _cb_finalizado(self, estado: str, error_msg: str, duracion_s: float):
         """Callback al terminar la secuencia de ejecución (ejecutado desde hilo de trabajo)."""
-        # Usar self.after para no bloquear la GUI con messageboxes durante la transición
         self.after(50, self._restaurar_ui_idle, estado, error_msg, duracion_s)
 
     def _restaurar_ui_idle(self, estado: str, error_msg: str, duracion_s: float):
@@ -120,14 +125,12 @@ class LogicaEjecucionMixin:
         self.panel_derecho.set_modo_idle()
         self.panel_derecho.actualizar_timer("0:00:00")
 
-        # Mostrar feedback de resultado con un pequeño delay para permitir
-        # que la GUI se estabilice completamente antes del messagebox
         def _mostrar_resultado():
             if estado == "COMPLETADO":
                 self.panel_derecho.dibujar_gauges(100.0, 100.0)
                 messagebox.showinfo("Ciclo Finalizado", f"Trabajo completado exitosamente en {duracion_s} segundos.")
             elif estado == "DETENIDO":
-                messagebox.showwarning("Ciclo Detenido", "El trabajo fue abortado inmediatamente por el operador.\nEl láser se apagó y el cabezal retornó al centro de reposo.")
+                messagebox.showwarning("Ciclo Detenido", "El trabajo fue abortado inmediatamente por el operador.\nEl láser se apagó y el cabezal Thorlabs retornó al centro de reposo.")
             elif estado == "ERROR":
                 messagebox.showerror("Error de Ciclo", f"Ocurrió un error durante el trazado:\n{error_msg}")
 

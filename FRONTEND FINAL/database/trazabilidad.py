@@ -25,7 +25,7 @@ class GestorTrazabilidad:
         id_log = gt.registrar_ciclo({
             "operador":           "Técnico A",
             "archivo_dxf":        "batman.dxf",
-            "hardware_usado":     "maqueta_servos",
+            "hardware_usado":     "thorlabs_galvo",
             "receta_id":          2,
             "receta_nombre":      "Policarbonato — Alta Precisión",
             "velocidad_trazado":  1.0,
@@ -232,7 +232,7 @@ class GestorTrazabilidad:
             "receta_id":          None,
             "receta_nombre":      "Manual",
             "archivo_dxf":        "",
-            "hardware_usado":     "maqueta_servos",
+            "hardware_usado":     "thorlabs_galvo",
             "velocidad_trazado":  None,
             "velocidad_viaje":    None,
             "num_pasadas":        1,

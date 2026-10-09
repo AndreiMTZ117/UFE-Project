@@ -9,13 +9,13 @@ from typing import Callable, List, Optional, Tuple
 
 from .constantes import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
-    COLOR_BLUE, COLOR_VECTOR_GRAY,
+    COLOR_BLUE, COLOR_VECTOR_GRAY, COLOR_YELLOW,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
 )
 
 
 class PanelGeneral(ctk.CTkFrame):
-    """Panel central con canvas isométrico 1:1, reglas graduadas y base editable."""
+    """Panel central con canvas isométrico 1:1, reglas graduadas y diferenciación de trazos/saltos."""
 
     def __init__(
         self,
@@ -29,16 +29,20 @@ class PanelGeneral(ctk.CTkFrame):
         self.f_head = ctk.CTkFont(family=FONT_TEACHERS, size=13, weight="bold")
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
         self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=11)
+        self.f_legend = ctk.CTkFont(family=FONT_TEACHERS, size=10, weight="bold")
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        self.ancho_base_cm = 28.0
-        self.alto_base_cm = 25.0
+        self.saltos_actuales: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+
+        # Dimensiones estándar nativas del campo Thorlabs (±50 mm -> 10.0 x 10.0 cm)
+        self.ancho_base_cm = 10.0
+        self.alto_base_cm = 10.0
 
         self._crear_widgets()
 
     def _crear_widgets(self):
-        # 1. Título "General" (top)
+        # 1. Cabecera con título y leyenda de diferenciación espacial
         top_header = ctk.CTkFrame(self, fg_color="transparent")
         top_header.pack(side="top", fill="x", pady=(2, 4))
 
@@ -51,11 +55,29 @@ class PanelGeneral(ctk.CTkFrame):
         )
         self.lbl_title.pack(side="left")
 
-        # 2. Footer Area size (anclado abajo primero, EDITABLE)
+        # Leyenda de trayectorias
+        legend_frame = ctk.CTkFrame(top_header, fg_color="transparent")
+        legend_frame.pack(side="right")
+
+        ctk.CTkLabel(
+            legend_frame,
+            text="― Marcado (Láser ON)",
+            font=self.f_legend,
+            text_color="#475569"
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(
+            legend_frame,
+            text="┄ Salto rápido (Láser OFF)",
+            font=self.f_legend,
+            text_color="#D97706"
+        ).pack(side="left")
+
+        # 2. Footer Area size (EDITABLE)
         self.footer_area = ctk.CTkFrame(self, fg_color="transparent", height=34)
         self.footer_area.pack(side="bottom", fill="x", pady=(6, 0))
 
-        lbl_area = ctk.CTkLabel(self.footer_area, text="ÁREA BASE:", font=self.f_bold, text_color=COLOR_TEXT)
+        lbl_area = ctk.CTkLabel(self.footer_area, text="CAMPO DE TRABAJO:", font=self.f_bold, text_color=COLOR_TEXT)
         lbl_area.pack(side="left", padx=(2, 6))
 
         # Píldora editable X
@@ -80,7 +102,7 @@ class PanelGeneral(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_dim_x.insert(0, "28.0")
+        self.entry_dim_x.insert(0, "10.0")
         self.entry_dim_x.pack(side="left", padx=2, pady=2)
         self.entry_dim_x.bind("<Return>", lambda e: self._cb_dimensiones_cambiadas())
         self.entry_dim_x.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
@@ -109,14 +131,14 @@ class PanelGeneral(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_dim_y.insert(0, "25.0")
+        self.entry_dim_y.insert(0, "10.0")
         self.entry_dim_y.pack(side="left", padx=2, pady=2)
         self.entry_dim_y.bind("<Return>", lambda e: self._cb_dimensiones_cambiadas())
         self.entry_dim_y.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
 
         ctk.CTkLabel(self.pill_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left", padx=(2, 8), pady=2)
 
-        # 3. Tarjeta blanca con borde negro grueso (al centro expandible, simple cuadrado)
+        # 3. Tarjeta de visualización
         self.card_general = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -148,7 +170,6 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def actualizar_dimensiones(self, ancho_cm: float, alto_cm: float):
-        """Actualiza los inputs numéricos de dimensiones de la base / pieza."""
         self.ancho_base_cm = float(ancho_cm)
         self.alto_base_cm = float(alto_cm)
         self.entry_dim_x.delete(0, "end")
@@ -158,23 +179,24 @@ class PanelGeneral(ctk.CTkFrame):
         self.redibujar()
 
     def set_limites_hardware(self, x_min: float, x_max: float, y_min: float, y_max: float):
-        """Define los límites absolutos del hardware/máquina para mapeo fiel en canvas."""
         self._maq_x_min = x_min
         self._maq_x_max = x_max
         self._maq_y_min = y_min
         self._maq_y_max = y_max
 
-
     def redibujar(
         self,
         trazos: Optional[List[List[Tuple[float, float]]]] = None,
-        trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
+        trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None,
+        saltos_rapidos: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
     ):
-        """Renderizado isométrico 1:1 basado en las dimensiones de la base física."""
+        """Renderizado isométrico 1:1 con diferenciación de trazos de corte y saltos rápidos."""
         if trazos is not None:
             self.trazos_actuales = trazos
         if trazos_completados is not None:
             self.trazos_completados = trazos_completados
+        if saltos_rapidos is not None:
+            self.saltos_actuales = saltos_rapidos
 
         c = self.canvas
         c.delete("all")
@@ -193,37 +215,47 @@ class PanelGeneral(ctk.CTkFrame):
         # Dibujar reglas graduadas según dimensiones de base actuales
         self._dibujar_reglas(c, mx, draw_h, draw_w)
 
-        # --- ESCALA BASADA EN LA BASE FÍSICA MÉTRICA EN CM (1:1 ISOMÉTRICO) ---
+        # --- ESCALA BASADA EN EL CAMPO FÍSICO EN CM (1:1 ISOMÉTRICO) ---
         rango_w = max(0.1, self.ancho_base_cm)
         rango_h = max(0.1, self.alto_base_cm)
 
-        # Escala isométrica 1:1 estricta sobre la base física en cm (1 cm en X = 1 cm en Y en pantalla)
         escala_pixel = min(draw_w / rango_w, draw_h / rango_h) * 0.92
 
-        # Centrar la base dentro del área de dibujo
         base_w_px = rango_w * escala_pixel
         base_h_px = rango_h * escala_pixel
         base_x0 = mx + (draw_w - base_w_px) / 2
         base_y0 = 15 + (draw_h - base_h_px) / 2
 
-        # Dibujar rectángulo de base visible (contorno punteado que representa el área base máxima en cm)
+        # Rectángulo del campo óptico F-Theta
         c.create_rectangle(
             base_x0, base_y0,
             base_x0 + base_w_px, base_y0 + base_h_px,
             outline="#94A3B8", width=1.5, dash=(6, 4)
         )
 
-        if not self.trazos_actuales:
-            c.create_text(w // 2, h // 2, text="Sin archivo DXF cargado", font=(FONT_TEACHERS, 14), fill="#94A3B8")
+        # Cruz del centro óptico nativo (0, 0)
+        cx_px = base_x0 + base_w_px / 2.0
+        cy_px = base_y0 + base_h_px / 2.0
+        c.create_line(cx_px - 8, cy_px, cx_px + 8, cy_px, fill="#CBD5E1", width=1.5)
+        c.create_line(cx_px, cy_px - 8, cx_px, cy_px + 8, fill="#CBD5E1", width=1.5)
+
+        if not self.trazos_actuales and not self.saltos_actuales:
+            c.create_text(w // 2, h // 2, text="Sin archivo cargado (DXF / G-code)", font=(FONT_TEACHERS, 14), fill="#94A3B8")
             return
 
-        # Helper: mapear coordenada física métrica (cm) → pixel del canvas
         def to_px(x_cm, y_cm):
             px = base_x0 + x_cm * escala_pixel
             py = (base_y0 + base_h_px) - (y_cm * escala_pixel)
             return px, py
 
-        # 1. Dibujar geometría base completa en gris claro (#CCD1D9)
+        # 1. Dibujar saltos rápidos en vacío (G0 / láser OFF) con línea discontinua ámbar
+        for salto in self.saltos_actuales:
+            p1, p2 = salto
+            px1, py1 = to_px(p1[0], p1[1])
+            px2, py2 = to_px(p2[0], p2[1])
+            c.create_line(px1, py1, px2, py2, fill="#F59E0B", width=1.2, dash=(4, 4), capstyle="round")
+
+        # 2. Dibujar geometría de corte base completa (láser ON) en línea sólida gris oscuro
         for ruta in self.trazos_actuales:
             if len(ruta) < 2:
                 continue
@@ -233,7 +265,7 @@ class PanelGeneral(ctk.CTkFrame):
                 coords.extend([px, py])
             c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=2.5, capstyle="round", joinstyle="round")
 
-        # 2. Dibujar segmentos completados en azul eléctrico (#3A43EF)
+        # 3. Dibujar segmentos completados durante ejecución activa en azul eléctrico
         for segmento in self.trazos_completados:
             p1, p2 = segmento
             px1, py1 = to_px(p1[0], p1[1])
@@ -248,12 +280,12 @@ class PanelGeneral(ctk.CTkFrame):
         for i in range(num_ticks):
             # Ticks Eje Y
             y_pos = (draw_h + 15) - (i * (draw_h / (num_ticks - 1)))
-            val_y = int(round(i * (self.alto_base_cm / (num_ticks - 1))))
+            val_y = round(i * (self.alto_base_cm / (num_ticks - 1)) - (self.alto_base_cm / 2.0), 1)
             c.create_line(mx - 6, y_pos, mx, y_pos, fill=COLOR_BORDER, width=1.5)
-            c.create_text(mx - 9, y_pos, text=str(val_y), font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="e")
+            c.create_text(mx - 9, y_pos, text=f"{val_y:+.1f}", font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="e")
 
             # Ticks Eje X
             x_pos = mx + (i * (draw_w / (num_ticks - 1)))
-            val_x = int(round(i * (self.ancho_base_cm / (num_ticks - 1))))
+            val_x = round(i * (self.ancho_base_cm / (num_ticks - 1)) - (self.ancho_base_cm / 2.0), 1)
             c.create_line(x_pos, draw_h + 15, x_pos, draw_h + 21, fill=COLOR_BORDER, width=1.5)
-            c.create_text(x_pos, draw_h + 26, text=str(val_x), font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="n")
+            c.create_text(x_pos, draw_h + 26, text=f"{val_x:+.1f}", font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="n")

@@ -1,12 +1,12 @@
 ﻿# -*- coding: utf-8 -*-
 """
-core/visualizador.py — Generador Universal de Previsualización Gráfica
+core/visualizador.py — Generador Universal de Previsualizacion Gráfica
 
 Genera un reporte gráfico (PNG) comparativo:
   - Panel izquierdo: Espacio CAD original
   - Panel derecho: Espacio de trabajo de la máquina destino
-  - Muestra líneas de corte/trazado (láser ON) y traslados (láser OFF)
-  - Diagnóstico de entidades geométricas
+  - Muestra lineas de corte/trazado (laser ON) y traslados (laser OFF)
+  - Diagnóstico de entidades geometricas
 """
 
 import os
@@ -61,7 +61,7 @@ def generar_previsualizacion(nombre_dxf, tray_orig, tray_cal, limites_maquina, n
 
     fig = plt.figure(figsize=(16, 8), facecolor='#1a1a2e')
     fig.suptitle(
-        f"Previsualización de Trazado Láser — {os.path.basename(nombre_dxf)}",
+        f"Previsualizacion de Trazado Laser — {os.path.basename(nombre_dxf)}",
         color='white', fontsize=14, fontweight='bold', y=0.98
     )
 
@@ -93,7 +93,7 @@ def generar_previsualizacion(nombre_dxf, tray_orig, tray_cal, limites_maquina, n
 
     resumen_orig = (
         f"Trazos: {len(tray_orig)}  |  Puntos: {pts_orig}\n"
-        f"Dimensiones CAD: {ancho_dxf:.2f} × {alto_dxf:.2f} u"
+        f"Dimensiones CAD: {ancho_dxf:.2f} x {alto_dxf:.2f} u"
     )
     ax_orig.text(0.02, 0.02, resumen_orig, transform=ax_orig.transAxes,
         color='#aabbcc', fontsize=8, verticalalignment='bottom',
@@ -137,17 +137,17 @@ def generar_previsualizacion(nombre_dxf, tray_orig, tray_cal, limites_maquina, n
     alto_cal  = round(max_yc - min_yc, 3)
     resumen_cal = (
         f"Trazos: {len(tray_cal)}  |  Waypoints: {pts_cal}\n"
-        f"BBox Máquina: {ancho_cal} × {alto_cal} u\n"
-        f"Límites: X[{x_min_lim:.1f}, {x_max_lim:.1f}], Y[{y_min_lim:.1f}, {y_max_lim:.1f}]"
+        f"BBox Máquina: {ancho_cal} x {alto_cal} u\n"
+        f"Limites: X[{x_min_lim:.1f}, {x_max_lim:.1f}], Y[{y_min_lim:.1f}, {y_max_lim:.1f}]"
     )
     ax_cal.text(0.02, 0.02, resumen_cal, transform=ax_cal.transAxes,
         color='#aabbcc', fontsize=8, verticalalignment='bottom',
         bbox=dict(boxstyle='round,pad=0.4', facecolor='#0f0f1e', alpha=0.7, edgecolor='#3a3a6a'))
 
     leyenda = [
-        Line2D([0],[0], color='#ff6655', linewidth=1.5, label='Trazo Láser (ON)'),
+        Line2D([0],[0], color='#ff6655', linewidth=1.5, label='Trazo Laser (ON)'),
         Line2D([0],[0], color='#444466', linewidth=1.0, linestyle='--', label='Traslado Vacío (OFF)'),
-        Line2D([0],[0], color='#5588bb', linewidth=1.5, label='Límites Máquina'),
+        Line2D([0],[0], color='#5588bb', linewidth=1.5, label='Limites Máquina'),
     ]
     ax_cal.legend(handles=leyenda, loc='upper right', fontsize=7,
                   facecolor='#0f0f1e', edgecolor='#3a3a6a', labelcolor='#ccccdd')
@@ -155,5 +155,5 @@ def generar_previsualizacion(nombre_dxf, tray_orig, tray_cal, limites_maquina, n
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(nombre_salida, dpi=150, bbox_inches='tight', facecolor=fig.get_facecolor())
     plt.close(fig)
-    print(f"Previsualización guardada: {os.path.abspath(nombre_salida)}")
+    print(f"Previsualizacion guardada: {os.path.abspath(nombre_salida)}")
     return nombre_salida

@@ -14,5 +14,6 @@ class RenderizadoDualMixin:
     def _actualizar_vistas_canvases(self):
         """Redibuja en sincronía el Canvas General y el Canvas Trace Point."""
         trazos = getattr(self.puente, "trazos_fisicos_cm", self.puente.trazos_calibrados)
-        self.panel_general.redibujar(trazos, self.trazos_completados)
+        saltos = getattr(self.puente, "saltos_fisicos_cm", [])
+        self.panel_general.redibujar(trazos, self.trazos_completados, saltos)
         self.panel_derecho.redibujar_trace(trazos, self.trazos_completados, self.pos_laser_actual)

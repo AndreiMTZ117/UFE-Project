@@ -44,7 +44,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        self.pos_laser_actual = (59.00, 50.50)
+        self.pos_laser_actual = (0.0, 0.0)   # Centro óptico del campo Thorlabs
 
         self.pct_trace = 0.0
         self.pct_total = 0.0
@@ -167,6 +167,56 @@ class PanelDerecho(ctk.CTkFrame):
         self.canvas_gauges.pack(fill="both", expand=True)
         self.canvas_gauges.bind("<Configure>", lambda e: self.dibujar_gauges())
 
+        # 2b. Monitor Analítico DAQ & Tiempo Exacto (FASE 4.2)
+        self.card_monitor_daq = ctk.CTkFrame(
+            self,
+            fg_color=COLOR_CARD,
+            border_color=COLOR_BORDER,
+            border_width=BRUTAL_BORDER,
+            corner_radius=BRUTAL_CORNER,
+            height=58
+        )
+        self.card_monitor_daq.pack(side="top", fill="x", pady=(0, 6))
+        self.card_monitor_daq.pack_propagate(False)
+
+        daq_row1 = ctk.CTkFrame(self.card_monitor_daq, fg_color="transparent")
+        daq_row1.pack(fill="x", padx=8, pady=(4, 1))
+
+        self.lbl_daq_tiempo = ctk.CTkLabel(
+            daq_row1,
+            text="⏱ T. EST.: 0.000 s",
+            font=self.f_bold,
+            text_color=COLOR_TEXT
+        )
+        self.lbl_daq_tiempo.pack(side="left")
+
+        self.lbl_daq_muestras = ctk.CTkLabel(
+            daq_row1,
+            text="[ 0 pts @ 100kS/s ]",
+            font=self.f_regular,
+            text_color="#64748B"
+        )
+        self.lbl_daq_muestras.pack(side="right")
+
+        daq_row2 = ctk.CTkFrame(self.card_monitor_daq, fg_color="transparent")
+        daq_row2.pack(fill="x", padx=8, pady=(0, 3))
+
+        self.lbl_daq_voltaje_live = ctk.CTkLabel(
+            daq_row2,
+            text="⚡ AO: Vx = +0.00 V | Vy = +0.00 V",
+            font=self.f_regular,
+            text_color=COLOR_BLUE
+        )
+        self.lbl_daq_voltaje_live.pack(side="left")
+
+        self.lbl_daq_voltaje_max = ctk.CTkLabel(
+            daq_row2,
+            text="|V|_max: ±0.00 V",
+            font=self.f_regular,
+            text_color="#64748B"
+        )
+        self.lbl_daq_voltaje_max.pack(side="right")
+
         # 3. Panel "Trace point" con Zoom y Halo (al centro expandible)
         self.box_trace = ctk.CTkFrame(self, fg_color="transparent")
         self.box_trace.pack(side="top", fill="both", expand=True, pady=(2, 4))
@@ -199,7 +249,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.lbl_coord_live = ctk.CTkLabel(
             self.coord_badge,
-            text="x = 14.00 cm  |  y = 12.50 cm",
+            text="x = 0.00 cm  |  y = 0.00 cm",
             font=self.f_bold,
             text_color=COLOR_TEXT,
             padx=10,
@@ -239,7 +289,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_x.insert(0, "14.00")
+        self.entry_home_x.insert(0, "0.00")
         self.entry_home_x.pack(side="left", padx=4)
         ctk.CTkLabel(row_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
@@ -258,7 +308,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_y.insert(0, "12.50")
+        self.entry_home_y.insert(0, "0.00")
         self.entry_home_y.pack(side="left", padx=4)
         ctk.CTkLabel(row_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
@@ -341,6 +391,17 @@ class PanelDerecho(ctk.CTkFrame):
     def actualizar_coordenadas(self, x: float, y: float):
         self.pos_laser_actual = (x, y)
         self.lbl_coord_live.configure(text=f"x = {x:.2f} cm  |  y = {y:.2f} cm")
+
+    def set_metricas_estimadas(self, tiempo_s: float, n_muestras: int, max_vx: float, max_vy: float):
+        """Actualiza las métricas analíticas del monitor DAQ (tiempo exacto y voltajes máx)."""
+        self.lbl_daq_tiempo.configure(text=f"⏱ T. EST.: {tiempo_s:.3f} s")
+        self.lbl_daq_muestras.configure(text=f"[ {n_muestras:,} pts @ 100kS/s ]")
+        v_max = max(max_vx, max_vy)
+        self.lbl_daq_voltaje_max.configure(text=f"|V|_max: ±{v_max:.2f} V")
+
+    def actualizar_voltajes_live(self, vx: float, vy: float):
+        """Actualiza la telemetría instantánea de voltaje enviada a los galvanómetros."""
+        self.lbl_daq_voltaje_live.configure(text=f"⚡ AO: Vx = {vx:+.2f} V | Vy = {vy:+.2f} V")
 
     # Renderizado de medidores
     def dibujar_gauges(self, pct_trace: Optional[float] = None, pct_total: Optional[float] = None):

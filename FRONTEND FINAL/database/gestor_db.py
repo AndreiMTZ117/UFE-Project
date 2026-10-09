@@ -69,9 +69,9 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
 
     -- Archivo procesado
     archivo_dxf         TEXT    NOT NULL,
-    hardware_usado      TEXT    NOT NULL DEFAULT 'maqueta_servos',
+    hardware_usado      TEXT    NOT NULL DEFAULT 'thorlabs_galvo',
 
-    -- Snapshot de parámetros en el momento de ejecución
+    -- Snapshot de parámetros en el momento de ejecucion
     velocidad_trazado   REAL,
     velocidad_viaje     REAL,
     num_pasadas         INTEGER DEFAULT 1,
@@ -96,8 +96,8 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
 # =========================================================
 _RECETAS_DEFAULT = [
     {
-        "nombre":             "Acrílico — Estándar",
-        "polimero":           "Acrílico (PMMA)",
+        "nombre":             "Acrilico — Estándar",
+        "polimero":           "Acrilico (PMMA)",
         "notas":              "Perfil base para acrílico transparente o de color. Velocidad moderada para evitar bordes quemados.",
         "velocidad_trazado":  1.5,
         "velocidad_viaje":    3.0,
@@ -147,7 +147,7 @@ _RECETAS_DEFAULT = [
         "rotar_90_grados":    0,
     },
     {
-        "nombre":             "Maqueta — Prueba Vectorial",
+        "nombre":             "Thorlabs — Prueba Vectorial",
         "polimero":           "Genérico (Prueba)",
         "notas":              "Perfil de validación geométrica. Velocidad muy lenta, sin restricciones ópticas. Usar en modo simulación.",
         "velocidad_trazado":  2.0,
@@ -185,7 +185,7 @@ class GestorDB:
         self._inicializar()
 
     def _inicializar(self):
-        """Crea las tablas e inserta recetas por defecto si es la primera ejecución."""
+        """Crea las tablas e inserta recetas por defecto si es la primera ejecucion."""
         print(f"[DB] Inicializando base de datos en: {self.ruta_db}")
         with self.conexion() as conn:
             conn.execute(_SQL_CREAR_TABLA_RECETAS)
@@ -197,7 +197,7 @@ class GestorDB:
             total = conn.execute("SELECT COUNT(*) FROM recetas").fetchone()[0]
             if total == 0:
                 self._insertar_recetas_default(conn)
-                print("[DB] Recetas por defecto precargadas (Acrílico, Policarbonato, Nylon, Prueba).")
+                print("[DB] Recetas por defecto precargadas (Acrilico, Policarbonato, Nylon, Prueba).")
             else:
                 print(f"[DB] {total} receta(s) ya existente(s). No se sobreescriben.")
 
