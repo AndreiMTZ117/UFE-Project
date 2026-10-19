@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from .constantes import RECETAS_PREDETERMINADAS
+from interfaz.i18n import tr
 
 
 class EventosInteraccionMixin:
@@ -27,7 +28,7 @@ class EventosInteraccionMixin:
         estado_hw = "Thorlabs GVS112/M" if conectado else "Virtual Simulation"
         self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
         modo = "Physical Hardware" if conectado else "Virtual Simulation"
-        self.terminal.log(f"[HW] Thorlabs GVS112/M — Mode: {modo}")
+        self.terminal.log(tr("log_hw_mode", mode=modo))
 
     def _on_click_load_file(self):
         """Opens file browser to select a DXF drawing for CAD/CAM G-code conversion and tracing."""
@@ -49,7 +50,7 @@ class EventosInteraccionMixin:
         """Loads a selected DXF or triggers file browser."""
         if self.puente.en_ejecucion or getattr(self, "_cargando_dxf", False):
             return
-        if val == "[ Load File... ]":
+        if val in ("[ Load File... ]", "[ Načíst soubor... ]", tr("dxf_load_file")):
             self._on_click_load_file()
         else:
             dxfs = self.puente.listar_archivos_dxf()
@@ -79,7 +80,7 @@ class EventosInteraccionMixin:
                 if self.puente.ruta_dxf_actual:
                     self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
                     self._actualizar_vistas_canvases()
-                self.terminal.log(f"[Recipe] Selected: {nombre_receta}")
+                self.terminal.log(tr("log_recipe_sel", name=nombre_receta))
                 break
 
     def _on_rotacion_cambiada(self, angulo: float):
@@ -120,7 +121,7 @@ class EventosInteraccionMixin:
         try:
             self.puente.guardar_o_actualizar_receta(datos, receta_id)
             messagebox.showinfo("Recipe", f"Recipe '{nombre_receta}' successfully updated.")
-            self.terminal.log(f"[Recipes] Recipe ID={receta_id} ('{nombre_receta}') saved to SQLite3.")
+            self.terminal.log(tr("log_recipe_saved", id=receta_id, name=nombre_receta))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save recipe: {e}")
 
@@ -176,6 +177,7 @@ class EventosInteraccionMixin:
                 self.panel_config.set_recetas(nombres)
                 if self.lista_recetas:
                     self._on_receta_seleccionada(self.lista_recetas[0]["nombre"])
+                self.terminal.log(tr("log_recipe_deleted", name=nombre))
                 messagebox.showinfo("Deleted", f"Recipe '{nombre}' deleted.")
 
     def _on_centro_cambiado(self, x: float, y: float):
@@ -188,7 +190,7 @@ class EventosInteraccionMixin:
         self.panel_derecho.actualizar_coordenadas(x, y)
         if not self.puente.en_ejecucion:
             self.puente.centrar_galvos()
-        self.terminal.log(f"[HOME] Manual center set to: ({x:.2f}, {y:.2f}) cm")
+        self.terminal.log(tr("log_home_set", x=x, y=y))
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
         self._actualizar_vistas_canvases()
@@ -208,10 +210,10 @@ class EventosInteraccionMixin:
         if self.puente.ruta_dxf_actual:
             self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Base] Dimensions: {ancho_cm:.1f} x {alto_cm:.1f} cm | Automatic center: ({cx:.2f}, {cy:.2f}) cm. Paths recalculated.")
+            self.terminal.log(tr("log_base_recalc", w=ancho_cm, h=alto_cm, cx=cx, cy=cy))
         else:
             self._actualizar_vistas_canvases()
-            self.terminal.log(f"[Base] Dimensions: {ancho_cm:.1f} x {alto_cm:.1f} cm | Automatic center: ({cx:.2f}, {cy:.2f}) cm.")
+            self.terminal.log(tr("log_base_set", w=ancho_cm, h=alto_cm, cx=cx, cy=cy))
 
     def _aplicar_limites_hardware(self):
         """Aplica los límites dinámicos de la máquina al panel general para renderizado correcto."""

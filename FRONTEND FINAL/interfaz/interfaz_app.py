@@ -41,6 +41,7 @@ cargar_fuentes_windows()
 
 # Puente de conexión con el backend
 from interfaz.conexion_interfaz import PuenteLaser
+from interfaz.i18n import tr
 
 # =============================================================================
 # 2 A 6. COMPONENTES VISUALES
@@ -159,7 +160,8 @@ class AppLaserCTk(
             on_com_seleccionado=self._on_com_seleccionado,
             on_dxf_seleccionado=self._on_dxf_seleccionado,
             on_load_file_click=self._on_click_load_file,
-            on_toggle_terminal=self._on_toggle_terminal
+            on_toggle_terminal=self._on_toggle_terminal,
+            on_idioma_cambiado=self._on_idioma_cambiado
         )
         self.barra_superior.pack(fill="x", padx=16, pady=(10, 4))
 
@@ -210,6 +212,12 @@ class AppLaserCTk(
             on_cerrar=lambda: self.barra_superior.set_terminal_activo(False),
             obtener_historial=lambda: self.puente.gestor_trazabilidad.listar_historial(limite=50)
         )
+
+    def _on_idioma_cambiado(self, nuevo_idioma: str):
+        """Notificación cuando el usuario cambia el idioma (EN / CS)."""
+        if hasattr(self, 'terminal'):
+            self.terminal.log(tr("log_lang_changed"))
+
 
 
 def iniciar():

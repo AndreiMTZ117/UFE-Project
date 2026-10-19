@@ -16,6 +16,7 @@ from .constantes import (
     COLOR_GREEN, COLOR_YELLOW, COLOR_TERMINAL_BG,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
 )
+from .i18n import tr, registrar_observador, obtener_idioma
 
 
 class TerminalFlotante(ctk.CTkFrame):
@@ -47,6 +48,8 @@ class TerminalFlotante(ctk.CTkFrame):
         self._modo_historial = False
 
         self._crear_widgets()
+        registrar_observador(self.actualizar_idioma)
+
 
     def _crear_widgets(self):
         # 1. Cabecera del terminal
@@ -56,7 +59,7 @@ class TerminalFlotante(ctk.CTkFrame):
         # Botón History funcional
         self.btn_history = ctk.CTkButton(
             t_header,
-            text="📋 History",
+            text=tr("term_history"),
             command=self._toggle_historial,
             fg_color="transparent",
             text_color="#FFFFFF",
@@ -73,7 +76,7 @@ class TerminalFlotante(ctk.CTkFrame):
         # Botón Exportar CSV
         self.btn_export = ctk.CTkButton(
             t_header,
-            text="⬇ CSV",
+            text=tr("term_export"),
             command=self._exportar_csv,
             fg_color="transparent",
             text_color="#FFFFFF",
@@ -112,7 +115,7 @@ class TerminalFlotante(ctk.CTkFrame):
             bd=0
         )
         self.txt_terminal.pack(fill="both", expand=True, padx=12, pady=(4, 12))
-        self.txt_terminal.insert("end", "[UFE Laser Console Initialized]\nSystem ready.\n")
+        self.txt_terminal.insert("end", tr("log_console_init") + "\n")
 
         # 3. Frame de historial (oculto por defecto)
         self.frame_historial = ctk.CTkFrame(self, fg_color=COLOR_TERMINAL_BG)
@@ -123,7 +126,7 @@ class TerminalFlotante(ctk.CTkFrame):
         if self._modo_historial:
             self.frame_historial.pack_forget()
             self.txt_terminal.pack(fill="both", expand=True, padx=12, pady=(4, 12))
-            self.btn_history.configure(text="📋 History", border_color="#FFFFFF")
+            self.btn_history.configure(text=tr("term_history"), border_color="#FFFFFF")
             self._modo_historial = False
         else:
             self._mostrar_historial()
@@ -143,13 +146,13 @@ class TerminalFlotante(ctk.CTkFrame):
             widget.destroy()
 
         self.frame_historial.pack(fill="both", expand=True, padx=12, pady=(4, 12))
-        self.btn_history.configure(text="◀ Logs", border_color=COLOR_YELLOW)
+        self.btn_history.configure(text=tr("term_logs"), border_color=COLOR_YELLOW)
         self._modo_historial = True
 
         if not registros:
             lbl_empty = ctk.CTkLabel(
                 self.frame_historial,
-                text="No production records found.",
+                text=tr("hist_no_records"),
                 font=self.f_bold,
                 text_color="#94A3B8"
             )
@@ -169,7 +172,7 @@ class TerminalFlotante(ctk.CTkFrame):
         header_frame.pack(fill="x", padx=2, pady=(0, 4))
         header_frame.pack_propagate(False)
 
-        columnas = ["#", "Fecha", "DXF", "Receta", "Modo", "Estado", "Duración"]
+        columnas = [tr("col_num"), tr("col_date"), tr("col_dxf"), tr("col_recipe"), tr("col_mode"), tr("col_status"), tr("col_duration")]
         anchos = [32, 115, 125, 115, 75, 85, 60]
         for col, ancho in zip(columnas, anchos):
             ctk.CTkLabel(
@@ -192,10 +195,10 @@ class TerminalFlotante(ctk.CTkFrame):
             estado_raw = str(reg.get("estado", "?")).strip().upper()
             if estado_raw in ("COMPLETADO", "COMPLETED", "OK"):
                 color_estado = COLOR_GREEN
-                estado_display = "COMPLETED"
+                estado_display = tr("status_completed")
             elif estado_raw in ("ABORTADO", "ABORTED", "STOPPED"):
                 color_estado = "#FF6B6B"
-                estado_display = "ABORTED"
+                estado_display = tr("status_stopped")
             else:
                 color_estado = "#F5A623"
                 estado_display = "FAILED"
@@ -216,6 +219,13 @@ class TerminalFlotante(ctk.CTkFrame):
                 receta_txt = receta_txt[:13] + "..."
 
             modo_txt = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting")
+            if modo_txt in ("Cutting", "Řezání"):
+                modo_txt = tr("mode_cutting")
+            elif modo_txt in ("Welding", "Svařování"):
+                modo_txt = tr("mode_welding")
+            elif modo_txt in ("Marking", "Značení"):
+                modo_txt = tr("mode_marking")
+
             if len(modo_txt) > 10:
                 modo_txt = modo_txt[:8] + ".."
 
@@ -247,14 +257,14 @@ class TerminalFlotante(ctk.CTkFrame):
 
         registros = self.obtener_historial()
         if not registros:
-            self.log("[Export] No records found to export.")
+            self.log(tr("hist_export_empty"))
             return
 
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         ruta_default = f"production_history_{fecha_str}.csv"
 
         ruta = filedialog.asksaveasfilename(
-            title="Export Production History",
+            title=tr("hist_export_title"),
             defaultextension=".csv",
             initialfile=ruta_default,
             filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
@@ -282,7 +292,7 @@ class TerminalFlotante(ctk.CTkFrame):
                     hora = partes[1] if len(partes) > 1 else ""
 
                     st_raw = str(reg.get("estado", "")).upper()
-                    st_eng = "COMPLETED" if st_raw == "COMPLETADO" else "ABORTED" if st_raw == "ABORTADO" else st_raw
+                    st_eng = "COMPLETED" if st_raw in ("COMPLETADO", "COMPLETED", "OK") else "ABORTED" if st_raw in ("ABORTADO", "ABORTED", "STOPPED") else st_raw
 
                     modo_proc_csv = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting")
 
@@ -307,9 +317,19 @@ class TerminalFlotante(ctk.CTkFrame):
                     }
                     writer.writerow(fila)
 
-            self.log(f"[Export] History successfully exported to: {os.path.basename(ruta)} ({len(registros)} records)")
+            self.log(tr("hist_export_ok", file=os.path.basename(ruta), count=len(registros)))
         except Exception as e:
-            self.log(f"[Export] Export error: {e}")
+            self.log(tr("hist_export_err", err=e))
+
+    def actualizar_idioma(self):
+        """Actualiza textos de botones y tabla del modal de terminal al cambiar de idioma."""
+        if hasattr(self, "btn_history"):
+            self.btn_history.configure(text=tr("term_logs") if self._modo_historial else tr("term_history"))
+        if hasattr(self, "btn_export"):
+            self.btn_export.configure(text=tr("term_export"))
+        if self._modo_historial:
+            self._mostrar_historial()
+
 
     def toggle(self):
         if self.visible:

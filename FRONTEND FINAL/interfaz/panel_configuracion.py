@@ -20,6 +20,8 @@ from .constantes import (
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER,
     BrutalOptionMenu, agregar_tooltip
 )
+from .i18n import tr, registrar_observador
+
 
 # Textos de ayuda (tooltips) de cada parámetro editable
 _AYUDAS = {
@@ -132,9 +134,12 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.f_div = ctk.CTkFont(family=FONT_TEACHERS, size=9, weight="bold")
 
         self.inputs: Dict[str, ctk.CTkEntry] = {}
+        self._div_labels: Dict[str, ctk.CTkLabel] = {}
+        self._entry_labels: Dict[str, Any] = {}
         self.bloqueado_ejecucion = False
 
         self._crear_widgets()
+        registrar_observador(self.actualizar_idioma)
 
     # =========================================================================
     # CONSTRUCCIÓN DE WIDGETS
@@ -144,19 +149,19 @@ class PanelConfiguracion(ctk.CTkFrame):
         header_container = ctk.CTkFrame(self, fg_color="transparent")
         header_container.pack(side="top", fill="x", padx=6, pady=(2, 4))
 
-        lbl_sec = ctk.CTkLabel(
+        self.lbl_sec = ctk.CTkLabel(
             header_container,
-            text="RECIPE & PARAMETERS",
+            text=tr("recipe_parameters"),
             font=self.f_head,
             text_color=COLOR_TEXT,
             anchor="w"
         )
-        lbl_sec.pack(fill="x", pady=(0, 2))
+        self.lbl_sec.pack(fill="x", pady=(0, 2))
 
         header_frame = ctk.CTkFrame(header_container, fg_color="transparent")
         header_frame.pack(fill="x")
 
-        receta_box = ctk.CTkFrame(
+        self.receta_box = ctk.CTkFrame(
             header_frame,
             fg_color=COLOR_CARD,
             border_color=COLOR_BORDER,
@@ -164,11 +169,11 @@ class PanelConfiguracion(ctk.CTkFrame):
             corner_radius=BRUTAL_CORNER,
             height=34
         )
-        receta_box.pack(side="left", fill="x", expand=True, padx=(0, 4))
-        receta_box.pack_propagate(False)
+        self.receta_box.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self.receta_box.pack_propagate(False)
 
         self.opt_receta = BrutalOptionMenu(
-            receta_box,
+            self.receta_box,
             values=["Acrylic — Standard"],
             command=self._cb_receta_seleccionada,
             fg_color=COLOR_CARD,
@@ -183,11 +188,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=30
         )
         self.opt_receta.pack(fill="both", expand=True, padx=2, pady=2)
-        agregar_tooltip(
-            receta_box,
-            "Active recipe: saved preset of cutting parameters (speeds, delays, tolerances).\n"
-            "Selecting loads its values into the form."
-        )
+        agregar_tooltip(self.receta_box, tr("tooltip_recipe"))
 
         self.btn_del_receta = ctk.CTkButton(
             header_frame,
@@ -204,7 +205,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             font=ctk.CTkFont(size=14)
         )
         self.btn_del_receta.pack(side="right")
-        agregar_tooltip(self.btn_del_receta, "Delete selected recipe (factory preset recipes are protected).")
+        agregar_tooltip(self.btn_del_receta, tr("tooltip_btn_del"))
 
         # 2. Botonera New / Save (Anclada al fondo con prioridad)
         btn_box = ctk.CTkFrame(
@@ -220,7 +221,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         self.btn_new = ctk.CTkButton(
             btn_box,
-            text="+ New",
+            text=tr("btn_new_recipe"),
             command=self._cb_crear_receta,
             fg_color=COLOR_YELLOW,
             text_color=COLOR_TEXT,
@@ -232,11 +233,11 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=30
         )
         self.btn_new.pack(side="left", fill="both", expand=True, padx=(3, 2), pady=3)
-        agregar_tooltip(self.btn_new, "Create a new recipe preset with current form values.")
+        agregar_tooltip(self.btn_new, tr("tooltip_btn_new"))
 
         self.btn_save = ctk.CTkButton(
             btn_box,
-            text="💾 Save",
+            text=tr("btn_save_recipe"),
             command=self._cb_guardar_receta,
             fg_color="#F1F5F9",
             text_color=COLOR_TEXT,
@@ -248,7 +249,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=30
         )
         self.btn_save.pack(side="right", fill="both", expand=True, padx=(2, 3), pady=3)
-        agregar_tooltip(self.btn_save, "Save current form values to the selected recipe preset.")
+        agregar_tooltip(self.btn_save, tr("tooltip_btn_save"))
 
         # 3. Formulario scrollable de parámetros con 6 divisores continuos
         self.scroll_params = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -257,44 +258,45 @@ class PanelConfiguracion(ctk.CTkFrame):
         # -------------------------------------------------------------
         # A) KINEMATICS
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "KINEMATICS", es_primero=True)
-        self._crear_campo_entry(self.scroll_params, "Mark speed", "velocidad_trazado", "mm/s", "2.0")
-        self._crear_campo_entry(self.scroll_params, "Travel speed", "velocidad_viaje", "mm/s", "3.5")
-        self._crear_campo_entry(self.scroll_params, "Min. segment dur.", "duracion_min_segmento_ms", "ms", "50")
-        self._crear_campo_entry(self.scroll_params, "Min. travel dur.", "duracion_min_viaje_ms", "ms", "300")
+        self._crear_divisor(self.scroll_params, "sec_kinematics", es_primero=True)
+        self._crear_campo_entry(self.scroll_params, "velocidad_trazado", "mm/s", "2.0")
+        self._crear_campo_entry(self.scroll_params, "velocidad_viaje", "mm/s", "3.5")
+        self._crear_campo_entry(self.scroll_params, "duracion_min_segmento_ms", "ms", "50")
+        self._crear_campo_entry(self.scroll_params, "duracion_min_viaje_ms", "ms", "300")
 
         # -------------------------------------------------------------
         # B) OPTICAL DELAYS
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "OPTICAL DELAYS")
-        self._crear_campo_entry(self.scroll_params, "Laser ON delay", "laser_on_delay_ms", "ms", "50")
-        self._crear_campo_entry(self.scroll_params, "Laser OFF delay", "laser_off_delay_ms", "ms", "30")
-        self._crear_campo_entry(self.scroll_params, "Mark delay", "mark_delay_ms", "ms", "20")
-        self._crear_campo_entry(self.scroll_params, "Jump delay", "jump_delay_ms", "ms", "100")
+        self._crear_divisor(self.scroll_params, "sec_optical_delays")
+        self._crear_campo_entry(self.scroll_params, "laser_on_delay_ms", "ms", "50")
+        self._crear_campo_entry(self.scroll_params, "laser_off_delay_ms", "ms", "30")
+        self._crear_campo_entry(self.scroll_params, "mark_delay_ms", "ms", "20")
+        self._crear_campo_entry(self.scroll_params, "jump_delay_ms", "ms", "100")
 
         # -------------------------------------------------------------
         # C) PROCESS & PASSES
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "PROCESS & PASSES")
+        self._crear_divisor(self.scroll_params, "sec_process_passes")
 
         # Selector de Modo de Proceso
-        card_proc = ctk.CTkFrame(
+        self.card_proc = ctk.CTkFrame(
             self.scroll_params,
             fg_color=COLOR_CARD,
             border_color=COLOR_BORDER,
             border_width=1,
             corner_radius=BRUTAL_CORNER
         )
-        card_proc.pack(fill="x", padx=4, pady=2)
+        self.card_proc.pack(fill="x", padx=4, pady=2)
 
-        top_proc = ctk.CTkFrame(card_proc, fg_color="transparent")
+        top_proc = ctk.CTkFrame(self.card_proc, fg_color="transparent")
         top_proc.pack(fill="x", padx=6, pady=(3, 1))
-        ctk.CTkLabel(top_proc, text="Process mode", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
+        self.lbl_proc_title = ctk.CTkLabel(top_proc, text=tr("param_modo_proceso"), font=self.f_regular, text_color=COLOR_TEXT)
+        self.lbl_proc_title.pack(side="left")
         ctk.CTkLabel(top_proc, text="[preset]", font=self.f_unit, text_color="#64748B").pack(side="right")
 
         self.opt_modo_proceso = BrutalOptionMenu(
-            card_proc,
-            values=["Cutting", "Welding", "Marking"],
+            self.card_proc,
+            values=[tr("mode_cutting"), tr("mode_welding"), tr("mode_marking")],
             command=self._cb_modo_proceso_cambiado,
             fg_color="#F8FAFC",
             text_color=COLOR_TEXT,
@@ -307,49 +309,50 @@ class PanelConfiguracion(ctk.CTkFrame):
             font=self.f_bold,
             height=26
         )
-        self.opt_modo_proceso.set("Cutting")
+        self.opt_modo_proceso.set(tr("mode_cutting"))
         self.opt_modo_proceso.pack(fill="x", padx=6, pady=(1, 4))
-        agregar_tooltip(card_proc, _AYUDAS["modo_proceso"])
+        agregar_tooltip(self.card_proc, tr("help_modo_proceso"))
 
-        self._crear_campo_entry(self.scroll_params, "Number of passes", "num_pasadas", "passes", "1")
-        self._crear_campo_entry(self.scroll_params, "Cooling delay", "cooling_delay_s", "s", "0.0")
+        self._crear_campo_entry(self.scroll_params, "num_pasadas", "passes", "1")
+        self._crear_campo_entry(self.scroll_params, "cooling_delay_s", "s", "0.0")
 
         # -------------------------------------------------------------
         # D) CAD GEOMETRY
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "CAD GEOMETRY")
-        self._crear_campo_entry(self.scroll_params, "RDP tolerance", "tolerancia_rdp", "mm", "0.005")
-        self._crear_campo_entry(self.scroll_params, "Join tolerance", "tolerancia_union", "mm", "0.08")
+        self._crear_divisor(self.scroll_params, "sec_cad_geometry")
+        self._crear_campo_entry(self.scroll_params, "tolerancia_rdp", "mm", "0.005")
+        self._crear_campo_entry(self.scroll_params, "tolerancia_union", "mm", "0.08")
 
         # -------------------------------------------------------------
         # E) SPATIAL & AXES
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "SPATIAL & AXES")
-        self._crear_campo_entry(self.scroll_params, "Drawing scale", "escala_dibujo", "ratio", "0.78")
-        self._crear_campo_entry(self.scroll_params, "Rotation", "rotacion_grados", "°", "0")
+        self._crear_divisor(self.scroll_params, "sec_spatial_axes")
+        self._crear_campo_entry(self.scroll_params, "escala_dibujo", "ratio", "0.78")
+        self._crear_campo_entry(self.scroll_params, "rotacion_grados", "°", "0")
 
         # Fila horizontal compacta de CheckBoxes (Inv X, Inv Y, Swap XY)
-        card_axes = ctk.CTkFrame(
+        self.card_axes = ctk.CTkFrame(
             self.scroll_params,
             fg_color=COLOR_CARD,
             border_color=COLOR_BORDER,
             border_width=1,
             corner_radius=BRUTAL_CORNER
         )
-        card_axes.pack(fill="x", padx=4, pady=2)
+        self.card_axes.pack(fill="x", padx=4, pady=2)
 
-        top_axes = ctk.CTkFrame(card_axes, fg_color="transparent")
+        top_axes = ctk.CTkFrame(self.card_axes, fg_color="transparent")
         top_axes.pack(fill="x", padx=6, pady=(3, 1))
-        ctk.CTkLabel(top_axes, text="Axis transforms", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
+        self.lbl_axes_title = ctk.CTkLabel(top_axes, text=tr("sec_spatial_axes"), font=self.f_regular, text_color=COLOR_TEXT)
+        self.lbl_axes_title.pack(side="left")
         ctk.CTkLabel(top_axes, text="[flips]", font=self.f_unit, text_color="#64748B").pack(side="right")
 
-        chk_row = ctk.CTkFrame(card_axes, fg_color="transparent")
+        chk_row = ctk.CTkFrame(self.card_axes, fg_color="transparent")
         chk_row.pack(fill="x", padx=6, pady=(2, 4))
 
         self.var_invert_x = ctk.BooleanVar(value=False)
         self.chk_invert_x = ctk.CTkCheckBox(
             chk_row,
-            text="Inv X",
+            text=tr("param_invert_x"),
             variable=self.var_invert_x,
             command=lambda: self._cb_checkbox_cambiado("invert_x", self.var_invert_x.get()),
             font=self.f_regular,
@@ -365,12 +368,12 @@ class PanelConfiguracion(ctk.CTkFrame):
             checkbox_height=16
         )
         self.chk_invert_x.pack(side="left", expand=True)
-        agregar_tooltip(self.chk_invert_x, _AYUDAS["invert_x"])
+        agregar_tooltip(self.chk_invert_x, tr("help_invert_x"))
 
         self.var_invert_y = ctk.BooleanVar(value=False)
         self.chk_invert_y = ctk.CTkCheckBox(
             chk_row,
-            text="Inv Y",
+            text=tr("param_invert_y"),
             variable=self.var_invert_y,
             command=lambda: self._cb_checkbox_cambiado("invert_y", self.var_invert_y.get()),
             font=self.f_regular,
@@ -386,12 +389,12 @@ class PanelConfiguracion(ctk.CTkFrame):
             checkbox_height=16
         )
         self.chk_invert_y.pack(side="left", expand=True)
-        agregar_tooltip(self.chk_invert_y, _AYUDAS["invert_y"])
+        agregar_tooltip(self.chk_invert_y, tr("help_invert_y"))
 
         self.var_swap_xy = ctk.BooleanVar(value=False)
         self.chk_swap_xy = ctk.CTkCheckBox(
             chk_row,
-            text="Swap XY",
+            text=tr("param_swap_xy"),
             variable=self.var_swap_xy,
             command=lambda: self._cb_checkbox_cambiado("swap_xy", self.var_swap_xy.get()),
             font=self.f_regular,
@@ -407,12 +410,12 @@ class PanelConfiguracion(ctk.CTkFrame):
             checkbox_height=16
         )
         self.chk_swap_xy.pack(side="left", expand=True)
-        agregar_tooltip(self.chk_swap_xy, _AYUDAS["swap_xy"])
+        agregar_tooltip(self.chk_swap_xy, tr("help_swap_xy"))
 
         # -------------------------------------------------------------
         # F) ALIGNMENT (Frame Area / Trace Box)
         # -------------------------------------------------------------
-        self._crear_divisor(self.scroll_params, "ALIGNMENT")
+        self._crear_divisor(self.scroll_params, "sec_alignment")
         card_align = ctk.CTkFrame(
             self.scroll_params,
             fg_color=COLOR_CARD,
@@ -424,7 +427,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         self.btn_frame = ctk.CTkButton(
             card_align,
-            text="⛶ Frame Area (Trace Box)",
+            text=f"⛶ {tr('btn_trace_box')}",
             command=self._cb_click_frame,
             fg_color="#F1F5F9",
             text_color=COLOR_TEXT,
@@ -436,11 +439,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=32
         )
         self.btn_frame.pack(fill="x", padx=6, pady=4)
-        agregar_tooltip(
-            self.btn_frame,
-            "Trace the closed 4-corner bounding box perimeter with LASER STRICTLY OFF\n"
-            "to check optical workpiece positioning and clearance."
-        )
+        agregar_tooltip(self.btn_frame, tr("tooltip_btn_frame"))
 
         # Contenedor dinámico durante enmarcado activo: Botones PAUSE y STOP (50% / 50% de ancho idéntico)
         self.frame_running_box = ctk.CTkFrame(card_align, fg_color="transparent")
@@ -450,7 +449,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         self.btn_frame_pause = ctk.CTkButton(
             self.frame_running_box,
-            text="⏸ Pause",
+            text=f"⏸ {tr('btn_pause')}",
             command=self._cb_frame_pause,
             fg_color=COLOR_PAUSE,
             text_color=COLOR_TEXT,
@@ -463,11 +462,11 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=32
         )
         self.btn_frame_pause.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
-        agregar_tooltip(self.btn_frame_pause, "Pause or resume the framing trace.")
+        agregar_tooltip(self.btn_frame_pause, tr("btn_pause"))
 
         self.btn_frame_stop = ctk.CTkButton(
             self.frame_running_box,
-            text="⏹ Stop",
+            text=f"⏹ {tr('btn_framing_stop')}",
             command=self._cb_frame_stop,
             fg_color=COLOR_RED,
             text_color="#FFFFFF",
@@ -480,12 +479,12 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=32
         )
         self.btn_frame_stop.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
-        agregar_tooltip(self.btn_frame_stop, "Stop framing immediately and return head to Home center.")
+        agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))
 
     # =========================================================================
     # HELPERS DE CREACIÓN DE WIDGETS
     # =========================================================================
-    def _crear_divisor(self, parent, texto_corto: str, es_primero: bool = False):
+    def _crear_divisor(self, parent, div_key: str, es_primero: bool = False):
         """
         Inserta un divisor horizontal Cyber-Brutalist elegante con etiqueta
         en mayúsculas (#64748B) y línea divisoria tenue (#CBD5E1).
@@ -497,18 +496,19 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         lbl = ctk.CTkLabel(
             div_frame,
-            text=texto_corto.upper(),
+            text=tr(div_key).upper(),
             font=self.f_div,
             text_color="#64748B"
         )
         lbl.pack(side="left", padx=(0, 6))
+        self._div_labels[div_key] = lbl
 
         line = ctk.CTkFrame(div_frame, fg_color="#CBD5E1", height=1)
         line.pack(side="left", fill="x", expand=True, pady=7)
         return div_frame
 
-    def _crear_campo_entry(self, parent, label_text: str, key: str, unit: str, val_def: str):
-        """Crea una tarjeta de entrada numérica estándar Cyber-Brutalist."""
+    def _crear_campo_entry(self, parent, key: str, unit: str, val_def: str):
+        """Crea una tarjeta de entrada numérica estándar Cyber-Brutalist con soporte i18n."""
         p_card = ctk.CTkFrame(
             parent,
             fg_color=COLOR_CARD,
@@ -521,8 +521,11 @@ class PanelConfiguracion(ctk.CTkFrame):
         top_row = ctk.CTkFrame(p_card, fg_color="transparent")
         top_row.pack(fill="x", padx=6, pady=(3, 1))
 
-        ctk.CTkLabel(top_row, text=label_text, font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
-        ctk.CTkLabel(top_row, text=f"[{unit}]", font=self.f_unit, text_color="#64748B").pack(side="right")
+        lbl_name = ctk.CTkLabel(top_row, text=tr(f"param_{key}"), font=self.f_regular, text_color=COLOR_TEXT)
+        lbl_name.pack(side="left")
+        lbl_unit = ctk.CTkLabel(top_row, text=f"[{unit}]", font=self.f_unit, text_color="#64748B")
+        lbl_unit.pack(side="right")
+        self._entry_labels[key] = (lbl_name, lbl_unit, unit, p_card)
 
         entry = ctk.CTkEntry(
             p_card,
@@ -538,10 +541,10 @@ class PanelConfiguracion(ctk.CTkFrame):
         entry.pack(fill="x", padx=6, pady=(1, 4))
         self.inputs[key] = entry
 
-        ayuda = _AYUDAS.get(key, label_text)
+        ayuda = tr(f"help_{key}")
         rango = _RANGOS_VALIDOS.get(key)
         if rango:
-            ayuda += f"\nValid range: {rango[0]} to {rango[1]} {unit}."
+            ayuda += f"\nRange: {rango[0]} to {rango[1]} {unit}."
         agregar_tooltip(p_card, ayuda)
 
         # Validación visual interactiva
@@ -699,10 +702,12 @@ class PanelConfiguracion(ctk.CTkFrame):
         # Modo de proceso
         if hasattr(self, "opt_modo_proceso"):
             modo = receta.get("modo_proceso", "Cutting")
-            if modo in ("Cutting", "Welding", "Marking"):
-                self.opt_modo_proceso.set(modo)
-            else:
-                self.opt_modo_proceso.set("Cutting")
+            modo_display = tr("mode_cutting")
+            if modo in ("Welding", "Svařování"):
+                modo_display = tr("mode_welding")
+            elif modo in ("Marking", "Značení"):
+                modo_display = tr("mode_marking")
+            self.opt_modo_proceso.set(modo_display)
 
         # Casillas de verificación de hardware
         if hasattr(self, "var_invert_x"):
@@ -758,9 +763,15 @@ class PanelConfiguracion(ctk.CTkFrame):
             except (ValueError, TypeError):
                 datos["tolerancia_rdp"] = 0.0
 
-        # Modo de proceso
+        # Modo de proceso normalizado canónico en inglés para backend / DB
         if hasattr(self, "opt_modo_proceso"):
-            datos["modo_proceso"] = str(self.opt_modo_proceso.get())
+            modo_raw = str(self.opt_modo_proceso.get())
+            if modo_raw in ("Welding", "Svařování"):
+                datos["modo_proceso"] = "Welding"
+            elif modo_raw in ("Marking", "Značení"):
+                datos["modo_proceso"] = "Marking"
+            else:
+                datos["modo_proceso"] = "Cutting"
         else:
             datos["modo_proceso"] = "Cutting"
 
@@ -782,6 +793,82 @@ class PanelConfiguracion(ctk.CTkFrame):
         datos["rotar_90_grados"] = 1 if datos["rotacion_grados"] == 90.0 else 0
         return datos
 
+    def actualizar_idioma(self):
+        """Actualiza todas las etiquetas, divisores, botones y tooltips al cambiar el idioma."""
+        if hasattr(self, "lbl_sec"):
+            self.lbl_sec.configure(text=tr("recipe_parameters"))
+        if hasattr(self, "btn_new"):
+            self.btn_new.configure(text=tr("btn_new_recipe"))
+        if hasattr(self, "btn_save"):
+            self.btn_save.configure(text=tr("btn_save_recipe"))
+
+        # Actualizar divisores
+        for div_key, lbl in self._div_labels.items():
+            lbl.configure(text=tr(div_key).upper())
+
+        # Actualizar campos de entrada y tooltips
+        for key, (lbl_name, lbl_unit, unit, p_card) in self._entry_labels.items():
+            lbl_name.configure(text=tr(f"param_{key}"))
+            ayuda = tr(f"help_{key}")
+            rango = _RANGOS_VALIDOS.get(key)
+            if rango:
+                ayuda += f"\nRange: {rango[0]} to {rango[1]} {unit}."
+            agregar_tooltip(p_card, ayuda)
+
+        # Modo de proceso
+        if hasattr(self, "lbl_proc_title"):
+            self.lbl_proc_title.configure(text=tr("param_modo_proceso"))
+        if hasattr(self, "card_proc"):
+            agregar_tooltip(self.card_proc, tr("help_modo_proceso"))
+
+        if hasattr(self, "opt_modo_proceso"):
+            modo_actual = self.opt_modo_proceso.get()
+            canon = "Cutting"
+            if modo_actual in ("Welding", "Svařování"):
+                canon = "Welding"
+            elif modo_actual in ("Marking", "Značení"):
+                canon = "Marking"
+
+            self.opt_modo_proceso.configure(values=[tr("mode_cutting"), tr("mode_welding"), tr("mode_marking")])
+            if canon == "Welding":
+                self.opt_modo_proceso.set(tr("mode_welding"))
+            elif canon == "Marking":
+                self.opt_modo_proceso.set(tr("mode_marking"))
+            else:
+                self.opt_modo_proceso.set(tr("mode_cutting"))
+
+        # Checkboxes y alineación
+        if hasattr(self, "lbl_axes_title"):
+            self.lbl_axes_title.configure(text=tr("sec_spatial_axes"))
+        if hasattr(self, "chk_invert_x"):
+            self.chk_invert_x.configure(text=tr("param_invert_x"))
+            agregar_tooltip(self.chk_invert_x, tr("help_invert_x"))
+        if hasattr(self, "chk_invert_y"):
+            self.chk_invert_y.configure(text=tr("param_invert_y"))
+            agregar_tooltip(self.chk_invert_y, tr("help_invert_y"))
+        if hasattr(self, "chk_swap_xy"):
+            self.chk_swap_xy.configure(text=tr("param_swap_xy"))
+            agregar_tooltip(self.chk_swap_xy, tr("help_swap_xy"))
+
+        if hasattr(self, "btn_frame"):
+            self.btn_frame.configure(text=f"⛶ {tr('btn_trace_box')}")
+            agregar_tooltip(self.btn_frame, tr("tooltip_btn_frame"))
+        if hasattr(self, "btn_frame_pause"):
+            self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}")
+            agregar_tooltip(self.btn_frame_pause, tr("btn_pause"))
+        if hasattr(self, "btn_frame_stop"):
+            self.btn_frame_stop.configure(text=f"⏹ {tr('btn_framing_stop')}")
+            agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))
+
+        if hasattr(self, "receta_box"):
+            agregar_tooltip(self.receta_box, tr("tooltip_recipe"))
+        if hasattr(self, "btn_del_receta"):
+            agregar_tooltip(self.btn_del_receta, tr("tooltip_btn_del"))
+        if hasattr(self, "btn_new"):
+            agregar_tooltip(self.btn_new, tr("tooltip_btn_new"))
+        if hasattr(self, "btn_save"):
+            agregar_tooltip(self.btn_save, tr("tooltip_btn_save"))
+
     def set_recetas(self, nombres: List[str], seleccionada: Optional[str] = None):
         """Actualiza el dropdown de recetas."""
         self.opt_receta.configure(values=nombres)
@@ -796,3 +883,4 @@ class PanelConfiguracion(ctk.CTkFrame):
             self.btn_del_receta.pack(side="right")
         else:
             self.btn_del_receta.pack_forget()
+

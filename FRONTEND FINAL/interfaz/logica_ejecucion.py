@@ -12,6 +12,7 @@ Módulo encargado de controlar el ciclo de vida de ejecución del corte/grabado:
 import time
 from tkinter import messagebox
 from .conexion_interfaz import HARDWARE_CONFIG
+from interfaz.i18n import tr
 
 
 class LogicaEjecucionMixin:
@@ -83,12 +84,12 @@ class LogicaEjecucionMixin:
             self.panel_config.set_estado_pausa(esta_pausado)
         if esta_pausado:
             self.tiempo_ultima_pausa = time.time()
-            self.terminal.log("[PAUSE] Execution paused. Laser turned off. Timer frozen.")
+            self.terminal.log(tr("log_pause"))
         else:
             if self.tiempo_ultima_pausa > 0:
                 self.tiempo_pausa_acumulado += (time.time() - self.tiempo_ultima_pausa)
                 self.tiempo_ultima_pausa = 0.0
-            self.terminal.log("[RESUME] Execution resumed. Laser enabled. Timer active.")
+            self.terminal.log(tr("log_resume"))
 
     def _on_click_stop(self):
         """Parada de emergencia inmediata: solicita confirmación y aborta la ejecución."""
@@ -122,7 +123,7 @@ class LogicaEjecucionMixin:
 
         self._progreso_pendiente = None
         self._es_framing = False
-        self.terminal.log("[STOP] Emergency stop executed by operator.")
+        self.terminal.log(tr("log_stop"))
         self.puente.detener_ejecucion()
 
         # Limpiar inmediatamente los trazos del canvas para no dejar el marcado congelado
@@ -173,7 +174,7 @@ class LogicaEjecucionMixin:
         self._timer_after_id = self.after(200, self._actualizar_timer_loop)
 
         params = self.panel_config.obtener_datos_formulario()
-        self.terminal.log("[FRAMING] Tracing bounding box perimeter with LASER STRICTLY OFF (gate=0)...")
+        self.terminal.log(tr("log_framing_start"))
         self.puente.ejecutar_enmarcado(
             params=params,
             on_progress=self._cb_progreso,
@@ -411,15 +412,15 @@ class LogicaEjecucionMixin:
                 self.panel_derecho.dibujar_gauges(0.0, 0.0)
                 if estado in ("COMPLETADO", "COMPLETED"):
                     self.panel_derecho.set_estado_sistema("READY")
-                    self.terminal.log("[FRAMING] Framing perimeter check completed.")
+                    self.terminal.log(tr("log_framing_done"))
                 elif estado in ("DETENIDO", "ABORTADO", "ABORTED"):
                     self.panel_derecho.set_estado_sistema("STOPPED")
                     self.panel_general.ocultar_frame_dxf()
-                    self.terminal.log("[FRAMING] Framing routine aborted by operator.")
+                    self.terminal.log(tr("log_framing_aborted"))
                 elif estado in ("ERROR", "FAILED"):
                     self.panel_derecho.set_estado_sistema("STOPPED")
                     self.panel_general.ocultar_frame_dxf()
-                    self.terminal.log(f"[FRAMING] Framing error: {error_msg}")
+                    self.terminal.log(tr("log_framing_err", err=error_msg))
                 return
 
             if estado in ("COMPLETADO", "COMPLETED"):

@@ -14,6 +14,7 @@ from .constantes import (
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER,
     agregar_tooltip
 )
+from .i18n import tr, registrar_observador, obtener_idioma
 
 
 class PanelGeneral(ctk.CTkFrame):
@@ -47,6 +48,8 @@ class PanelGeneral(ctk.CTkFrame):
         self._base_h_px = 0.0
 
         self._crear_widgets()
+        registrar_observador(self.actualizar_idioma)
+
 
     def _crear_widgets(self):
         # 1. Título "General" y Leyenda de Trazos (top)
@@ -55,7 +58,7 @@ class PanelGeneral(ctk.CTkFrame):
 
         self.lbl_title = ctk.CTkLabel(
             top_header,
-            text="VECTOR CANVAS (1:1 ISOMETRIC)",
+            text=tr("canvas_title"),
             font=self.f_head,
             text_color=COLOR_TEXT,
             anchor="w"
@@ -81,7 +84,8 @@ class PanelGeneral(ctk.CTkFrame):
         c_guide = tk.Canvas(box_guide, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
         c_guide.pack(side="left")
         c_guide.create_line(2, 7, 18, 7, fill=COLOR_VECTOR_GRAY, width=2.5, capstyle="round")
-        ctk.CTkLabel(box_guide, text="Target Vector (Guide)", font=f_leg, text_color=COLOR_TEXT).pack(side="left", padx=(3, 2))
+        self.lbl_legend_guide = ctk.CTkLabel(box_guide, text=tr("legend_guide"), font=f_leg, text_color=COLOR_TEXT)
+        self.lbl_legend_guide.pack(side="left", padx=(3, 2))
 
         # Separador vertical
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
@@ -96,8 +100,8 @@ class PanelGeneral(ctk.CTkFrame):
         cy = 8.0
         for bx in (5.0, 13.0, 21.0):
             c_jump.create_oval(bx - r_bolita, cy - r_bolita, bx + r_bolita, cy + r_bolita, fill=COLOR_ORANGE, outline="")
-        lbl_jump = ctk.CTkLabel(box_jump, text="Rapid Jump (G0, Laser OFF)", font=f_leg, text_color=COLOR_TEXT)
-        lbl_jump.pack(side="left", padx=(4, 6))
+        self.lbl_legend_jump = ctk.CTkLabel(box_jump, text=tr("legend_jump"), font=f_leg, text_color=COLOR_TEXT)
+        self.lbl_legend_jump.pack(side="left", padx=(4, 6))
 
         # Separador vertical
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
@@ -108,7 +112,8 @@ class PanelGeneral(ctk.CTkFrame):
         c_trail = tk.Canvas(box_trail, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
         c_trail.pack(side="left")
         c_trail.create_line(2, 7, 18, 7, fill=COLOR_BLUE, width=3.5, capstyle="round")
-        ctk.CTkLabel(box_trail, text="Executed Toolpath Trail", font=f_leg, text_color=COLOR_TEXT).pack(side="left", padx=(3, 2))
+        self.lbl_legend_trail = ctk.CTkLabel(box_trail, text=tr("legend_trace"), font=f_leg, text_color=COLOR_TEXT)
+        self.lbl_legend_trail.pack(side="left", padx=(3, 2))
 
         # Separador vertical
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
@@ -119,7 +124,9 @@ class PanelGeneral(ctk.CTkFrame):
         c_pointer = tk.Canvas(box_pointer, width=16, height=14, bg=COLOR_CARD, highlightthickness=0)
         c_pointer.pack(side="left")
         c_pointer.create_oval(4, 3, 12, 11, fill="#22C55E", outline="#15803D", width=1.0)
-        ctk.CTkLabel(box_pointer, text="Beam Cursor", font=f_leg, text_color=COLOR_TEXT).pack(side="left", padx=(3, 2))
+        pointer_txt = "Beam Cursor" if obtener_idioma() == "EN" else "Kurzor paprsku"
+        self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=pointer_txt, font=f_leg, text_color=COLOR_TEXT)
+        self.lbl_legend_pointer.pack(side="left", padx=(3, 2))
 
         agregar_tooltip(
             self.legend_frame,
@@ -134,8 +141,8 @@ class PanelGeneral(ctk.CTkFrame):
         self.footer_area = ctk.CTkFrame(self, fg_color="transparent", height=34)
         self.footer_area.pack(side="bottom", fill="x", pady=(6, 0))
 
-        lbl_area = ctk.CTkLabel(self.footer_area, text="BASE AREA:", font=self.f_bold, text_color=COLOR_TEXT)
-        lbl_area.pack(side="left", padx=(2, 6))
+        self.lbl_area = ctk.CTkLabel(self.footer_area, text=f"{tr('base_dim_title')}:", font=self.f_bold, text_color=COLOR_TEXT)
+        self.lbl_area.pack(side="left", padx=(2, 6))
 
         # Píldora editable X
         self.pill_x = ctk.CTkFrame(
@@ -677,3 +684,48 @@ class PanelGeneral(ctk.CTkFrame):
         # 4. Rótulos de ejes: "Y [cm]" arriba del eje Y y "X [cm]" a la derecha del eje X
         c.create_text(x0 - 4, y0 - 8, text="Y [cm]", font=(FONT_TEACHERS, 8, "bold"), fill=COLOR_TEXT, anchor="sw")
         c.create_text(x1 + 6, y1, text="X [cm]", font=(FONT_TEACHERS, 8, "bold"), fill=COLOR_TEXT, anchor="w")
+
+    def actualizar_idioma(self):
+        """Actualiza títulos, leyendas y tooltips del panel central al cambiar el idioma."""
+        if hasattr(self, "lbl_title"):
+            self.lbl_title.configure(text=tr("canvas_title"))
+        if hasattr(self, "lbl_legend_guide"):
+            self.lbl_legend_guide.configure(text=tr("legend_guide"))
+        if hasattr(self, "lbl_legend_jump"):
+            self.lbl_legend_jump.configure(text=tr("legend_jump"))
+        if hasattr(self, "lbl_legend_trail"):
+            self.lbl_legend_trail.configure(text=tr("legend_trace"))
+        if hasattr(self, "lbl_legend_pointer"):
+            ptr_txt = "Beam Cursor" if obtener_idioma() == "EN" else "Kurzor paprsku"
+            self.lbl_legend_pointer.configure(text=ptr_txt)
+        if hasattr(self, "lbl_area"):
+            self.lbl_area.configure(text=f"{tr('base_dim_title')}:")
+
+        if hasattr(self, "legend_frame"):
+            agregar_tooltip(
+                self.legend_frame,
+                "Toolpath line guide:\n"
+                "• Gray: Target CAD geometry\n"
+                "• Dashed Orange: Rapid traverse without laser\n"
+                "• Blue: Laser-processed toolpath\n"
+                "• Green dot: Real-time beam / cursor position"
+            )
+        if hasattr(self, "pill_x"):
+            agregar_tooltip(
+                self.pill_x,
+                "Width (X axis) of the physical base or workpiece, in centimeters.\n"
+                "Defines the canvas scale and drawing placement area. Press Enter to apply."
+                if obtener_idioma() == "EN" else
+                "Šířka (osa X) fyzické základny nebo obrobku v centimetrech.\n"
+                "Definuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití."
+            )
+        if hasattr(self, "pill_y"):
+            agregar_tooltip(
+                self.pill_y,
+                "Height (Y axis) of the physical base or workpiece, in centimeters.\n"
+                "Defines the canvas scale and drawing placement area. Press Enter to apply."
+                if obtener_idioma() == "EN" else
+                "Výška (osa Y) fyzické základny nebo obrobku v centimetrech.\n"
+                "Definuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití."
+            )
+

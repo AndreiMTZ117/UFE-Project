@@ -37,6 +37,7 @@ from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
+from interfaz.i18n import tr
 
 
 def cargar_perfil_hardware() -> Dict[str, Any]:
@@ -702,7 +703,7 @@ class PuenteLaser:
         """
         if self._en_ejecucion:
             if on_log:
-                on_log("[Framing] Execution engine is busy. Cannot start framing.")
+                on_log(tr("log_framing_busy"))
             return False
 
         if not self.trazos_calibrados:
@@ -760,9 +761,10 @@ class PuenteLaser:
             self.apagar_laser()
 
             if on_log:
-                on_log(f"=== FRAMING ROUTINE STARTED ({num_vueltas} lap{'s' if num_vueltas > 1 else ''}) ===")
-                on_log(f"[Framing] Bounding Box: X[{min_x:.2f}, {max_x:.2f}] mm | Y[{min_y:.2f}, {max_y:.2f}] mm")
-                on_log(f"[Framing] Travel speed: {v_viaje} mm/s | Laser Gate: STRICTLY 0 (OFF)")
+                s_suf = 's' if num_vueltas > 1 else ''
+                on_log(tr("log_framing_routine_start", vueltas=num_vueltas, s=s_suf))
+                on_log(tr("log_framing_bbox", min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y))
+                on_log(tr("log_framing_speed", speed=v_viaje))
 
             try:
                 fs = 5000.0
@@ -828,10 +830,10 @@ class PuenteLaser:
 
                 if self._evento_detener.is_set():
                     if on_log:
-                        on_log("[Framing] Stopped by operator.")
+                        on_log(tr("log_framing_stopped_op"))
                 else:
                     if on_log:
-                        on_log("[Framing] Routine completed successfully. Galvos safely at Home.")
+                        on_log(tr("log_framing_ok"))
 
             except Exception as e:
                 estado = "ERROR"
@@ -886,7 +888,7 @@ class PuenteLaser:
         trazos = self.trazos_calibrados
         if not trazos:
             if self.ruta_dxf_actual and os.path.exists(self.ruta_dxf_actual):
-                on_log("[EXEC] Processing CAD/DXF geometry inside worker thread...")
+                on_log(tr("log_exec_processing"))
                 self.cargar_dxf(self.ruta_dxf_actual, params)
                 trazos = self.trazos_calibrados
         if not trazos:
@@ -910,14 +912,13 @@ class PuenteLaser:
         total_trazos = len(trazos)
         total_puntos = sum(len(t) for t in trazos)
 
-        on_log(f"[EXEC] Starting process in mode: {modo_proceso} | Passes: {num_pasadas} | File: {self.nombre_dxf_actual}")
-        on_log(f"=== TRACE STARTED: {self.nombre_dxf_actual} ===")
-        on_log(f"Hardware: {self.obtener_nombre_hardware()} | Mode: {'PHYSICAL HARDWARE' if not self.es_simulacion else 'VIRTUAL SIMULATION'}")
-        on_log(f"Paths: {total_trazos} | Waypoints: {total_puntos} | Passes: {num_pasadas}")
-        on_log(f"Mark speed: {v_trazado} mm/s | Jump speed: {v_viaje} mm/s")
-        on_log(f"Delays: jump={jump_delay_ms:g} ms | mark={mark_delay_ms:g} ms | "
-               f"laser ON={laser_on_delay_ms:g} ms | laser OFF={laser_off_delay_ms:g} ms | "
-               f"cooling={cooling_delay_s:g} s")
+        hw_mode = 'PHYSICAL HARDWARE' if not self.es_simulacion else 'VIRTUAL SIMULATION'
+        on_log(tr("log_trace_start", mode=modo_proceso, passes=num_pasadas, file=self.nombre_dxf_actual))
+        on_log(tr("log_trace_header", file=self.nombre_dxf_actual))
+        on_log(tr("log_trace_hw", hw=self.obtener_nombre_hardware(), mode=hw_mode))
+        on_log(tr("log_trace_paths", paths=total_trazos, waypoints=total_puntos, passes=num_pasadas))
+        on_log(tr("log_trace_speeds", mark=v_trazado, jump=v_viaje))
+        on_log(tr("log_trace_delays", jump=jump_delay_ms, mark=mark_delay_ms, on=laser_on_delay_ms, off=laser_off_delay_ms, cooling=cooling_delay_s))
 
         try:
             # ---------------------------------------------------------------
@@ -1035,7 +1036,7 @@ class PuenteLaser:
                     estado = "STOPPED"
                     break
 
-                on_log(f"[EXEC] Starting process in mode: {modo_proceso} | Pass {pass_idx}/{num_pasadas}")
+                on_log(tr("log_exec_pass", mode=modo_proceso, pass_idx=pass_idx, passes=num_pasadas))
 
                 # Deterministic hardware/simulation output via NIDaqController for this pass
                 try:
@@ -1153,11 +1154,11 @@ class PuenteLaser:
             # ---------------------------------------------------------------
             if self._evento_detener.is_set():
                 estado = "ABORTED"
-                on_log("[STOP] Emergency stop executed.")
+                on_log(tr("log_stop_executed"))
                 self.apagar_laser()
-                on_log("[STOP] Laser off. System safely at rest.")
+                on_log(tr("log_stop_rest"))
             else:
-                on_log("Work cycle completed successfully!")
+                on_log(tr("log_work_completed"))
 
         except Exception as e:
             estado = "ERROR"
@@ -1209,7 +1210,7 @@ class PuenteLaser:
                     "mensaje_error": error_msg,
                     "duracion_segundos": duracion_s
                 })
-                on_log(f"[DB] Cycle recorded: Status={estado_db}, Duration={duracion_s}s")
+                on_log(tr("log_db_recorded", status=estado_db, dur=duracion_s))
             except Exception as e_bd:
                 on_log(f"[DB] Warning: Could not record traceability: {e_bd}")
 

@@ -9,6 +9,7 @@ estado del hardware Thorlabs GVS112/M y carga de ficheros DXF.
 import os
 import threading
 from tkinter import messagebox
+from interfaz.i18n import tr
 
 
 class GestionDatosMixin:
@@ -34,9 +35,9 @@ class GestionDatosMixin:
         conectado_fisico = self.puente.esta_conectado_fisico()
         self.barra_superior.set_estado_com(conectado_fisico)
         if conectado_fisico:
-            self.terminal.log("[HW] Thorlabs GVS112/M physically connected.")
+            self.terminal.log(tr("log_hw_connected"))
         else:
-            self.terminal.log("[HW] Thorlabs GVS112/M not detected — VIRTUAL SIMULATION mode active.")
+            self.terminal.log(tr("log_hw_sim"))
 
         # Mostrar estado en el selector de puertos COM
         estado_hw = "Thorlabs GVS112/M" if conectado_fisico else "Virtual Simulation"
@@ -66,7 +67,7 @@ class GestionDatosMixin:
             self.barra_superior.set_bloqueo_carga(True)
 
         if hasattr(self, "terminal"):
-            self.terminal.log("Loading and parsing geometry, please wait...")
+            self.terminal.log(tr("log_dxf_loading"))
 
         params = self.panel_config.obtener_datos_formulario()
 
@@ -75,8 +76,10 @@ class GestionDatosMixin:
             if hasattr(self, "barra_superior") and hasattr(self.barra_superior, "set_bloqueo_carga"):
                 self.barra_superior.set_bloqueo_carga(False)
             if hasattr(self, "terminal"):
-                self.terminal.log(f"[DXF] Loaded: {res.get('archivo', os.path.basename(ruta))} "
-                                  f"({res.get('num_trazos', 0)} paths, {res.get('num_waypoints', 0)} waypoints)")
+                archivo = res.get('archivo', os.path.basename(ruta))
+                paths = res.get('num_trazos', 0)
+                points = res.get('num_waypoints', 0)
+                self.terminal.log(tr("log_dxf_loaded", file=archivo, paths=paths, points=points))
             self.trazos_completados.clear()
             self.panel_general.limpiar_completados()
             self.panel_derecho.limpiar_progreso()
@@ -89,7 +92,7 @@ class GestionDatosMixin:
             if hasattr(self, "barra_superior") and hasattr(self.barra_superior, "set_bloqueo_carga"):
                 self.barra_superior.set_bloqueo_carga(False)
             if hasattr(self, "terminal"):
-                self.terminal.log(f"[DXF Error] Failed to load {os.path.basename(ruta)}: {e}")
+                self.terminal.log(tr("log_dxf_err", file=os.path.basename(ruta), err=e))
             messagebox.showerror("DXF Error", f"Failed to load DXF file: {e}")
 
         if not asincrono:

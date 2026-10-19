@@ -31,7 +31,8 @@ customtkinter>=5.2.0
 # 2. Computación Numérica y Algoritmos Espaciales CAM
 # ------------------------------------------------------------------------------
 # Manejo de arreglos vectorizados, síntesis de ondas a 100 kHz y discretización
-numpy>=1.24.0,<2.0.0
+numpy>=1.24.0
+
 
 # Optimización espacial de trayectorias, distancias cdist y heurísticas TSP
 scipy>=1.10.0

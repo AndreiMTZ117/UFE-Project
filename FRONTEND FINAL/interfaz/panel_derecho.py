@@ -17,6 +17,7 @@ from .constantes import (
     BRUTAL_CORNER, BRUTAL_BORDER, BRUTAL_BORDER_THICK,
     agregar_tooltip
 )
+from .i18n import tr, registrar_observador, obtener_idioma
 
 
 class PanelDerecho(ctk.CTkFrame):
@@ -51,6 +52,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.centro_home = (14.00, 12.50)
         self.pos_laser_actual = (14.00, 12.50)
+        self._ultimo_estado = "READY"
 
         self.pct_trace = 0.0
         self.pct_total = 0.0
@@ -62,6 +64,8 @@ class PanelDerecho(ctk.CTkFrame):
         self.ancla_vivo: Optional[Tuple[float, float]] = None
 
         self._crear_widgets()
+        registrar_observador(self.actualizar_idioma)
+
 
     def _crear_widgets(self):
         # =====================================================================
@@ -87,7 +91,7 @@ class PanelDerecho(ctk.CTkFrame):
             height=42
         )
         self.btn_home.pack(side="left", padx=(0, 6))
-        agregar_tooltip(self.btn_home, "Open/close calibration panel to define resting center (Home).")
+        agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
 
         # Contenedor dinámico (IDLE vs RUNNING)
         self.action_box = ctk.CTkFrame(self.frame_controles, fg_color="transparent")
@@ -96,7 +100,7 @@ class PanelDerecho(ctk.CTkFrame):
         # Botón START (Modo IDLE) - Ámbar industrial #F5A623 con borde de 2px
         self.btn_start = ctk.CTkButton(
             self.action_box,
-            text="START",
+            text=tr("btn_start"),
             command=self._cb_start,
             fg_color=COLOR_YELLOW,
             text_color=COLOR_TEXT,
@@ -115,7 +119,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.btn_pause_resume = ctk.CTkButton(
             self.running_box,
-            text="PAUSE",
+            text=tr("btn_pause"),
             command=self._cb_pause_resume,
             fg_color=COLOR_PAUSE,
             text_color=COLOR_TEXT,
@@ -133,7 +137,7 @@ class PanelDerecho(ctk.CTkFrame):
         # Emergency Stop con jerarquía visual dominante y borde reforzado de 3px
         self.btn_stop = ctk.CTkButton(
             self.running_box,
-            text="STOP",
+            text=tr("btn_stop"),
             command=self._cb_stop,
             fg_color=COLOR_RED,
             text_color="#FFFFFF",
@@ -192,7 +196,7 @@ class PanelDerecho(ctk.CTkFrame):
         # Badge de estado del sistema (Ready / Scanning / Paused / Stopped)
         self.badge_status = ctk.CTkLabel(
             header_telem,
-            text="● READY",
+            text=f"● {tr('status_ready')}",
             font=ctk.CTkFont(family=FONT_SEGOE, size=9, weight="bold"),
             text_color=COLOR_GREEN,
             fg_color="#DCFCE7",
@@ -219,12 +223,13 @@ class PanelDerecho(ctk.CTkFrame):
         self.box_vx.pack(side="left", fill="both", expand=True, padx=(0, 4))
         self.box_vx.pack_propagate(False)
 
-        ctk.CTkLabel(
+        self.lbl_chan_x = ctk.CTkLabel(
             self.box_vx,
-            text="CHANNEL X",
+            text=tr("dmm_x"),
             font=self.f_dmm_lbl,
             text_color=COLOR_MUTED
-        ).pack(anchor="w", padx=6, pady=(2, 0))
+        )
+        self.lbl_chan_x.pack(anchor="w", padx=6, pady=(2, 0))
 
         self.lbl_vx = ctk.CTkLabel(
             self.box_vx,
@@ -247,12 +252,13 @@ class PanelDerecho(ctk.CTkFrame):
         self.box_vy.pack(side="right", fill="both", expand=True, padx=(4, 0))
         self.box_vy.pack_propagate(False)
 
-        ctk.CTkLabel(
+        self.lbl_chan_y = ctk.CTkLabel(
             self.box_vy,
-            text="CHANNEL Y",
+            text=tr("dmm_y"),
             font=self.f_dmm_lbl,
             text_color=COLOR_MUTED
-        ).pack(anchor="w", padx=6, pady=(2, 0))
+        )
+        self.lbl_chan_y.pack(anchor="w", padx=6, pady=(2, 0))
 
         self.lbl_vy = ctk.CTkLabel(
             self.box_vy,
@@ -376,8 +382,8 @@ class PanelDerecho(ctk.CTkFrame):
             height=130
         )
 
-        lbl_center = ctk.CTkLabel(self.card_home_popup, text="Center (Home)", font=self.f_bold, text_color=COLOR_TEXT)
-        lbl_center.pack(pady=(6, 4))
+        self.lbl_center_title = ctk.CTkLabel(self.card_home_popup, text=tr("home_title"), font=self.f_bold, text_color=COLOR_TEXT)
+        self.lbl_center_title.pack(pady=(6, 4))
 
         frame_xy = ctk.CTkFrame(self.card_home_popup, fg_color="transparent")
         frame_xy.pack(padx=10, pady=2, fill="x")
@@ -423,7 +429,7 @@ class PanelDerecho(ctk.CTkFrame):
         # Botón para centrar y aplicar
         self.btn_set_home = ctk.CTkButton(
             self.card_home_popup,
-            text="Set Home",
+            text=tr("btn_apply"),
             command=self._cb_aplicar_centro,
             fg_color=COLOR_CARD,
             text_color=COLOR_TEXT,
@@ -442,7 +448,8 @@ class PanelDerecho(ctk.CTkFrame):
 
     # Zoom del seguimiento laser
     def _actualizar_titulo_zoom(self):
-        self.lbl_trace.configure(text=f"LASER TRACKING (ZOOM {self.zoom_relativo}X)")
+        self.lbl_trace.configure(text=f"{tr('view_trace')} (ZOOM {self.zoom_relativo}X)")
+
 
     def _cambiar_zoom(self, direccion: int):
         """Sube o baja un nivel del zoom relativo y redibuja el seguimiento."""
@@ -526,7 +533,7 @@ class PanelDerecho(ctk.CTkFrame):
     def set_modo_running(self):
         self.btn_start.pack_forget()
         self.running_box.pack(fill="both", expand=True)
-        self.btn_pause_resume.configure(text="PAUSE", fg_color=COLOR_PAUSE)
+        self.btn_pause_resume.configure(text=tr("btn_pause"), fg_color=COLOR_PAUSE)
         self.set_estado_sistema("SCANNING")
         # Deshabilitar botón de centrar puntero (Home) durante la ejecución
         self.btn_home.configure(state="disabled")
@@ -538,6 +545,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.ancla_vivo = None
         self.running_box.pack_forget()
         self.btn_start.pack(fill="both", expand=True)
+        self.btn_start.configure(text=tr("btn_start"))
         self.set_estado_sistema("READY")
         self.actualizar_voltajes(0.0, 0.0, False)
         # Reactivar botón de centrar puntero (Home) al volver a reposo
@@ -545,26 +553,27 @@ class PanelDerecho(ctk.CTkFrame):
 
     def set_estado_pausa(self, pausado: bool):
         if pausado:
-            self.btn_pause_resume.configure(text="RESUME", fg_color=COLOR_YELLOW)
+            self.btn_pause_resume.configure(text=tr("btn_resume"), fg_color=COLOR_YELLOW)
             self.set_estado_sistema("PAUSED")
             self.set_laser_activo(False)
         else:
-            self.btn_pause_resume.configure(text="PAUSE", fg_color=COLOR_PAUSE)
+            self.btn_pause_resume.configure(text=tr("btn_pause"), fg_color=COLOR_PAUSE)
             self.set_estado_sistema("SCANNING")
 
     def set_estado_sistema(self, estado: str):
         try:
+            self._ultimo_estado = str(estado)
             estado_up = str(estado).upper()
             if estado_up in ("IDLE", "READY"):
-                self.badge_status.configure(text="● READY", text_color=COLOR_GREEN, fg_color="#DCFCE7")
+                self.badge_status.configure(text=f"● {tr('status_ready')}", text_color=COLOR_GREEN, fg_color="#DCFCE7")
             elif estado_up in ("RUNNING", "SCANNING"):
-                self.badge_status.configure(text="● SCANNING", text_color="#B45309", fg_color="#FEF3C7")
+                self.badge_status.configure(text=f"● {tr('status_executing')}", text_color="#B45309", fg_color="#FEF3C7")
             elif estado_up in ("PAUSED",):
-                self.badge_status.configure(text="● PAUSED", text_color="#D97706", fg_color="#FEF08A")
+                self.badge_status.configure(text=f"● {tr('status_paused')}", text_color="#D97706", fg_color="#FEF08A")
             elif estado_up in ("STOPPED", "ABORTED"):
-                self.badge_status.configure(text="● STOPPED", text_color=COLOR_RED, fg_color="#FEE2E2")
+                self.badge_status.configure(text=f"● {tr('status_stopped')}", text_color=COLOR_RED, fg_color="#FEE2E2")
             elif estado_up in ("COMPLETED",):
-                self.badge_status.configure(text="● COMPLETED", text_color=COLOR_GREEN, fg_color="#DCFCE7")
+                self.badge_status.configure(text=f"● {tr('status_completed')}", text_color=COLOR_GREEN, fg_color="#DCFCE7")
             else:
                 self.badge_status.configure(text=f"● {estado_up}", text_color=COLOR_MUTED, fg_color="#F1F5F9")
         except Exception:
@@ -633,11 +642,11 @@ class PanelDerecho(ctk.CTkFrame):
 
             c1_x = w * 0.28
             c1_y = h * 0.54
-            self._dibujar_un_gauge(c, c1_x, c1_y, r, grosor, self.pct_trace, "Current Path")
+            self._dibujar_un_gauge(c, c1_x, c1_y, r, grosor, self.pct_trace, tr("gauge_trace"))
 
             c2_x = w * 0.72
             c2_y = h * 0.54
-            self._dibujar_un_gauge(c, c2_x, c2_y, r, grosor, self.pct_total, "Total Progress")
+            self._dibujar_un_gauge(c, c2_x, c2_y, r, grosor, self.pct_total, tr("gauge_total"))
         except Exception:
             pass
 
@@ -812,3 +821,25 @@ class PanelDerecho(ctk.CTkFrame):
             c.create_oval(cx - r_pt, cy - r_pt, cx + r_pt, cy + r_pt, fill="#FFFFFF", outline=COLOR_BORDER, width=BRUTAL_BORDER)
         except Exception:
             pass
+
+    def actualizar_idioma(self):
+        """Actualiza todas las etiquetas, botones, tooltips y medidores al cambiar el idioma."""
+        if hasattr(self, "btn_start"):
+            self.btn_start.configure(text=tr("btn_start"))
+        if hasattr(self, "btn_stop"):
+            self.btn_stop.configure(text=tr("btn_stop"))
+        if hasattr(self, "btn_home"):
+            agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
+        if hasattr(self, "btn_set_home"):
+            self.btn_set_home.configure(text=tr("btn_apply"))
+        if hasattr(self, "lbl_center_title"):
+            self.lbl_center_title.configure(text=tr("home_title"))
+        if hasattr(self, "lbl_chan_x"):
+            self.lbl_chan_x.configure(text=tr("dmm_x"))
+        if hasattr(self, "lbl_chan_y"):
+            self.lbl_chan_y.configure(text=tr("dmm_y"))
+
+        self._actualizar_titulo_zoom()
+        self.dibujar_gauges()
+        self.set_estado_sistema(getattr(self, "_ultimo_estado", "READY"))
+
