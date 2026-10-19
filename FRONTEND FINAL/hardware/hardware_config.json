@@ -1,0 +1,27 @@
+{
+  "daq": {
+    "analog_channels": [
+      "Dev1/ao0",
+      "Dev1/ao1"
+    ],
+    "laser_gate_channel": "Dev1/port0/line0",
+    "sample_rate_hz": 100000.0,
+    "sync_clock": "/Dev1/ao/SampleClock"
+  },
+  "galvo_dynamics": {
+    "voltage_limits": {
+      "min": -10.0,
+      "max": 10.0
+    },
+    "volts_per_mm": 0.1,
+    "jump_delay_us": 150,
+    "mark_delay_us": 50,
+    "laser_on_delay_us": 20,
+    "laser_off_delay_us": 20
+  },
+  "cad_cam": {
+    "freecad_cmd": "FreeCADcmd",
+    "timeout_seconds": 30,
+    "rdp_tolerance": 0.0
+  }
+}

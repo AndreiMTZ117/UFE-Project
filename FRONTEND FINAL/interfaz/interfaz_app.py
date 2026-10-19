@@ -73,7 +73,7 @@ class AppLaserCTk(
         super().__init__()
 
         # Configuración de ventana Cyber-Brutalism
-        self.title("UFE Laser — Vector Workstation")
+        self.title("Thorlabs GVS112/M — Industrial Galvanometer Laser Workstation")
         self.geometry("1280x760")
         self.minsize(1150, 700)
         ctk.set_appearance_mode("light")
@@ -100,6 +100,7 @@ class AppLaserCTk(
         # Configurar valores iniciales de límites, centro y dimensiones en los paneles
         self._aplicar_limites_hardware()
         self.panel_derecho.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
+        self.panel_general.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_derecho.actualizar_coordenadas(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_general.actualizar_dimensiones(self.puente.ancho_base_cm, self.puente.alto_base_cm)
 
@@ -110,36 +111,39 @@ class AppLaserCTk(
         self.protocol("WM_DELETE_WINDOW", self._on_cerrar_aplicacion)
 
     def _on_cerrar_aplicacion(self):
-        """Libera de forma segura los recursos del hardware y cierra la aplicación inmediatamente."""
+        """Libera de forma segura los recursos del hardware y cierra la aplicacion de inmediato."""
+        if getattr(self, '_cerrando', False):
+            return
         self._cerrando = True
-        if hasattr(self, "puente") and self.puente:
-            self.puente.cerrando = True
 
-        # 1. Cancelar bucle de temporizador
-        if hasattr(self, "_timer_loop_id") and self._timer_loop_id:
+        # Deshabilitar el protocolo para evitar reentradas
+        try:
+            self.protocol("WM_DELETE_WINDOW", lambda: None)
+        except Exception:
+            pass
+
+        # Cancelar timer programado del cronometro
+        if hasattr(self, '_timer_after_id') and self._timer_after_id:
             try:
-                self.after_cancel(self._timer_loop_id)
+                self.after_cancel(self._timer_after_id)
             except Exception:
                 pass
-            self._timer_loop_id = None
 
-        # 2. Detener ejecución de hardware en curso
+        # Detener la ejecucion y apagar laser de inmediato
         try:
-            if self.puente and self.puente.en_ejecucion:
-                self.puente.detener_ejecucion()
+            if hasattr(self, 'puente'):
+                if self.puente.en_ejecucion:
+                    self.puente.detener_ejecucion()
+                if self.puente.controlador_hardware:
+                    try:
+                        self.puente.apagar_laser()
+                        self.puente.controlador_hardware.cerrar()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
-        # 3. Apagar láser y cerrar recursos DAQ
-        try:
-            if self.puente and self.puente.controlador_hardware:
-                if hasattr(self.puente.controlador_hardware, "abortar_inmediato"):
-                    self.puente.controlador_hardware.abortar_inmediato()
-                self.puente.controlador_hardware.cerrar()
-        except Exception:
-            pass
-
-        # 4. Destruir ventana de forma limpia
+        # Destruir ventana de forma segura
         try:
             self.destroy()
         except Exception:
@@ -152,9 +156,9 @@ class AppLaserCTk(
         # 2. BARRA SUPERIOR
         self.barra_superior = BarraSuperior(
             self,
-            on_hal_cambiado=self._on_hal_cambiado,
             on_com_seleccionado=self._on_com_seleccionado,
             on_dxf_seleccionado=self._on_dxf_seleccionado,
+            on_load_file_click=self._on_click_load_file,
             on_toggle_terminal=self._on_toggle_terminal
         )
         self.barra_superior.pack(fill="x", padx=16, pady=(10, 4))
@@ -175,7 +179,11 @@ class AppLaserCTk(
             on_crear_receta=self._on_crear_receta,
             on_guardar_receta=self._on_guardar_receta,
             on_eliminar_receta=self._on_eliminar_receta,
-            on_rotacion_cambiada=self._on_rotacion_cambiada
+            on_rotacion_cambiada=self._on_rotacion_cambiada,
+            on_parametro_cambiado=self._on_parametro_cambiado,
+            on_click_frame=self._on_click_frame,
+            on_click_pause_resume=self._on_click_pause_resume,
+            on_click_stop=self._on_click_stop
         )
         self.panel_config.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 

@@ -51,6 +51,18 @@ CREATE TABLE IF NOT EXISTS recetas (
     escala_dibujo         REAL    NOT NULL DEFAULT 0.90,
     rotar_90_grados       INTEGER NOT NULL DEFAULT 0,
 
+    -- Control cinemático avanzado y modo de proceso
+    duracion_min_segmento_ms INTEGER NOT NULL DEFAULT 0,
+    duracion_min_viaje_ms    INTEGER NOT NULL DEFAULT 0,
+    optimizar_tsp            INTEGER NOT NULL DEFAULT 1,
+    modo_proceso             TEXT    NOT NULL DEFAULT 'Cutting' CHECK(modo_proceso IN ('Cutting', 'Welding', 'Marking')),
+
+    -- Parámetros de disipación térmica y mapeo de ejes
+    cooling_delay_s       REAL    NOT NULL DEFAULT 0.0,
+    invert_x              INTEGER NOT NULL DEFAULT 0,
+    invert_y              INTEGER NOT NULL DEFAULT 0,
+    swap_xy               INTEGER NOT NULL DEFAULT 0,
+
     -- Metadatos de auditoría
     fecha_creacion        TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
     fecha_modificacion    TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
@@ -71,7 +83,8 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
     archivo_dxf         TEXT    NOT NULL,
     hardware_usado      TEXT    NOT NULL DEFAULT 'thorlabs_galvo',
 
-    -- Snapshot de parámetros en el momento de ejecucion
+    -- Snapshot de parámetros en el momento de ejecución
+    modo_proceso        TEXT    NOT NULL DEFAULT 'Cutting' CHECK(modo_proceso IN ('Cutting', 'Welding', 'Marking')),
     velocidad_trazado   REAL,
     velocidad_viaje     REAL,
     num_pasadas         INTEGER DEFAULT 1,
@@ -96,9 +109,10 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
 # =========================================================
 _RECETAS_DEFAULT = [
     {
-        "nombre":             "Acrilico — Estándar",
-        "polimero":           "Acrilico (PMMA)",
-        "notas":              "Perfil base para acrílico transparente o de color. Velocidad moderada para evitar bordes quemados.",
+        "nombre":             "Acrylic — Standard",
+        "polimero":           "Acrylic (PMMA)",
+        "notas":              "Base profile for clear or colored acrylic. Moderate speed to prevent heat-affected zones.",
+        "modo_proceso":       "Cutting",
         "velocidad_trazado":  1.5,
         "velocidad_viaje":    3.0,
         "num_pasadas":        1,
@@ -113,9 +127,10 @@ _RECETAS_DEFAULT = [
         "rotar_90_grados":    0,
     },
     {
-        "nombre":             "Policarbonato — Alta Precisión",
-        "polimero":           "Policarbonato (PC)",
-        "notas":              "Velocidad lenta y múltiples pasadas para corte limpio en policarbonato de 3mm.",
+        "nombre":             "Polycarbonate — High Precision",
+        "polimero":           "Polycarbonate (PC)",
+        "notas":              "Slow speed and multiple passes for clean cuts in 3mm polycarbonate.",
+        "modo_proceso":       "Cutting",
         "velocidad_trazado":  1.0,
         "velocidad_viaje":    2.5,
         "num_pasadas":        2,
@@ -130,9 +145,10 @@ _RECETAS_DEFAULT = [
         "rotar_90_grados":    0,
     },
     {
-        "nombre":             "Nylon — Grabado Suave",
+        "nombre":             "Nylon — Soft Engraving",
         "polimero":           "Nylon (PA6/PA12)",
-        "notas":              "Velocidad alta para grabado superficial sin perforar. No recomendado para corte completo.",
+        "notas":              "High speed for surface engraving without piercing. Not recommended for full cutting.",
+        "modo_proceso":       "Marking",
         "velocidad_trazado":  2.5,
         "velocidad_viaje":    4.0,
         "num_pasadas":        1,
@@ -147,9 +163,10 @@ _RECETAS_DEFAULT = [
         "rotar_90_grados":    0,
     },
     {
-        "nombre":             "Thorlabs — Prueba Vectorial",
-        "polimero":           "Genérico (Prueba)",
-        "notas":              "Perfil de validación geométrica. Velocidad muy lenta, sin restricciones ópticas. Usar en modo simulación.",
+        "nombre":             "Simulation — Vector Test",
+        "polimero":           "Generic (Test)",
+        "notas":              "Geometric validation profile. Low speed without optical delays. Used for simulation mode.",
+        "modo_proceso":       "Marking",
         "velocidad_trazado":  2.0,
         "velocidad_viaje":    3.5,
         "num_pasadas":        1,
@@ -185,19 +202,53 @@ class GestorDB:
         self._inicializar()
 
     def _inicializar(self):
-        """Crea las tablas e inserta recetas por defecto si es la primera ejecucion."""
+        """Crea las tablas e inserta recetas por defecto si es la primera ejecución."""
         print(f"[DB] Inicializando base de datos en: {self.ruta_db}")
         with self.conexion() as conn:
             conn.execute(_SQL_CREAR_TABLA_RECETAS)
             conn.execute(_SQL_CREAR_TABLA_HISTORIAL)
-            conn.commit()
 
-        # Insertar recetas por defecto solo si la tabla está vacía
-        with self.conexion() as conn:
+            # Migración suave retrocompatible: verificar si faltan columnas nuevas en recetas
+            info_cols = {r[1] for r in conn.execute("PRAGMA table_info(recetas)").fetchall()}
+            columnas_extra = [
+                ("duracion_min_segmento_ms", "INTEGER NOT NULL DEFAULT 0"),
+                ("duracion_min_viaje_ms", "INTEGER NOT NULL DEFAULT 0"),
+                ("optimizar_tsp", "INTEGER NOT NULL DEFAULT 1"),
+                ("modo_proceso", "TEXT NOT NULL DEFAULT 'Cutting'"),
+                ("cooling_delay_s", "REAL NOT NULL DEFAULT 0.0"),
+                ("invert_x", "INTEGER NOT NULL DEFAULT 0"),
+                ("invert_y", "INTEGER NOT NULL DEFAULT 0"),
+                ("swap_xy", "INTEGER NOT NULL DEFAULT 0"),
+            ]
+            migrated = False
+            for col_name, col_def in columnas_extra:
+                if col_name not in info_cols:
+                    conn.execute(f"ALTER TABLE recetas ADD COLUMN {col_name} {col_def}")
+                    migrated = True
+
+            info_cols_hist = {r[1] for r in conn.execute("PRAGMA table_info(historial_produccion)").fetchall()}
+            if "modo_proceso" not in info_cols_hist:
+                conn.execute("ALTER TABLE historial_produccion ADD COLUMN modo_proceso TEXT DEFAULT 'Cutting'")
+                migrated = True
+
+            # Normalizar modos de proceso únicamente si se acaba de aplicar una migración estructural
+            if migrated:
+                conn.execute(
+                    "UPDATE recetas SET modo_proceso = 'Cutting' "
+                    "WHERE modo_proceso IS NULL OR modo_proceso NOT IN ('Cutting', 'Welding', 'Marking')"
+                )
+                conn.execute("UPDATE recetas SET modo_proceso = 'Marking' WHERE LOWER(nombre) LIKE '%nylon%'")
+                conn.execute("UPDATE recetas SET modo_proceso = 'Marking' WHERE (LOWER(nombre) LIKE '%simula%' OR LOWER(nombre) LIKE '%maqueta%')")
+                conn.execute(
+                    "UPDATE historial_produccion SET modo_proceso = 'Cutting' "
+                    "WHERE modo_proceso IS NULL OR modo_proceso NOT IN ('Cutting', 'Welding', 'Marking')"
+                )
+
+            # Insertar recetas por defecto solo si la tabla está vacía
             total = conn.execute("SELECT COUNT(*) FROM recetas").fetchone()[0]
             if total == 0:
                 self._insertar_recetas_default(conn)
-                print("[DB] Recetas por defecto precargadas (Acrilico, Policarbonato, Nylon, Prueba).")
+                print("[DB] Recetas por defecto precargadas (Acrílico, Policarbonato, Nylon, Prueba).")
             else:
                 print(f"[DB] {total} receta(s) ya existente(s). No se sobreescriben.")
 
@@ -205,13 +256,13 @@ class GestorDB:
         """Inserta el conjunto inicial de recetas de fábrica."""
         sql = """
             INSERT OR IGNORE INTO recetas (
-                nombre, polimero, notas,
+                nombre, polimero, notas, modo_proceso,
                 velocidad_trazado, velocidad_viaje, num_pasadas,
                 laser_on_delay_ms, laser_off_delay_ms, mark_delay_ms, jump_delay_ms,
                 tolerancia_rdp, tolerancia_union, longitud_min_trazo,
                 escala_dibujo, rotar_90_grados
             ) VALUES (
-                :nombre, :polimero, :notas,
+                :nombre, :polimero, :notas, :modo_proceso,
                 :velocidad_trazado, :velocidad_viaje, :num_pasadas,
                 :laser_on_delay_ms, :laser_off_delay_ms, :mark_delay_ms, :jump_delay_ms,
                 :tolerancia_rdp, :tolerancia_union, :longitud_min_trazo,
@@ -220,7 +271,6 @@ class GestorDB:
         """
         for receta in _RECETAS_DEFAULT:
             conn.execute(sql, receta)
-        conn.commit()
 
     @contextmanager
     def conexion(self):
@@ -232,10 +282,11 @@ class GestorDB:
             with db.conexion() as conn:
                 conn.execute("...")
         """
-        conn = sqlite3.connect(self.ruta_db, check_same_thread=False)
+        conn = sqlite3.connect(self.ruta_db, timeout=10.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
-        conn.execute("PRAGMA journal_mode=WAL")   # Write-Ahead Logging: mayor concurrencia
-        conn.execute("PRAGMA foreign_keys=ON")    # Integridad referencial activa
+        conn.execute("PRAGMA journal_mode=WAL;")    # Write-Ahead Logging: mayor concurrencia
+        conn.execute("PRAGMA synchronous=NORMAL;")  # Integridad de datos y rendimiento optimizado en WAL
+        conn.execute("PRAGMA foreign_keys=ON;")     # Integridad referencial activa
         try:
             yield conn
             conn.commit()

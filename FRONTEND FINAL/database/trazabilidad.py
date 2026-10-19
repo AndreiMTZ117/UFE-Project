@@ -20,7 +20,7 @@ class GestorTrazabilidad:
     Gestiona las operaciones de escritura y consulta sobre la tabla
     `historial_produccion`.
 
-    Uso típico desde principal.py:
+    Uso típico:
         gt = GestorTrazabilidad()
         id_log = gt.registrar_ciclo({
             "operador":           "Técnico A",
@@ -37,8 +37,34 @@ class GestorTrazabilidad:
         })
     """
 
-    # Estados válidos para el campo 'estado'
-    ESTADOS_VALIDOS = {"COMPLETADO", "ABORTADO", "FALLO_HARDWARE"}
+    # Modos de proceso canónicos restringidos
+    MODOS_PROCESO_VALIDOS = {"Cutting", "Welding", "Marking"}
+
+    # Estados válidos para el campo 'estado' (canónicos y bilingües)
+    ESTADOS_VALIDOS = {
+        "COMPLETADO", "ABORTADO", "FALLO_HARDWARE",
+        "COMPLETED", "ABORTED", "STOPPED", "ERROR", "FAILED"
+    }
+
+    # Normalización universal a valores canónicos de la base de datos
+    MAPA_ESTADOS = {
+        "COMPLETADO": "COMPLETADO",
+        "COMPLETED": "COMPLETADO",
+        "OK": "COMPLETADO",
+        "SUCCESS": "COMPLETADO",
+        "EXITOSO": "COMPLETADO",
+        "ABORTADO": "ABORTADO",
+        "ABORTED": "ABORTADO",
+        "STOPPED": "ABORTADO",
+        "DETENIDO": "ABORTADO",
+        "CANCELADO": "ABORTADO",
+        "CANCELLED": "ABORTADO",
+        "FALLO_HARDWARE": "FALLO_HARDWARE",
+        "HARDWARE_FAILURE": "FALLO_HARDWARE",
+        "ERROR": "FALLO_HARDWARE",
+        "FAILED": "FALLO_HARDWARE",
+        "FALLO": "FALLO_HARDWARE",
+    }
 
     def __init__(self, gestor: GestorDB = None):
         self._db = gestor or gestor_global
@@ -58,27 +84,61 @@ class GestorTrazabilidad:
             int: ID del registro insertado.
 
         Raises:
-            ValueError: Si 'archivo_dxf' está vacío o 'estado' es inválido.
+            ValueError: Si 'archivo_dxf' está vacío.
         """
-        if not datos.get("archivo_dxf", "").strip():
-            raise ValueError("El campo 'archivo_dxf' es obligatorio.")
+        # Normalizar archivo DXF
+        archivo_dxf = (
+            datos.get("archivo_dxf")
+            or datos.get("dxf")
+            or datos.get("archivo")
+            or ""
+        ).strip()
+        if not archivo_dxf:
+            archivo_dxf = "Desconocido.dxf"
 
-        estado = datos.get("estado", "COMPLETADO").upper()
-        if estado not in self.ESTADOS_VALIDOS:
-            raise ValueError(
-                f"Estado '{estado}' no válido. Use: {self.ESTADOS_VALIDOS}"
-            )
+        # Normalizar estado de forma resiliente
+        estado_in = str(datos.get("estado") or datos.get("status") or "COMPLETADO").strip().upper()
+        if estado_in in self.MAPA_ESTADOS:
+            estado = self.MAPA_ESTADOS[estado_in]
+        elif "COMPLET" in estado_in or "OK" in estado_in or "SUCCESS" in estado_in:
+            estado = "COMPLETADO"
+        elif "ABORT" in estado_in or "STOP" in estado_in or "CANCEL" in estado_in:
+            estado = "ABORTADO"
+        else:
+            estado = "FALLO_HARDWARE"
+
+        # Normalizar sinónimos de métricas y metadatos
+        duracion = datos.get("duracion_segundos")
+        if duracion is None:
+            duracion = datos.get("tiempo_proceso_s", datos.get("duracion_s", datos.get("duracion", 0.0)))
+
+        waypoints = datos.get("waypoints_totales")
+        if waypoints is None:
+            waypoints = datos.get("puntos_totales", datos.get("waypoints", 0))
+
+        trazos = datos.get("trazos_totales")
+        if trazos is None:
+            trazos = datos.get("total_trazos", datos.get("paths_totales", datos.get("trazos", 0)))
+
+        hardware = datos.get("hardware_usado") or datos.get("hardware") or "thorlabs_galvo"
+        msg_err = datos.get("mensaje_error") if datos.get("mensaje_error") is not None else datos.get("error_msg", datos.get("error", ""))
+        receta_nom = datos.get("receta_nombre") or datos.get("recipe_name") or "Manual"
+        receta_id_in = datos.get("receta_id") if "receta_id" in datos else datos.get("recipe_id")
+
+        modo_raw = str(datos.get("modo_proceso") or datos.get("modo") or "Cutting").strip()
+        modo_norm_map = {m.lower(): m for m in self.MODOS_PROCESO_VALIDOS}
+        modo_proceso = modo_norm_map.get(modo_raw.lower(), "Cutting")
 
         sql = """
             INSERT INTO historial_produccion (
-                operador, receta_id, receta_nombre,
+                operador, receta_id, receta_nombre, modo_proceso,
                 archivo_dxf, hardware_usado,
                 velocidad_trazado, velocidad_viaje, num_pasadas,
                 escala_dibujo, tolerancia_rdp, tolerancia_union,
                 trazos_totales, waypoints_totales, duracion_segundos,
                 estado, mensaje_error
             ) VALUES (
-                :operador, :receta_id, :receta_nombre,
+                :operador, :receta_id, :receta_nombre, :modo_proceso,
                 :archivo_dxf, :hardware_usado,
                 :velocidad_trazado, :velocidad_viaje, :num_pasadas,
                 :escala_dibujo, :tolerancia_rdp, :tolerancia_union,
@@ -87,15 +147,47 @@ class GestorTrazabilidad:
             )
         """
         registro = self._aplicar_defaults_historial(datos)
+        registro["archivo_dxf"] = archivo_dxf
+        registro["modo_proceso"] = modo_proceso
         registro["estado"] = estado
+        registro["duracion_segundos"] = float(duracion or 0.0)
+        registro["waypoints_totales"] = int(waypoints or 0)
+        registro["trazos_totales"] = int(trazos or 0)
+        registro["hardware_usado"] = str(hardware)
+        registro["mensaje_error"] = str(msg_err or "")
 
         with self._db.conexion() as conn:
+            # Resolución de receta_id para respetar la integridad referencial (FOREIGN KEY)
+            receta_id_valido = None
+            if receta_id_in is not None:
+                try:
+                    rid_int = int(receta_id_in)
+                    row = conn.execute("SELECT id, nombre FROM recetas WHERE id = ?", (rid_int,)).fetchone()
+                    if row:
+                        receta_id_valido = row["id"]
+                        if not receta_nom or receta_nom == "Manual":
+                            receta_nom = row["nombre"]
+                except (ValueError, TypeError):
+                    row = conn.execute("SELECT id, nombre FROM recetas WHERE LOWER(nombre) = LOWER(?)", (str(receta_id_in).strip(),)).fetchone()
+                    if row:
+                        receta_id_valido = row["id"]
+                        receta_nom = row["nombre"]
+
+            if receta_id_valido is None and receta_nom and receta_nom != "Manual":
+                row = conn.execute("SELECT id, nombre FROM recetas WHERE LOWER(nombre) = LOWER(?)", (str(receta_nom).strip(),)).fetchone()
+                if row:
+                    receta_id_valido = row["id"]
+                    receta_nom = row["nombre"]
+
+            registro["receta_id"] = receta_id_valido
+            registro["receta_nombre"] = str(receta_nom or "Manual")
+
             cursor = conn.execute(sql, registro)
             nuevo_id = cursor.lastrowid
 
         print(
             f"[Trazabilidad] [LOG] Ciclo registrado - ID={nuevo_id} | "
-            f"DXF: '{datos['archivo_dxf']}' | Estado: {estado}"
+            f"DXF: '{archivo_dxf}' | Modo: {modo_proceso} | Estado: {estado} | Duración: {registro['duracion_segundos']:.2f}s"
         )
         return nuevo_id
 
@@ -123,6 +215,9 @@ class GestorTrazabilidad:
         with self._db.conexion() as conn:
             rows = conn.execute(sql, (limite, offset)).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
+
+    # Alias para compatibilidad con llamadas tipo obtener_historial
+    obtener_historial = listar_historial
 
     def obtener_registro(self, registro_id: int) -> dict:
         """
@@ -159,14 +254,15 @@ class GestorTrazabilidad:
         Args:
             estado: 'COMPLETADO', 'ABORTADO' o 'FALLO_HARDWARE'.
         """
-        estado = estado.upper()
+        estado_norm = str(estado).strip().upper()
+        estado_clean = self.MAPA_ESTADOS.get(estado_norm, estado_norm)
         sql = """
             SELECT * FROM historial_produccion
             WHERE estado = ?
             ORDER BY id DESC
         """
         with self._db.conexion() as conn:
-            rows = conn.execute(sql, (estado,)).fetchall()
+            rows = conn.execute(sql, (estado_clean,)).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
 
     def filtrar_por_dxf(self, nombre_dxf: str) -> list:
@@ -231,6 +327,7 @@ class GestorTrazabilidad:
             "operador":           "Operador",
             "receta_id":          None,
             "receta_nombre":      "Manual",
+            "modo_proceso":       "Cutting",
             "archivo_dxf":        "",
             "hardware_usado":     "thorlabs_galvo",
             "velocidad_trazado":  None,

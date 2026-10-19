@@ -11,7 +11,7 @@ Transforma vectores del espacio CAD al espacio de trabajo del hardware:
 
 import math
 from .lector_dxf import obtener_limites_dxf
-from .optimizador_rutas import optimizar_y_unir_trazos, simplificar_trayectoria_rdp
+from .PathOptimizer import optimizar_y_unir_trazos, simplificar_trayectoria_rdp
 
 def transformar_y_escalar_dxf(trayectorias,
                                x_min_limit, x_max_limit,
@@ -21,14 +21,13 @@ def transformar_y_escalar_dxf(trayectorias,
                                rotacion_grados=None,
                                marco_ancho_cm=None,
                                marco_alto_cm=None,
-                               base_ancho_cm=None,
-                               base_alto_cm=None,
                                tolerancia_rdp=0.0,
                                tolerancia_union=0.02,
                                longitud_min_trazo=0.01,
                                optimizar_recorrido=True,
                                centro_x=None,
-                               centro_y=None):
+                               centro_y=None,
+                               *args, **kwargs):
     """
     Mapea trayectorias DXF al espacio físico destino manteniendo proporciones exactas.
 
@@ -57,8 +56,6 @@ def transformar_y_escalar_dxf(trayectorias,
     # Determinar ángulo de rotación efectivo
     if rotacion_grados is not None:
         angulo_deg = float(rotacion_grados)
-    elif rotar_90_grados:
-        angulo_deg = 90.0
     else:
         angulo_deg = 0.0
 
@@ -97,17 +94,20 @@ def transformar_y_escalar_dxf(trayectorias,
     kx = cal_alto / rango_dest_x if rango_dest_x > 0 else 1.0
     ky = cal_ancho / rango_dest_y if rango_dest_y > 0 else 1.0
 
-    # Dimensiones del área máxima permitida de trabajo en cm (base/material)
-    area_w_cm = float(base_ancho_cm) if base_ancho_cm is not None else cal_ancho
-    area_h_cm = float(base_alto_cm) if base_alto_cm is not None else cal_alto
-
     # Centros destino
     dest_cx = float(centro_x) if centro_x is not None else (x_min_limit + x_max_limit) / 2.0
     dest_cy = float(centro_y) if centro_y is not None else (y_min_limit + y_max_limit) / 2.0
 
-    # Escala uniforme isométrica estricta (preserva proporción 1:1, nunca deforma la figura)
-    scale_x = (area_w_cm * escala) / rot_ancho
-    scale_y = (area_h_cm * escala) / rot_alto
+    # Marco óptico del escáner en cm (calibración física del hardware)
+    marco_ref_w = float(marco_ancho_cm) if marco_ancho_cm is not None else cal_ancho
+    marco_ref_h = float(marco_alto_cm) if marco_alto_cm is not None else cal_alto
+
+    # Escala uniforme isométrica estricta (preserva proporción 1:1, nunca deforma la figura).
+    # La escala física de la figura está gobernada exclusivamente por el marco óptico del escáner
+    # y el parámetro 'escala' (Drawing scale a la izquierda), SIN alterarse por las dimensiones
+    # de la base/material ni quedar confinada/recortada en un cuadrado artificial.
+    scale_x = (marco_ref_w * escala) / rot_ancho
+    scale_y = (marco_ref_h * escala) / rot_alto
     s_phys = min(scale_x, scale_y)  # Factor de escala físico uniforme en cm / unidad DXF
     sx = s_phys / kx
     sy = s_phys / ky

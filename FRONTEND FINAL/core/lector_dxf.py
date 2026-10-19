@@ -11,7 +11,6 @@ Soporta extracción geométrica de:
   - Bloques anidados (INSERT) mediante resolución recursiva
 """
 
-import math
 import os
 import ezdxf
 from ezdxf import path
@@ -22,18 +21,12 @@ def entidades_recursivas(entidades, profundidad=0, max_profundidad=12):
         return
 
     for entidad in entidades:
-        dxftype=entidad.dxftype()
+        dxftype = entidad.dxftype()
 
-        if dxftype=='INSERT':
+        if dxftype in ('INSERT', 'DIMENSION'):
             try:
-                sub_entidades =entidad.explode()
+                sub_entidades = entidad.explode()
                 for sub in entidades_recursivas(sub_entidades, profundidad + 1, max_profundidad):
-                    yield sub
-            except Exception:
-                pass
-        elif dxftype=='DIMENSION':
-            try:
-                for sub in entidades_recursivas(entidad.explode(), profundidad + 1, max_profundidad):
                     yield sub
             except Exception:
                 pass
@@ -85,9 +78,9 @@ class LectorDXF:
             ultimo_pt = None
 
             for v in vertices:
-                x =round(v.x, 4)
-                y =round(v.y, 4)
-                pt =(x, y)
+                x = round(v.x, 4)
+                y = round(v.y, 4)
+                pt = (x, y)
                 if pt != ultimo_pt:
                     coordenadas_trazo.append(pt)
                     ultimo_pt = pt

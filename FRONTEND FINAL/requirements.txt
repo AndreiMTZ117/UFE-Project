@@ -1,7 +1,49 @@
-# Dependencias del proyecto UFE Laser - Galvanómetro Thorlabs GVS112/M
+# ==============================================================================
+# SISTEMA DE TRAZADO LÁSER VECTORIAL (THORLABS GALVO GVS112/M + NI PXI)
+# Dependencias Oficiales de Producción para Despliegue en Laboratorio
+# ==============================================================================
+#
+# Entorno de Ejecución Recomendado:
+#   - Versión de Python: Python 3.10 o 3.11 (64-bit recomendado)
+#   - Sistema Operativo : Windows 10 / 11 (64-bit)
+#
+# Requisitos de Sistema y Drivers de Hardware:
+#   1. NI-DAQmx Runtime / Driver (National Instruments):
+#      Requerido para comunicación por hardware con chasis NI PXIe-1073
+#      y tarjeta multifunción NI PXI-6229. En modo simulación no es mandatorio.
+#   2. FreeCAD (versión >= 0.21 / 1.0):
+#      Requerido para la conversión automatizada en segundo plano (Headless)
+#      de archivos DXF a Código G estándar ISO 6983 ('FreeCADcmd' en el PATH).
+#
+# Paquetes Obsoletos y Prototipos Descartados:
+#   - PyQt6 / PyQt5 : Descartado (GUI activa opera sobre CustomTkinter).
+#   - pyserial      : Descartado (comunicación directa vía hardware DAQmx).
+#   - pyqtgraph     : Descartado (renderizado sobre Canvas vectorial nativo).
+#   - matplotlib    : Descartado (sin importaciones activas en runtime).
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Interfaz Gráfica de Usuario (Cyber-Brutalist HMI)
+# ------------------------------------------------------------------------------
 customtkinter>=5.2.0
+
+# ------------------------------------------------------------------------------
+# 2. Computación Numérica y Algoritmos Espaciales CAM
+# ------------------------------------------------------------------------------
+# Manejo de arreglos vectorizados, síntesis de ondas a 100 kHz y discretización
+numpy>=1.24.0,<2.0.0
+
+# Optimización espacial de trayectorias, distancias cdist y heurísticas TSP
+scipy>=1.10.0
+
+# ------------------------------------------------------------------------------
+# 3. Procesamiento Geométrico CAD (DXF)
+# ------------------------------------------------------------------------------
+# Análisis, lectura e inspección de entidades vectoriales en planos DXF
 ezdxf>=1.1.0
-numpy>=1.24.0
-matplotlib>=3.7.0
-pillow>=10.0.0
-nidaqmx>=1.0.0
+
+# ------------------------------------------------------------------------------
+# 4. Capa de Instrumentación y Control DAQ (National Instruments)
+# ------------------------------------------------------------------------------
+# Control determinista sincronizado por reloj de hardware (AO espejos y DO láser)
+nidaqmx>=0.9.0

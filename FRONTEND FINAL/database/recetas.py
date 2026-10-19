@@ -6,11 +6,13 @@ Operaciones disponibles:
   CREATE  → crear_receta(datos)
   READ    → obtener_receta(id), listar_recetas(), buscar_por_polimero(polimero)
   UPDATE  → actualizar_receta(id, datos)
-  DELETE  → eliminar_receta(id)
-  UTILITY → receta_a_config(id)  →  retorna dict listo para principal.py
+  UTILITY → receta_a_config(id)  →  retorna dict de configuración listo para el sistema
 """
 
 from .gestor_db import GestorDB, gestor_global
+
+# Modos de proceso canónicos restringidos para el sistema láser
+MODOS_PROCESO_VALIDOS = {"Cutting", "Welding", "Marking"}
 
 
 class GestorRecetas:
@@ -25,19 +27,26 @@ class GestorRecetas:
         gr.eliminar_receta(id_nuevo)
     """
 
-    # Columnas numéricas con sus rangos de validación mínima
+    # Columnas numéricas con sus rangos de validación mínima (compatibles con galvanómetros de alta velocidad)
     _VALIDACIONES = {
-        "velocidad_trazado":  (0.01, 100.0),
-        "velocidad_viaje":    (0.01, 100.0),
-        "num_pasadas":        (1, 99),
-        "laser_on_delay_ms":  (0, 10000),
-        "laser_off_delay_ms": (0, 10000),
-        "mark_delay_ms":      (0, 10000),
-        "jump_delay_ms":      (0, 10000),
-        "tolerancia_rdp":     (0.0, 10.0),
-        "tolerancia_union":   (0.0, 10.0),
-        "longitud_min_trazo": (0.0, 10.0),
-        "escala_dibujo":      (0.01, 1.0),
+        "velocidad_trazado":         (0.01, 50000.0),
+        "velocidad_viaje":           (0.01, 50000.0),
+        "num_pasadas":               (1, 999),
+        "laser_on_delay_ms":         (0, 10000),
+        "laser_off_delay_ms":        (0, 10000),
+        "mark_delay_ms":             (0, 10000),
+        "jump_delay_ms":             (0, 10000),
+        "tolerancia_rdp":            (0.0, 10.0),
+        "tolerancia_union":          (0.0, 10.0),
+        "longitud_min_trazo":        (0.0, 10.0),
+        "escala_dibujo":             (0.01, 1.0),
+        "duracion_min_segmento_ms":  (0, 10000),
+        "duracion_min_viaje_ms":     (0, 10000),
+        "optimizar_tsp":             (0, 1),
+        "cooling_delay_s":           (0.0, 3600.0),
+        "invert_x":                  (0, 1),
+        "invert_y":                  (0, 1),
+        "swap_xy":                   (0, 1),
     }
 
     def __init__(self, gestor: GestorDB = None):
@@ -74,13 +83,17 @@ class GestorRecetas:
                 velocidad_trazado, velocidad_viaje, num_pasadas,
                 laser_on_delay_ms, laser_off_delay_ms, mark_delay_ms, jump_delay_ms,
                 tolerancia_rdp, tolerancia_union, longitud_min_trazo,
-                escala_dibujo, rotar_90_grados
+                escala_dibujo, rotar_90_grados,
+                duracion_min_segmento_ms, duracion_min_viaje_ms, optimizar_tsp, modo_proceso,
+                cooling_delay_s, invert_x, invert_y, swap_xy
             ) VALUES (
                 :nombre, :polimero, :notas,
                 :velocidad_trazado, :velocidad_viaje, :num_pasadas,
                 :laser_on_delay_ms, :laser_off_delay_ms, :mark_delay_ms, :jump_delay_ms,
                 :tolerancia_rdp, :tolerancia_union, :longitud_min_trazo,
-                :escala_dibujo, :rotar_90_grados
+                :escala_dibujo, :rotar_90_grados,
+                :duracion_min_segmento_ms, :duracion_min_viaje_ms, :optimizar_tsp, :modo_proceso,
+                :cooling_delay_s, :invert_x, :invert_y, :swap_xy
             )
         """
         # Aplicar valores por defecto para campos opcionales no enviados
@@ -177,21 +190,16 @@ class GestorRecetas:
             "laser_on_delay_ms", "laser_off_delay_ms", "mark_delay_ms", "jump_delay_ms",
             "tolerancia_rdp", "tolerancia_union", "longitud_min_trazo",
             "escala_dibujo", "rotar_90_grados",
+            "duracion_min_segmento_ms", "duracion_min_viaje_ms", "optimizar_tsp", "modo_proceso",
+            "cooling_delay_s", "invert_x", "invert_y", "swap_xy"
         }
         columnas = {k: v for k, v in datos.items() if k in campos_editables}
-
         if not columnas:
             return False
 
-        # Siempre actualizar fecha_modificacion
-        columnas["fecha_modificacion"] = "datetime('now','localtime')"
-
-        set_clause = ", ".join(
-            f"{col} = datetime('now','localtime')" if col == "fecha_modificacion" else f"{col} = :{col}"
-            for col in columnas
-        )
-        columnas.pop("fecha_modificacion", None)  # No pasar como parámetro, ya está en SQL literal
-        columnas["_id"] = receta_id
+        set_clause = ", ".join(f"{col} = :{col}" for col in columnas)
+        parametros = dict(columnas)
+        parametros["_id"] = receta_id
 
         sql = f"""
             UPDATE recetas
@@ -200,7 +208,7 @@ class GestorRecetas:
             WHERE id = :_id
         """
         with self._db.conexion() as conn:
-            cursor = conn.execute(sql, columnas)
+            cursor = conn.execute(sql, parametros)
             filas = cursor.rowcount
 
         if filas > 0:
@@ -245,7 +253,7 @@ class GestorRecetas:
     def receta_a_config(self, receta_id: int) -> dict:
         """
         Convierte una receta almacenada en la base de datos al formato
-        de parámetros que espera transformar_y_escalar_dxf() y principal.py.
+        de parámetros de ejecución del sistema.
 
         Returns:
             dict con claves compatibles con las variables de config_galvo.py,
@@ -257,31 +265,39 @@ class GestorRecetas:
 
         return {
             # Cinemáticos
-            "velocidad_trazado":   receta["velocidad_trazado"],
-            "velocidad_viaje":     receta["velocidad_viaje"],
-            "num_pasadas":         receta["num_pasadas"],
+            "velocidad_trazado":        receta.get("velocidad_trazado", 2.0),
+            "velocidad_viaje":          receta.get("velocidad_viaje", 3.5),
+            "num_pasadas":              receta.get("num_pasadas", 1),
+            "duracion_min_segmento_ms": receta.get("duracion_min_segmento_ms", 50),
+            "duracion_min_viaje_ms":    receta.get("duracion_min_viaje_ms", 300),
+            "optimizar_tsp":            bool(receta.get("optimizar_tsp", 1)),
+            "modo_proceso":             receta.get("modo_proceso", "Cutting"),
+            "cooling_delay_s":          float(receta.get("cooling_delay_s", 0.0)),
+            "invert_x":                 bool(receta.get("invert_x", 0)),
+            "invert_y":                 bool(receta.get("invert_y", 0)),
+            "swap_xy":                  bool(receta.get("swap_xy", 0)),
             # Temporización óptica
-            "laser_on_delay_ms":   receta["laser_on_delay_ms"],
-            "laser_off_delay_ms":  receta["laser_off_delay_ms"],
-            "mark_delay_ms":       receta["mark_delay_ms"],
-            "jump_delay_ms":       receta["jump_delay_ms"],
+            "laser_on_delay_ms":        receta.get("laser_on_delay_ms", 0),
+            "laser_off_delay_ms":       receta.get("laser_off_delay_ms", 0),
+            "mark_delay_ms":            receta.get("mark_delay_ms", 0),
+            "jump_delay_ms":            receta.get("jump_delay_ms", 0),
             # Geométricos
-            "tolerancia_rdp":      receta["tolerancia_rdp"],
-            "tolerancia_union":    receta["tolerancia_union"],
-            "longitud_min_trazo":  receta["longitud_min_trazo"],
-            "escala_dibujo":       receta["escala_dibujo"],
-            "rotar_90_grados":     bool(receta["rotar_90_grados"]),
+            "tolerancia_rdp":           receta.get("tolerancia_rdp", 0.0),
+            "tolerancia_union":         receta.get("tolerancia_union", 0.08),
+            "longitud_min_trazo":       receta.get("longitud_min_trazo", 0.01),
+            "escala_dibujo":            receta.get("escala_dibujo", 0.90),
+            "rotar_90_grados":          bool(receta.get("rotar_90_grados", 0)),
             # Metadatos
-            "_receta_id":          receta["id"],
-            "_receta_nombre":      receta["nombre"],
-            "_polimero":           receta["polimero"],
+            "_receta_id":               receta.get("id"),
+            "_receta_nombre":           receta.get("nombre", "Manual"),
+            "_polimero":                receta.get("polimero", "General"),
         }
 
     # ----------------------------------------------------------
     # PRIVADOS: Validación y Defaults
     # ----------------------------------------------------------
     def _validar_rangos(self, datos: dict):
-        """Valida que los valores numéricos estén dentro de rangos físicamente válidos."""
+        """Valida que los valores numéricos y atributos estén dentro de rangos y opciones físicamente válidos."""
         for campo, (minv, maxv) in self._VALIDACIONES.items():
             if campo in datos:
                 val = datos[campo]
@@ -289,25 +305,44 @@ class GestorRecetas:
                     raise ValueError(
                         f"El campo '{campo}' tiene valor {val}, fuera del rango permitido [{minv}, {maxv}]."
                     )
+        if "modo_proceso" in datos and datos["modo_proceso"] is not None:
+            m_str = str(datos["modo_proceso"]).strip()
+            modos_norm = {m.lower(): m for m in MODOS_PROCESO_VALIDOS}
+            if m_str.lower() in modos_norm:
+                datos["modo_proceso"] = modos_norm[m_str.lower()]
+            else:
+                permitidos = sorted(list(MODOS_PROCESO_VALIDOS))
+                raise ValueError(
+                    f"Modo de proceso no válido: '{datos['modo_proceso']}'. "
+                    f"Valores permitidos: {permitidos}."
+                )
 
     def _aplicar_defaults(self, datos: dict) -> dict:
         """Devuelve el dict con valores por defecto para los campos no enviados."""
         defaults = {
-            "nombre":             "",
-            "polimero":           "Genérico",
-            "notas":              "",
-            "velocidad_trazado":  2.0,
-            "velocidad_viaje":    3.5,
-            "num_pasadas":        1,
-            "laser_on_delay_ms":  0,
-            "laser_off_delay_ms": 0,
-            "mark_delay_ms":      0,
-            "jump_delay_ms":      0,
-            "tolerancia_rdp":     0.0,
-            "tolerancia_union":   0.08,
-            "longitud_min_trazo": 0.01,
-            "escala_dibujo":      0.90,
-            "rotar_90_grados":    0,
+            "nombre":                    "",
+            "polimero":                  "Genérico",
+            "notas":                     "",
+            "velocidad_trazado":         2.0,
+            "velocidad_viaje":           3.5,
+            "num_pasadas":               1,
+            "duracion_min_segmento_ms":  50,
+            "duracion_min_viaje_ms":     300,
+            "optimizar_tsp":             1,
+            "modo_proceso":              "Cutting",
+            "cooling_delay_s":           0.0,
+            "invert_x":                  0,
+            "invert_y":                  0,
+            "swap_xy":                   0,
+            "laser_on_delay_ms":         0,
+            "laser_off_delay_ms":        0,
+            "mark_delay_ms":             0,
+            "jump_delay_ms":             0,
+            "tolerancia_rdp":            0.0,
+            "tolerancia_union":          0.08,
+            "longitud_min_trazo":        0.01,
+            "escala_dibujo":             0.90,
+            "rotar_90_grados":           0,
         }
         defaults.update(datos)
         return defaults

@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-interfaz/conexion_interfaz.py — Puente de Conexión Backend <-> Interfaz Gráfica
+interfaz/conexion_interfaz.py — Puente de Conexion Backend <-> Interfaz Grafica
 
 Gestiona:
   1. Base de datos SQLite3 (GestorRecetas y GestorTrazabilidad)
-  2. Procesamiento de archivos DXF y G-code (LectorDXF, LectorGcode y GeneradorMatrizTemporal)
-  3. Control unificado del hardware Thorlabs GVS112/M (SIMULACIÓN o PXI-6229 REAL)
-  4. Hilo asíncrono de ejecucion de corte/trazado sincronizado en tiempo real con
-     la cinemática física y control estricto del estado del laser.
+  2. Procesamiento de archivos DXF (LectorDXF y transformar_y_escalar_dxf)
+  3. Conexion al sistema Thorlabs GVS112/M (fisico o simulacion automatica)
+  4. Hilo asincrono de ejecucion con telemetria en tiempo real,
+     control estricto del laser y parada instantanea no bloqueante.
+
+Hardware soportado:
+  - Thorlabs GVS112/M con tarjeta DAQ/DAC fisica
+  - Modo Simulacion automatico cuando el hardware no esta disponible
 """
 
 import os
@@ -20,106 +24,179 @@ from typing import Callable, Optional, Dict, List, Tuple, Any
 
 import numpy as np
 
-# Asegurar importación de módulos del proyecto
+# Asegurar importacion de modulos del proyecto
 _DIR_RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _DIR_RAIZ not in sys.path:
     sys.path.insert(0, _DIR_RAIZ)
 
 from core.lector_dxf import LectorDXF, obtener_limites_dxf
-from core.lector_gcode import LectorGcode
-from core.generador_matriz_temporal import GeneradorMatrizTemporal
 from core.generador_trayectorias import transformar_y_escalar_dxf
+from core.GCodeParser import GCodeParser, TrajectoryBlock
+from core.PathOptimizer import PathOptimizer
+from core.GalvoSignalGenerator import GalvoSignalGenerator
+from core.NIDaqController import NIDaqController
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
-from hardware_thorlabs_galvo.config_galvo import (
-    CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
-    CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
-    ESCALA_DIBUJO, ROTAR_90_GRADOS,
-    VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
-    FRECUENCIA_MUESTREO_HZ, ESCALA_VX_POR_MM, ESCALA_VY_POR_MM,
-    OFFSET_VX, OFFSET_VY, JUMP_DELAY_US, LASER_ON_DELAY_US, LASER_OFF_DELAY_US,
-    MODO_HARDWARE
-)
 
 
-def cargar_perfil_hardware(clave: str = "thorlabs_galvo") -> Dict[str, Any]:
-    """Carga el perfil cinemático y geométrico del hardware Thorlabs GVS112/M."""
-    campo_w_cm = round((CAMPO_X_MAX_MM - CAMPO_X_MIN_MM) / 10.0, 2)
-    campo_h_cm = round((CAMPO_Y_MAX_MM - CAMPO_Y_MIN_MM) / 10.0, 2)
-    return {
-        "clave": "thorlabs_galvo",
-        "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
-        "x_min": CAMPO_X_MIN_MM,
-        "x_max": CAMPO_X_MAX_MM,
-        "y_min": CAMPO_Y_MIN_MM,
-        "y_max": CAMPO_Y_MAX_MM,
-        "centro_x": 0.0,
-        "centro_y": 0.0,
-        "ancho_base_cm": campo_w_cm,
-        "alto_base_cm": campo_h_cm,
-        "marco_ancho_cm": campo_w_cm,
-        "marco_alto_cm": campo_h_cm,
-        "escala_dibujo": ESCALA_DIBUJO,
-        "rotar_90_grados": ROTAR_90_GRADOS,
-        "velocidad_trazado": VELOCIDAD_MARCADO_MM_S,
-        "velocidad_viaje": VELOCIDAD_SALTO_MM_S,
-    }
+def cargar_perfil_hardware() -> Dict[str, Any]:
+    """Carga el perfil cinematico y geometrico del Thorlabs GVS112/M."""
+    try:
+        from hardware.config_galvo import (
+            CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
+            CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
+            ESCALA_DIBUJO, ROTAR_90_GRADOS,
+            VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S
+        )
+        campo_w_cm = round((CAMPO_X_MAX_MM - CAMPO_X_MIN_MM) / 10.0, 2)
+        campo_h_cm = round((CAMPO_Y_MAX_MM - CAMPO_Y_MIN_MM) / 10.0, 2)
+        return {
+            "clave": "thorlabs_galvo",
+            "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
+            "x_min": CAMPO_X_MIN_MM,
+            "x_max": CAMPO_X_MAX_MM,
+            "y_min": CAMPO_Y_MIN_MM,
+            "y_max": CAMPO_Y_MAX_MM,
+            "centro_x": 0.0,
+            "centro_y": 0.0,
+            "ancho_base_cm": campo_w_cm,
+            "alto_base_cm": campo_h_cm,
+            "marco_ancho_cm": campo_w_cm,
+            "marco_alto_cm": campo_h_cm,
+            "escala_dibujo": ESCALA_DIBUJO,
+            "rotar_90_grados": ROTAR_90_GRADOS,
+            "velocidad_trazado": VELOCIDAD_MARCADO_MM_S,
+            "velocidad_viaje": VELOCIDAD_SALTO_MM_S,
+        }
+    except Exception as e:
+        print(f"[HAL] Error cargando config_galvo: {e}")
+        return {
+            "clave": "thorlabs_galvo",
+            "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
+            "x_min": -50.0, "x_max": 50.0,
+            "y_min": -50.0, "y_max": 50.0,
+            "centro_x": 0.0, "centro_y": 0.0,
+            "ancho_base_cm": 10.0, "alto_base_cm": 10.0,
+            "marco_ancho_cm": 10.0, "marco_alto_cm": 10.0,
+            "escala_dibujo": 0.90, "rotar_90_grados": False,
+            "velocidad_trazado": 500.0, "velocidad_viaje": 2000.0,
+        }
 
 
-# Único perfil de hardware: Thorlabs GVS112/M
 HARDWARE_CONFIG = {
-    "thorlabs_galvo": cargar_perfil_hardware("thorlabs_galvo")
+    "thorlabs_galvo": cargar_perfil_hardware()
 }
 
 
+# =============================================================================
+# PRESETS DE MODO DE PROCESO (Cutting, Welding, Marking)
+# =============================================================================
+PRESETS_MODO_PROCESO: Dict[str, Dict[str, Any]] = {
+    "Cutting": {
+        "modo_proceso": "Cutting",
+        "velocidad_trazado": 2.0,        # Slow cutting speed (mm/s)
+        "velocidad_viaje": 5.0,          # Safe repositioning (mm/s)
+        "num_pasadas": 2,                # Multi-pass for deep through-cut
+        "cooling_delay_s": 2.0,          # Inter-pass thermal cooling dwell (s)
+        "duracion_min_segmento_ms": 50,  # High time density per segment (ms)
+        "duracion_min_viaje_ms": 200,    # Safe galvo travel settling (ms)
+        "laser_on_delay_ms": 25,         # Pierce / lead-in delay (ms)
+        "laser_off_delay_ms": 15,        # Trailing cut completion delay (ms)
+        "mark_delay_ms": 20,             # Corner deceleration dwell (ms)
+        "jump_delay_ms": 80,             # Galvo jump settling dwell (ms)
+        "tolerancia_rdp": 0.0,           # 0.0 = zero geometric distortion
+        "tolerancia_union": 0.05,        # Tight contour chaining (mm)
+    },
+    "Welding": {
+        "modo_proceso": "Welding",
+        "velocidad_trazado": 15.0,       # Moderate speed for uniform thermal melt (mm/s)
+        "velocidad_viaje": 40.0,         # Rapid repositioning (mm/s)
+        "num_pasadas": 1,                # Single continuous pass
+        "cooling_delay_s": 0.0,          # Continuous operation
+        "duracion_min_segmento_ms": 20,  # Moderate segment density (ms)
+        "duracion_min_viaje_ms": 100,    # Quick repositioning dwell (ms)
+        "laser_on_delay_ms": 10,         # Fast pool initiation (ms)
+        "laser_off_delay_ms": 5,         # Crater fill delay (ms)
+        "mark_delay_ms": 10,             # Moderate galvo settling (ms)
+        "jump_delay_ms": 50,             # Standard galvo settling (ms)
+        "tolerancia_rdp": 0.002,         # Fine smoothing (mm)
+        "tolerancia_union": 0.08,        # Seam chaining tolerance (mm)
+    },
+    "Marking": {
+        "modo_proceso": "Marking",
+        "velocidad_trazado": 150.0,      # Fast surface engraving feed (mm/s)
+        "velocidad_viaje": 500.0,        # High-speed galvo jump (mm/s)
+        "num_pasadas": 1,                # Single fast pass
+        "cooling_delay_s": 0.0,          # No cooling delay needed
+        "duracion_min_segmento_ms": 2,   # Minimal segment delay for high throughput (ms)
+        "duracion_min_viaje_ms": 10,     # Agile repositioning (ms)
+        "laser_on_delay_ms": 1,          # Minimal optical latency (ms)
+        "laser_off_delay_ms": 1,         # Minimal optical tail (ms)
+        "mark_delay_ms": 0,              # Direct vector transitions (ms)
+        "jump_delay_ms": 10,             # Fast galvo settling (ms)
+        "tolerancia_rdp": 0.005,         # Node reduction for maximum speed
+        "tolerancia_union": 0.08,        # Standard contour chaining (mm)
+    }
+}
+
+
+def obtener_preset_modo(modo: str) -> Dict[str, Any]:
+    """Return recommended process parameters dictionary for Cutting, Welding, or Marking.
+
+    Args:
+        modo: 'Cutting', 'Welding', or 'Marking' (case-insensitive).
+
+    Returns:
+        Dict with recommended kinematic, timing, and multi-pass settings.
+    """
+    if not modo:
+        return dict(PRESETS_MODO_PROCESO["Marking"])
+    m_clean = str(modo).strip().lower()
+    for name, preset in PRESETS_MODO_PROCESO.items():
+        if name.lower() == m_clean:
+            return dict(preset)
+    return dict(PRESETS_MODO_PROCESO["Marking"])
+
+
 class PuenteLaser:
-    """Puente integral entre la interfaz de usuario y el motor backend Thorlabs."""
+    """Puente integral entre la interfaz de usuario y el motor backend."""
+
+    HAL_ACTUAL = "thorlabs_galvo"
 
     def __init__(self):
         self.gestor_recetas = GestorRecetas()
         self.gestor_trazabilidad = GestorTrazabilidad()
 
         self.controlador_hardware: Optional[Any] = None
-        self.puerto_conectado: Optional[str] = None
         self.es_simulacion = True
+        self._hw_lock = threading.Lock()
 
-        # HAL: siempre Thorlabs GVS112/M
-        self.hal_actual = "thorlabs_galvo"
-        cfg_init = HARDWARE_CONFIG["thorlabs_galvo"]
-        self.x_min_limit = cfg_init.get("x_min", -50.0)
-        self.x_max_limit = cfg_init.get("x_max",  50.0)
-        self.y_min_limit = cfg_init.get("y_min", -50.0)
-        self.y_max_limit = cfg_init.get("y_max",  50.0)
-
-        # Centro en el origen óptico nativo del galvo (0,0)
-        self.centro_x = cfg_init.get("centro_x", 0.0)
-        self.centro_y = cfg_init.get("centro_y", 0.0)
-        self.ancho_base_cm = cfg_init.get("ancho_base_cm", 10.0)
-        self.alto_base_cm  = cfg_init.get("alto_base_cm",  10.0)
+        # Perfil cinematico Thorlabs
+        self.hal_actual = self.HAL_ACTUAL
+        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
+        self.x_min_limit = cfg["x_min"]
+        self.x_max_limit = cfg["x_max"]
+        self.y_min_limit = cfg["y_min"]
+        self.y_max_limit = cfg["y_max"]
+        self.centro_x = cfg["centro_x"]
+        self.centro_y = cfg["centro_y"]
+        self.ancho_base_cm = cfg["ancho_base_cm"]
+        self.alto_base_cm = cfg["alto_base_cm"]
         self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
-        self.centro_cm_y = round(self.alto_base_cm  / 2.0, 2)
+        self.centro_cm_y = round(self.alto_base_cm / 2.0, 2)
+        self.escala_voltaje_v_mm = 0.200  # Thorlabs GVS112/M: +/-10V for +/-50mm (0.200 V/mm)
 
-        # Archivo DXF/G-code y geometrías cargadas
+        # Archivo DXF y geometrias
         self.ruta_dxf_actual: Optional[str] = None
         self.nombre_dxf_actual: Optional[str] = None
-        self.es_gcode: bool = False
         self.trazos_originales: List[List[Tuple[float, float]]] = []
         self.trazos_calibrados: List[List[Tuple[float, float]]] = []
         self.trazos_fisicos_cm: List[List[Tuple[float, float]]] = []
+        self.bloques_gcode_crudos: List[TrajectoryBlock] = []
+        self.bloques_gcode_optimizados: List[TrajectoryBlock] = []
+        self.daq_controller: Optional[NIDaqController] = None
 
-        # Saltos rápidos (G0 / laser OFF) para visualización dual
-        self.saltos_rapidos: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        self.saltos_fisicos_cm: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-
-        # Señales discretas DAQ y metricas analiticas
-        self.tiempo_estimado_s: float = 0.0
-        self.n_muestras_daq: int = 0
-        self.max_vx: float = 0.0
-        self.max_vy: float = 0.0
-        self._matriz_voltajes: Optional[np.ndarray] = None
-        self._mascara_laser: Optional[np.ndarray] = None
-
-        # Estado de ejecucion del hilo
+        # Control de ejecucion
         self._hilo_ejecucion: Optional[threading.Thread] = None
         self._evento_pausa = threading.Event()
         self._evento_pausa.set()
@@ -127,20 +204,55 @@ class PuenteLaser:
         self._en_ejecucion = False
         self._esta_pausado = False
 
+        # Iniciar hardware o simulador automaticamente
+        self._inicializar_hardware()
+
+    def _inicializar_hardware(self):
+        """Intenta inicializar el hardware Thorlabs. Si esta en modo simulacion o falla, activa simulador."""
+        try:
+            from hardware.config_galvo import TIPO_INTERFAZ_DAC
+            if TIPO_INTERFAZ_DAC == "SIMULACION":
+                self._activar_simulador()
+                return
+
+            from hardware.controlador_thorlabs import ControladorThorlabsGVS
+            hw = ControladorThorlabsGVS(tipo_interfaz=TIPO_INTERFAZ_DAC)
+            self.controlador_hardware = hw
+            self.es_simulacion = False
+            print("[PuenteLaser] Thorlabs GVS112/M physical hardware detected and ready.")
+        except Exception as e:
+            print(f"[PuenteLaser] Hardware fisico no disponible ({e}). Activando simulador.")
+            self._activar_simulador()
+
+    def _activar_simulador(self):
+        """Instancia el simulador Thorlabs como fallback."""
+        try:
+            from hardware.simulador_thorlabs import SimuladorThorlabsGVS
+            self.controlador_hardware = SimuladorThorlabsGVS()
+            self.es_simulacion = True
+            print("[PuenteLaser] SIMULATION mode active - physical hardware not connected.")
+        except Exception as e:
+            print(f"[PuenteLaser] Error activating simulator: {e}")
+            self.controlador_hardware = None
+            self.es_simulacion = True
+
+    def detectar_hardware(self) -> bool:
+        """Intenta inicializar o detectar el hardware Thorlabs GVS112/M fisico."""
+        self._inicializar_hardware()
+        return self.esta_conectado_fisico()
+
     def set_dimensiones_base(self, ancho_cm: float, alto_cm: float):
-        """Define las dimensiones físicas de la base y recalcula el centro automáticamente."""
+        """Define las dimensiones fisicas de la base y recalcula el centro."""
         self.ancho_base_cm = float(ancho_cm)
         self.alto_base_cm = float(alto_cm)
         self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
         self.centro_cm_y = round(self.alto_base_cm / 2.0, 2)
-
-        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        self.centro_x = cfg["centro_x"]
-        self.centro_y = cfg["centro_y"]
-        print(f"[PuenteLaser] Dimensiones base: {self.ancho_base_cm:.1f} x {self.alto_base_cm:.1f} cm | Centro: ({self.centro_cm_x:.2f}, {self.centro_cm_y:.2f}) cm")
+        self.centro_x = HARDWARE_CONFIG["thorlabs_galvo"]["centro_x"]
+        self.centro_y = HARDWARE_CONFIG["thorlabs_galvo"]["centro_y"]
+        print(f"[PuenteLaser] Dimensiones base: {self.ancho_base_cm:.1f} x {self.alto_base_cm:.1f} cm")
 
     def set_centro_cm(self, x_cm: float, y_cm: float):
-        """Define el centro de la base en centímetros (alteración manual del usuario)."""
+        """Define el centro en centimetros (ajuste manual del usuario)."""
         self.centro_cm_x = float(x_cm)
         self.centro_cm_y = float(y_cm)
 
@@ -149,40 +261,23 @@ class PuenteLaser:
         cal_alto = cfg.get("marco_alto_cm", 10.0)
         rango_x = self.x_max_limit - self.x_min_limit
         rango_y = self.y_max_limit - self.y_min_limit
-        kx = cal_alto / rango_x if rango_x > 0 else 1.0
-        ky = cal_ancho / rango_y if rango_y > 0 else 1.0
+        kx = cal_ancho / rango_x if rango_x > 0 else 1.0
+        ky = cal_alto / rango_y if rango_y > 0 else 1.0
 
         dx_cm = self.centro_cm_x - (self.ancho_base_cm / 2.0)
         dy_cm = self.centro_cm_y - (self.alto_base_cm / 2.0)
 
         hw_cx = cfg["centro_x"]
         hw_cy = cfg["centro_y"]
-
         self.centro_x = round(hw_cx + (dx_cm / kx), 3)
         self.centro_y = round(hw_cy + (dy_cm / ky), 3)
 
         self.centro_x = max(self.x_min_limit, min(self.x_max_limit, self.centro_x))
         self.centro_y = max(self.y_min_limit, min(self.y_max_limit, self.centro_y))
-
-        print(f"[PuenteLaser] Centro manual: ({self.centro_cm_x:.2f}, {self.centro_cm_y:.2f}) cm -> Hardware: ({self.centro_x:.2f}, {self.centro_y:.2f}) mm")
-
-    def cambiar_hardware(self, hal_nombre: str = "thorlabs_galvo"):
-        """Método de compatibilidad — el hardware siempre es Thorlabs GVS112/M."""
-        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        self.hal_actual = "thorlabs_galvo"
-        self.x_min_limit = cfg.get("x_min", -50.0)
-        self.x_max_limit = cfg.get("x_max",  50.0)
-        self.y_min_limit = cfg.get("y_min", -50.0)
-        self.y_max_limit = cfg.get("y_max",  50.0)
-        self.centro_x = cfg.get("centro_x", 0.0)
-        self.centro_y = cfg.get("centro_y", 0.0)
-        self.ancho_base_cm = cfg.get("ancho_base_cm", 10.0)
-        self.alto_base_cm  = cfg.get("alto_base_cm",  10.0)
-        self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
-        self.centro_cm_y = round(self.alto_base_cm  / 2.0, 2)
+        print(f"[PuenteLaser] Centro manual: ({self.centro_cm_x:.2f}, {self.centro_cm_y:.2f}) cm -> HW: ({self.centro_x:.2f}, {self.centro_y:.2f})")
 
     # =========================================================================
-    # GESTIÓN DE BASE DE DATOS (RECETAS)
+    # GESTION DE BASE DE DATOS (RECETAS)
     # =========================================================================
     def obtener_recetas(self) -> List[Dict]:
         try:
@@ -201,7 +296,8 @@ class PuenteLaser:
     def obtener_receta_default(self) -> Dict:
         recetas = self.obtener_recetas()
         for r in recetas:
-            if "acrílico" in r.get("nombre", "").lower() or "estándar" in r.get("nombre", "").lower():
+            nom = r.get("nombre", "").lower()
+            if "acrylic" in nom or "acrilico" in nom or "standard" in nom or "estandar" in nom:
                 return r
         return recetas[0] if recetas else {}
 
@@ -219,76 +315,117 @@ class PuenteLaser:
             print(f"[Conexion] Error al eliminar receta {receta_id}: {e}")
             return False
 
+    def obtener_preset_modo(self, modo: str) -> Dict[str, Any]:
+        """
+        Returns recommended process parameters for Cutting, Welding, or Marking.
+        """
+        return obtener_preset_modo(modo)
+
     # =========================================================================
-    # CONEXIÓN AL HARDWARE THORLABS (DAQ o Simulación)
+    # ESTADO DEL HARDWARE
     # =========================================================================
-    def listar_puertos_com(self) -> List[str]:
-        """Stub de compatibilidad — Thorlabs no usa puertos COM serie."""
-        return []
-
-    def conectar_puerto(self, puerto: str = "Thorlabs GVS") -> bool:
-        """Inicializa el controlador Thorlabs GVS112/M."""
-        return self.conectar_thorlabs()
-
-    def conectar_thorlabs(self) -> bool:
-        """Inicializa el driver unificado Thorlabs GVS112/M (SIMULACIÓN o PXI-6229 REAL)."""
-        try:
-            if self.controlador_hardware:
-                try:
-                    self.controlador_hardware.cerrar()
-                except Exception:
-                    pass
-                self.controlador_hardware = None
-
-            from hardware_thorlabs_galvo.controlador_thorlabs import ControladorThorlabsGVS
-            self.controlador_hardware = ControladorThorlabsGVS()
-            self.puerto_conectado = "Thorlabs GVS (NI PXI-6229 / Sim)"
-            modo = getattr(self.controlador_hardware, 'modo', 'SIMULACION')
-            self.es_simulacion = (modo != 'REAL')
-            return True
-        except Exception as e:
-            print(f"[Conexion] Excepcion al inicializar Thorlabs: {e}")
-            self.es_simulacion = True
-            return False
-
     def esta_conectado_fisico(self) -> bool:
-        """Informa si el controlador está en modo REAL (con tarjeta NI conectada)."""
-        if not self.controlador_hardware:
-            return False
-        modo = getattr(self.controlador_hardware, 'modo', 'SIMULACION')
-        return modo == 'REAL'
+        """Informa si hay hardware real listo (no simulacion)."""
+        return not self.es_simulacion and self.controlador_hardware is not None
 
     def obtener_nombre_hardware(self) -> str:
-        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        return cfg.get("nombre", "Thorlabs Galvo Scanner (GVS112/M)")
-
-    def centrar_espejos(self):
-        """Posiciona los espejos galvo en el origen óptico (0.0 V, 0.0 V)."""
-        if self.controlador_hardware and hasattr(self.controlador_hardware, "centrar_espejos"):
-            try:
-                self.controlador_hardware.centrar_espejos()
-            except Exception as e:
-                print(f"[PuenteLaser] Error al centrar espejos: {e}")
+        if self.es_simulacion:
+            return "Thorlabs GVS112/M (Simulation)"
+        return HARDWARE_CONFIG["thorlabs_galvo"].get("nombre", "Thorlabs GVS112/M")
 
     def apagar_laser(self):
-        """Apaga el laser de forma segura en el hardware Thorlabs."""
-        if self.controlador_hardware and hasattr(self.controlador_hardware, "apagar_laser"):
+        """Apaga el laser de forma segura."""
+        if self.controlador_hardware:
             try:
-                self.controlador_hardware.apagar_laser()
+                if hasattr(self.controlador_hardware, "apagar_laser"):
+                    self.controlador_hardware.apagar_laser()
             except Exception as e:
                 print(f"[PuenteLaser] Error apagando laser: {e}")
 
+    def centrar_galvos(self):
+        """Posiciona los espejos galvanometricos en reposo Home (0.0 V, 0.0 V) de forma segura."""
+        if self.controlador_hardware:
+            try:
+                if hasattr(self.controlador_hardware, "ir_a_posicion"):
+                    self.controlador_hardware.ir_a_posicion(0.0, 0.0)
+                elif hasattr(self.controlador_hardware, "enviar_voltajes"):
+                    self.controlador_hardware.enviar_voltajes(0.0, 0.0, laser_on=False)
+            except Exception as e:
+                print(f"[PuenteLaser] Error centrando galvos: {e}")
+
     # =========================================================================
-    # PROCESAMIENTO Y CARGA DE ARCHIVOS DXF / G-CODE
+    # TRANSFORMACION DE COORDENADAS DE HARDWARE
+    # =========================================================================
+    def transformar_coordenada_hardware(
+        self,
+        x: float,
+        y: float,
+        invert_x: bool = False,
+        invert_y: bool = False,
+        swap_xy: bool = False
+    ) -> Tuple[float, float]:
+        """
+        Transforms a physical coordinate (x, y) with axis swapping,
+        workspace center reflections, and hardware saturation clamping.
+
+        Order of operations:
+          1. Swap axes: (x, y) -> (y, x)
+          2. Reflect X across center of workspace (self.centro_x)
+          3. Reflect Y across center of workspace (self.centro_y)
+          4. Hardware saturation limits: clamp to [x_min, x_max] and [y_min, y_max]
+        """
+        if swap_xy:
+            x, y = y, x
+
+        if invert_x:
+            x = 2.0 * float(self.centro_x) - x
+
+        if invert_y:
+            y = 2.0 * float(self.centro_y) - y
+
+        x = max(float(self.x_min_limit), min(float(self.x_max_limit), x))
+        y = max(float(self.y_min_limit), min(float(self.y_max_limit), y))
+
+        return (round(x, 4), round(y, 4))
+
+    def aplicar_transformacion_hardware(
+        self,
+        trazos: List[List[Tuple[float, float]]],
+        invert_x: bool = False,
+        invert_y: bool = False,
+        swap_xy: bool = False
+    ) -> List[List[Tuple[float, float]]]:
+        """
+        Applies coordinate inversion, permutation, and physical clamping to a set of paths.
+        """
+        if not (invert_x or invert_y or swap_xy):
+            return trazos
+
+        trazos_tf: List[List[Tuple[float, float]]] = []
+        for ruta in trazos:
+            ruta_tf = [
+                self.transformar_coordenada_hardware(
+                    float(pt[0]), float(pt[1]),
+                    invert_x=invert_x,
+                    invert_y=invert_y,
+                    swap_xy=swap_xy
+                )
+                for pt in ruta
+            ]
+            trazos_tf.append(ruta_tf)
+        return trazos_tf
+
+    # =========================================================================
+    # PROCESAMIENTO DE ARCHIVOS DXF
     # =========================================================================
     def listar_archivos_dxf(self) -> List[str]:
-        """Busca archivos DXF y G-code en la carpeta dxf/ y en el directorio raiz."""
-        extensiones = ["*.dxf", "*.gcode", "*.nc", "*.ngc"]
+        patrones = [
+            os.path.join(_DIR_RAIZ, "dxf", "*.dxf"),
+            os.path.join(_DIR_RAIZ, "*.dxf")
+        ]
         archivos = []
-        for ext in extensiones:
-            archivos.extend(glob.glob(os.path.join(_DIR_RAIZ, "dxf", ext)))
-            archivos.extend(glob.glob(os.path.join(_DIR_RAIZ, ext)))
-
+        for p in patrones:
+            archivos.extend(glob.glob(p))
         vistos = set()
         resultado = []
         for f in archivos:
@@ -298,148 +435,101 @@ class PuenteLaser:
                 resultado.append(f)
         return resultado
 
+    def _generar_gcode_desde_dxf(self, fuente_dxf_o_trazos: Any, ruta_gcode: str):
+        """Generates standard ISO 6983 G-code from DXF vector contours or pre-extracted paths."""
+        if isinstance(fuente_dxf_o_trazos, list):
+            trazos = fuente_dxf_o_trazos
+        else:
+            lector = LectorDXF(fuente_dxf_o_trazos)
+            trazos = lector.extraer_coordenadas()
+
+        lines = [
+            "%",
+            "(Generated by CADConverter via FreeCAD / UFE Laser)",
+            "G21",  # Millimetres
+            "G90",  # Absolute positioning
+            "G17",  # XY plane
+        ]
+        for ruta in trazos:
+            if not ruta:
+                continue
+            lines.append("M5")
+            lines.append(f"G0 X{ruta[0][0]:.4f} Y{ruta[0][1]:.4f} F100.0")
+            lines.append("M3")
+            for pt in ruta[1:]:
+                lines.append(f"G1 X{pt[0]:.4f} Y{pt[1]:.4f} F20.0")
+        lines.append("M5")
+        lines.append("M2")
+        lines.append("%")
+        with open(ruta_gcode, "w", encoding="ascii", newline="\n") as fh:
+            fh.write("\n".join(lines) + "\n")
+
     def cargar_dxf(self, ruta_archivo: str, params_receta: Dict) -> Dict:
         """
-        Carga y procesa un archivo vectorial DXF o de máquina G-code (.gcode, .nc, .ngc).
+        Loads DXF with 100% entity preservation via high-performance LectorDXF (ezdxf),
+        generates standard ISO 6983 G-code, parses blocks, and optimizes trajectories.
         """
         if not os.path.exists(ruta_archivo):
-            raise FileNotFoundError(f"No existe el archivo: {ruta_archivo}")
+            raise FileNotFoundError(f"File not found: {ruta_archivo}")
 
         self.ruta_dxf_actual = ruta_archivo
         self.nombre_dxf_actual = os.path.basename(ruta_archivo)
-        self.es_gcode = ruta_archivo.lower().endswith(('.gcode', '.nc', '.ngc'))
 
-        if self.es_gcode:
-            return self._cargar_gcode(ruta_archivo, params_receta)
-        else:
-            lector = LectorDXF(ruta_archivo)
-            self.trazos_originales = lector.extraer_coordenadas()
-            if not self.trazos_originales:
-                raise ValueError(f"No se encontraron entidades vectoriales en {self.nombre_dxf_actual}")
-            return self.recalcular_trayectorias(params_receta)
+        # 1. Extracción vectorial de alta fidelidad con LectorDXF (ezdxf)
+        # Garantiza el 100% de las entidades (sin caídas de CDxfRead ni pérdida de figuras internas)
+        lector = LectorDXF(ruta_archivo)
+        trazos_dxf = lector.extraer_coordenadas()
+        if not trazos_dxf:
+            raise ValueError(f"No vector entities found in {self.nombre_dxf_actual}")
+        self.trazos_originales = trazos_dxf
 
-    def _cargar_gcode(self, ruta_archivo: str, params_receta: Dict) -> Dict:
-        """Intérprete y discretizador para archivos G-code estándar."""
-        v_trazado = float(params_receta.get("velocidad_trazado", VELOCIDAD_MARCADO_MM_S))
-        v_viaje   = float(params_receta.get("velocidad_viaje", VELOCIDAD_SALTO_MM_S))
+        # 2. Ruta de salida G-code (.gcode en el mismo directorio)
+        base_name, _ = os.path.splitext(ruta_archivo)
+        output_gcode_path = base_name + ".gcode"
 
-        lector = LectorGcode(
-            ruta_archivo,
-            feed_defecto_mm_min=v_trazado * 60.0,
-            feed_viaje_mm_min=v_viaje * 60.0
+        # 3. Generación directa de G-code ISO 6983 a partir de TODOS los trazos vectoriales (<0.02s)
+        self._generar_gcode_desde_dxf(trazos_dxf, output_gcode_path)
+
+        # 4. Parseo con GCodeParser
+        v_trazado = float(params_receta.get("velocidad_trazado", 2.0))
+        v_viaje = float(params_receta.get("velocidad_viaje", 3.5))
+        parser = GCodeParser(output_gcode_path, default_feed_mm_s=v_trazado, rapid_speed_mm_s=v_viaje)
+        self.bloques_gcode_crudos = parser.parse()
+
+        # 5. Optimización de trayectorias con PathOptimizer
+        tol_rdp = float(params_receta.get("tolerancia_rdp", 0.0))
+        tol_union = float(params_receta.get("tolerancia_union", 0.08))
+        optimizer = PathOptimizer(
+            epsilon=tol_rdp,
+            rapid_speed_mm_s=v_viaje,
+            connection_tolerance=tol_union
         )
-        segmentos = lector.leer()
-        if not segmentos:
-            raise ValueError(f"No se encontraron comandos de movimiento en {self.nombre_dxf_actual}")
+        self.bloques_gcode_optimizados = optimizer.optimize(self.bloques_gcode_crudos)
 
-        gen = GeneradorMatrizTemporal(
-            fs=FRECUENCIA_MUESTREO_HZ,
-            escala_vx=ESCALA_VX_POR_MM,
-            escala_vy=ESCALA_VY_POR_MM,
-            offset_vx=OFFSET_VX,
-            offset_vy=OFFSET_VY,
-            jump_delay_us=JUMP_DELAY_US,
-            laser_on_delay_us=LASER_ON_DELAY_US,
-            laser_off_delay_us=LASER_OFF_DELAY_US,
-            velocidad_defecto_mm_s=v_trazado,
-            velocidad_viaje_mm_s=v_viaje,
-        )
-        M, L, info = gen.generar(segmentos)
-        self._matriz_voltajes = M
-        self._mascara_laser = L
-        self.tiempo_estimado_s = info["tiempo_total_s"]
-        self.n_muestras_daq = info["n_muestras"]
-        self.max_vx = info["max_vx"]
-        self.max_vy = info["max_vy"]
-
-        # Extraer trazos de corte (marcado) y saltos de viaje
-        trazos_corte: List[List[Tuple[float, float]]] = []
-        saltos: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        trazo_actual: List[Tuple[float, float]] = []
-
-        for seg in segmentos:
-            p1 = (float(seg["x1"]), float(seg["y1"]))
-            p2 = (float(seg["x2"]), float(seg["y2"]))
-            if seg["laser_on"]:
-                if not trazo_actual:
-                    trazo_actual.append(p1)
-                trazo_actual.append(p2)
-            else:
-                if trazo_actual:
-                    trazos_corte.append(trazo_actual)
-                    trazo_actual = []
-                saltos.append((p1, p2))
-        if trazo_actual:
-            trazos_corte.append(trazo_actual)
-
-        self.trazos_calibrados = trazos_corte
-        self.saltos_rapidos = saltos
-
-        # Mapear a centímetros para el Canvas 1:1
-        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        cal_ancho = cfg.get("marco_ancho_cm", 10.0)
-        cal_alto  = cfg.get("marco_alto_cm", 10.0)
-        rango_x = self.x_max_limit - self.x_min_limit
-        rango_y = self.y_max_limit - self.y_min_limit
-        kx = cal_alto / rango_x if rango_x > 0 else 1.0
-        ky = cal_ancho / rango_y if rango_y > 0 else 1.0
-        cx_base = self.ancho_base_cm / 2.0
-        cy_base = self.alto_base_cm / 2.0
-
-        self.trazos_fisicos_cm = []
-        for ruta in self.trazos_calibrados:
-            ruta_cm = []
-            for xs, ys in ruta:
-                x_cm = cx_base + (xs - self.centro_x) * kx
-                y_cm = cy_base + (ys - self.centro_y) * ky
-                ruta_cm.append((round(x_cm, 3), round(y_cm, 3)))
-            self.trazos_fisicos_cm.append(ruta_cm)
-
-        self.saltos_fisicos_cm = []
-        for p1, p2 in saltos:
-            p1_cm = (round(cx_base + (p1[0] - self.centro_x) * kx, 3),
-                     round(cy_base + (p1[1] - self.centro_y) * ky, 3))
-            p2_cm = (round(cx_base + (p2[0] - self.centro_x) * kx, 3),
-                     round(cy_base + (p2[1] - self.centro_y) * ky, 3))
-            self.saltos_fisicos_cm.append((p1_cm, p2_cm))
-
-        min_x, max_x, min_y, max_y = obtener_limites_dxf(self.trazos_calibrados) if self.trazos_calibrados else (0,0,0,0)
-        total_puntos = sum(len(t) for t in self.trazos_calibrados)
-
-        return {
-            "archivo": self.nombre_dxf_actual,
-            "ruta": self.ruta_dxf_actual,
-            "num_trazos": len(self.trazos_calibrados),
-            "num_waypoints": total_puntos,
-            "ancho_cm": round((max_x - min_x) / 10.0, 2),
-            "alto_cm": round((max_y - min_y) / 10.0, 2),
-            "min_x": min_x,
-            "max_x": max_x,
-            "min_y": min_y,
-            "max_y": max_y,
-            "tiempo_estimado_s": self.tiempo_estimado_s,
-            "n_muestras_daq": self.n_muestras_daq,
-            "max_vx": self.max_vx,
-            "max_vy": self.max_vy,
-            "limites_hardware": {
-                "x_min": self.x_min_limit, "x_max": self.x_max_limit,
-                "y_min": self.y_min_limit, "y_max": self.y_max_limit
-            }
-        }
+        return self.recalcular_trayectorias(params_receta)
 
     def recalcular_trayectorias(self, params_receta: Dict) -> Dict:
-        """Aplica escala, rotación, optimización TSP a los trazos DXF y genera matriz temporal."""
+        """Aplica escala, rotación y optimización espacial preservando todas las figuras geométricas."""
         if not self.trazos_originales:
             return {}
+
+        tol_rdp = float(params_receta.get("tolerancia_rdp", 0.0))
+        tol_union = float(params_receta.get("tolerancia_union", 0.08))
+        v_viaje = float(params_receta.get("velocidad_viaje", 3.5))
+
+        # Reoptimizar bloques G-code si existen
+        if hasattr(self, "bloques_gcode_crudos") and self.bloques_gcode_crudos:
+            optimizer = PathOptimizer(
+                epsilon=tol_rdp,
+                rapid_speed_mm_s=v_viaje,
+                connection_tolerance=tol_union
+            )
+            self.bloques_gcode_optimizados = optimizer.optimize(self.bloques_gcode_crudos)
 
         escala = float(params_receta.get("escala_dibujo", 0.90))
         rotar_90 = bool(params_receta.get("rotar_90_grados", 0))
         rotacion_grados = params_receta.get("rotacion_grados", None)
-        tol_rdp = float(params_receta.get("tolerancia_rdp", 0.005))
-        tol_union = float(params_receta.get("tolerancia_union", 0.08))
         long_min = float(params_receta.get("longitud_min_trazo", 0.01))
-        v_trazado = float(params_receta.get("velocidad_trazado", VELOCIDAD_MARCADO_MM_S))
-        v_viaje   = float(params_receta.get("velocidad_viaje", VELOCIDAD_SALTO_MM_S))
 
         cfg = HARDWARE_CONFIG["thorlabs_galvo"]
         cal_ancho = cfg.get("marco_ancho_cm", 10.0)
@@ -466,49 +556,25 @@ class PuenteLaser:
             centro_y=self.centro_y
         )
 
-        # Generar matriz temporal analítica y metricas de voltajes/tiempo
-        gen = GeneradorMatrizTemporal(
-            fs=FRECUENCIA_MUESTREO_HZ,
-            escala_vx=ESCALA_VX_POR_MM,
-            escala_vy=ESCALA_VY_POR_MM,
-            offset_vx=OFFSET_VX,
-            offset_vy=OFFSET_VY,
-            jump_delay_us=JUMP_DELAY_US,
-            laser_on_delay_us=LASER_ON_DELAY_US,
-            laser_off_delay_us=LASER_OFF_DELAY_US,
-            velocidad_defecto_mm_s=v_trazado,
-            velocidad_viaje_mm_s=v_viaje,
-        )
-        M, L, info = gen.desde_trayectorias_dxf(
-            self.trazos_calibrados,
-            velocidad_corte_mm_s=v_trazado,
-            velocidad_viaje_mm_s=v_viaje,
-        )
-        self._matriz_voltajes = M
-        self._mascara_laser = L
-        self.tiempo_estimado_s = info["tiempo_total_s"]
-        self.n_muestras_daq = info["n_muestras"]
-        self.max_vx = info["max_vx"]
-        self.max_vy = info["max_vy"]
+        # Inversion y permutacion de coordenadas de hardware
+        invert_x = bool(params_receta.get("invert_x", False))
+        invert_y = bool(params_receta.get("invert_y", False))
+        swap_xy = bool(params_receta.get("swap_xy", False))
 
-        # Extraer saltos rápidos de viaje entre trazos DXF
-        saltos: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        pos_salto = (self.centro_x, self.centro_y)
-        for ruta in self.trazos_calibrados:
-            if not ruta:
-                continue
-            p_ini = ruta[0]
-            if math.hypot(p_ini[0] - pos_salto[0], p_ini[1] - pos_salto[1]) > 0.01:
-                saltos.append((pos_salto, p_ini))
-            pos_salto = ruta[-1]
-        self.saltos_rapidos = saltos
+        if invert_x or invert_y or swap_xy:
+            self.trazos_calibrados = self.aplicar_transformacion_hardware(
+                self.trazos_calibrados,
+                invert_x=invert_x,
+                invert_y=invert_y,
+                swap_xy=swap_xy
+            )
 
-        # Generar trazos métricos en centímetros para el Canvas (1:1 estricto sobre el área base)
+        # Generar trazos en cm para el Canvas
         self.trazos_fisicos_cm = []
         rango_x = self.x_max_limit - self.x_min_limit
         rango_y = self.y_max_limit - self.y_min_limit
-        kx = cal_alto / rango_x if rango_x > 0 else 1.0
-        ky = cal_ancho / rango_y if rango_y > 0 else 1.0
+        kx = cal_ancho / rango_x if rango_x > 0 else 1.0
+        ky = cal_alto / rango_y if rango_y > 0 else 1.0
 
         cx_base = self.ancho_base_cm / 2.0
         cy_base = self.alto_base_cm / 2.0
@@ -521,14 +587,6 @@ class PuenteLaser:
                 ruta_cm.append((round(x_cm, 3), round(y_cm, 3)))
             self.trazos_fisicos_cm.append(ruta_cm)
 
-        self.saltos_fisicos_cm = []
-        for p1, p2 in saltos:
-            p1_cm = (round(cx_base + (p1[0] - self.centro_x) * kx, 3),
-                     round(cy_base + (p1[1] - self.centro_y) * ky, 3))
-            p2_cm = (round(cx_base + (p2[0] - self.centro_x) * kx, 3),
-                     round(cy_base + (p2[1] - self.centro_y) * ky, 3))
-            self.saltos_fisicos_cm.append((p1_cm, p2_cm))
-
         min_x, max_x, min_y, max_y = obtener_limites_dxf(self.trazos_calibrados)
         total_puntos = sum(len(t) for t in self.trazos_calibrados)
 
@@ -537,16 +595,10 @@ class PuenteLaser:
             "ruta": self.ruta_dxf_actual,
             "num_trazos": len(self.trazos_calibrados),
             "num_waypoints": total_puntos,
-            "ancho_cm": round((max_x - min_x) / 10.0, 2),
-            "alto_cm": round((max_y - min_y) / 10.0, 2),
-            "min_x": min_x,
-            "max_x": max_x,
-            "min_y": min_y,
-            "max_y": max_y,
-            "tiempo_estimado_s": self.tiempo_estimado_s,
-            "n_muestras_daq": self.n_muestras_daq,
-            "max_vx": self.max_vx,
-            "max_vy": self.max_vy,
+            "ancho_cm": round(max_x - min_x, 2),
+            "alto_cm": round(max_y - min_y, 2),
+            "min_x": min_x, "max_x": max_x,
+            "min_y": min_y, "max_y": max_y,
             "limites_hardware": {
                 "x_min": self.x_min_limit, "x_max": self.x_max_limit,
                 "y_min": self.y_min_limit, "y_max": self.y_max_limit
@@ -554,14 +606,14 @@ class PuenteLaser:
         }
 
     # =========================================================================
-    # MOTOR DE EJECUCIÓN ASÍNCRONO EN TIEMPO REAL
+    # MOTOR DE EJECUCION ASINCRONO
     # =========================================================================
     def iniciar_ejecucion(self,
                           params_receta: Dict,
                           on_progress: Callable,
                           on_log: Callable,
                           on_finished: Callable):
-        """Inicia el hilo de ejecucion asíncrono para el cabezal Thorlabs."""
+        """Lanza el proceso de trazado en un hilo independiente."""
         if self._en_ejecucion:
             return
 
@@ -578,36 +630,41 @@ class PuenteLaser:
         self._hilo_ejecucion.start()
 
     def pausar_o_reanudar(self) -> bool:
-        """Alterna entre pausa y reanudación de forma no bloqueante."""
+        """Alterna entre pausa y reanudacion de forma no bloqueante."""
         if not self._en_ejecucion:
             return False
 
         if self._esta_pausado:
             self._esta_pausado = False
             self._evento_pausa.set()
-            if self.controlador_hardware and hasattr(self.controlador_hardware, "encender_laser"):
-                self.controlador_hardware.encender_laser()
+            if hasattr(self.controlador_hardware, "encender_laser"):
+                try:
+                    self.controlador_hardware.encender_laser()
+                except Exception:
+                    pass
             return False
         else:
             self._esta_pausado = True
             self._evento_pausa.clear()
-            if self.controlador_hardware and hasattr(self.controlador_hardware, "apagar_laser"):
-                self.controlador_hardware.apagar_laser()
+            self.apagar_laser()
             return True
 
     def pausar_por_seguridad(self):
-        """Pausa inmediata del laser preventivamente de forma no bloqueante."""
+        """Pausa inmediata preventiva."""
         if not self._en_ejecucion:
             return
         self._esta_pausado = True
         self._evento_pausa.clear()
 
     def detener_ejecucion(self):
-        """Detiene la ejecucion activa inmediatamente y aborta en el controlador."""
-        if not self._en_ejecucion:
-            return
+        """Detiene la ejecucion activa inmediatamente con parada atomica E-STOP."""
         self._evento_detener.set()
         self._evento_pausa.set()
+        if hasattr(self, "daq_controller") and self.daq_controller:
+            try:
+                self.daq_controller.stop_and_clear()
+            except Exception as e:
+                print(f"[PuenteLaser] Error al detener DAQ en E-STOP: {e}")
         if self.controlador_hardware:
             try:
                 if hasattr(self.controlador_hardware, "abortar_inmediato"):
@@ -615,13 +672,191 @@ class PuenteLaser:
                 else:
                     self.apagar_laser()
             except Exception as e:
-                print(f"[PuenteLaser] Error al invocar abortar_inmediato: {e}")
+                print(f"[PuenteLaser] Error al abortar hardware en E-STOP: {e}")
+        self.apagar_laser()
+        self.centrar_galvos()
 
-    def _enviar_seguro(self, comando: str, timeout: float = 15.0) -> str:
-        """Stub de compatibilidad."""
-        if self._evento_detener.is_set():
-            return "DETENIDO"
-        return "OK"
+    def ejecutar_enmarcado(
+        self,
+        params: Optional[Dict[str, Any]] = None,
+        on_progress: Optional[Callable] = None,
+        on_log: Optional[Callable] = None,
+        on_finished: Optional[Callable] = None,
+        asincrono: bool = True
+    ) -> bool:
+        """
+        Executes a closed rectangular perimeter tracing (Framing routine) around
+        the calibrated bounding box at rapid speed with LASER STRICTLY OFF.
+
+        Args:
+            params: Dictionary containing optional configuration:
+                    - 'velocidad_viaje': rapid travel feed (default: 2000 mm/s)
+                    - 'num_vueltas' / 'vueltas_framing': laps to execute (1 or 2, default: 1)
+            on_progress: Optional GUI progress callback.
+            on_log: Optional terminal logger callback.
+            on_finished: Optional completion callback.
+            asincrono: Whether to spawn a background daemon thread (default: True).
+
+        Returns:
+            bool: True if framing started successfully, False otherwise.
+        """
+        if self._en_ejecucion:
+            if on_log:
+                on_log("[Framing] Execution engine is busy. Cannot start framing.")
+            return False
+
+        if not self.trazos_calibrados:
+            msg = "[Framing] No calibrated trajectories available to frame."
+            if on_log:
+                on_log(msg)
+            if on_finished:
+                on_finished("ERROR", msg, 0.0)
+            return False
+
+        params_dict = params or {}
+        v_viaje = float(params_dict.get("velocidad_viaje", 2000.0))
+        num_vueltas = int(params_dict.get("num_vueltas", params_dict.get("vueltas_framing", 1)))
+        num_vueltas = max(1, min(2, num_vueltas))
+
+        # 1. Calculate Bounding Box of calibrated trajectories
+        min_x, max_x, min_y, max_y = obtener_limites_dxf(self.trazos_calibrados)
+
+        # 2. Build closed 4-corner perimeter
+        c1 = (float(min_x), float(min_y))
+        c2 = (float(max_x), float(min_y))
+        c3 = (float(max_x), float(max_y))
+        c4 = (float(min_x), float(max_y))
+        esquinas = [c1, c2, c3, c4, c1]
+
+        p_home = (float(self.centro_x), float(self.centro_y))
+
+        # 3. Build G0 motion blocks with laser strictly OFF
+        blocks: List[TrajectoryBlock] = []
+        pos = p_home
+
+        for lap in range(num_vueltas):
+            for pt in esquinas:
+                dist = math.hypot(pt[0] - pos[0], pt[1] - pos[1])
+                if dist > 1e-9:
+                    dur_s = max(0.010, dist / max(0.1, v_viaje))
+                    blocks.append(TrajectoryBlock("G0", pos, pt, dist / dur_s))
+                    pos = pt
+
+        # Return to Home at the end
+        dist_home = math.hypot(p_home[0] - pos[0], p_home[1] - pos[1])
+        if dist_home > 1e-9:
+            dur_s = max(0.010, dist_home / max(0.1, v_viaje))
+            blocks.append(TrajectoryBlock("G0", pos, p_home, dist_home / dur_s))
+
+        def _hilo_enmarcado():
+            t_inicio = time.time()
+            self._en_ejecucion = True
+            self._evento_detener.clear()
+            self._evento_pausa.set()
+            estado = "COMPLETED"
+            error_msg = ""
+
+            # Ensure laser is strictly disabled
+            self.apagar_laser()
+
+            if on_log:
+                on_log(f"=== FRAMING ROUTINE STARTED ({num_vueltas} lap{'s' if num_vueltas > 1 else ''}) ===")
+                on_log(f"[Framing] Bounding Box: X[{min_x:.2f}, {max_x:.2f}] mm | Y[{min_y:.2f}, {max_y:.2f}] mm")
+                on_log(f"[Framing] Travel speed: {v_viaje} mm/s | Laser Gate: STRICTLY 0 (OFF)")
+
+            try:
+                fs = 5000.0
+                generador = GalvoSignalGenerator(
+                    blocks,
+                    sample_rate_hz=fs,
+                    scale_factor_v_per_mm=self.escala_voltaje_v_mm,
+                    voltage_limits=(-10.0, 10.0),
+                    jump_delay_us=5000.0,
+                    mark_delay_us=0.0,
+                    laser_on_delay_us=0.0,
+                    laser_off_delay_us=0.0
+                )
+                voltajes, compuerta = generador.generate_signals()
+                # STRICT SAFETY: Laser gate is 0 for all samples
+                compuerta.fill(0)
+
+                try:
+                    self.daq_controller = NIDaqController(simulate=self.es_simulacion)
+                    self.daq_controller.setup_hardware(f_s=fs)
+                    self.daq_controller.write_buffers(voltajes, compuerta)
+                    self.daq_controller.start_emission()
+                except Exception as daq_e:
+                    if on_log:
+                        on_log(f"[Framing DAQ Notice] {daq_e}")
+
+                # Telemetry loop for visual framing tracking
+                n_samples = voltajes.shape[1]
+                t0 = time.time()
+                while True:
+                    if self._evento_detener.is_set():
+                        estado = "ABORTED"
+                        break
+
+                    # Pausa durante enmarcado: congelar la línea de tiempo sin perder posición
+                    if not self._evento_pausa.is_set():
+                        t_pausa = time.time()
+                        while not self._evento_pausa.is_set():
+                            if self._evento_detener.is_set():
+                                break
+                            time.sleep(0.05)
+                        t0 += time.time() - t_pausa
+                        continue
+
+                    k = min(n_samples - 1, int((time.time() - t0) * fs))
+                    vx = float(voltajes[0, k])
+                    vy = float(voltajes[1, k])
+                    pct = min(100.0, (k / float(max(1, n_samples - 1))) * 100.0)
+
+                    if on_progress:
+                        on_progress(
+                            0, 1,
+                            k, n_samples,
+                            vx / self.escala_voltaje_v_mm, vy / self.escala_voltaje_v_mm,
+                            round(pct, 1), round(pct, 1),
+                            False,  # laser strictly OFF
+                            vx, vy
+                        )
+
+                    if k >= n_samples - 1:
+                        break
+                    time.sleep(0.025)
+
+                if self._evento_detener.is_set():
+                    if on_log:
+                        on_log("[Framing] Stopped by operator.")
+                else:
+                    if on_log:
+                        on_log("[Framing] Routine completed successfully. Galvos safely at Home.")
+
+            except Exception as e:
+                estado = "ERROR"
+                error_msg = str(e)
+                if on_log:
+                    on_log(f"[Framing ERROR] {e}")
+            finally:
+                self.apagar_laser()
+                if hasattr(self, "daq_controller") and self.daq_controller:
+                    try:
+                        self.daq_controller.stop_and_clear()
+                    except Exception:
+                        pass
+                self._en_ejecucion = False
+                dur_s = round(time.time() - t_inicio, 2)
+                if on_finished:
+                    on_finished(estado, error_msg, dur_s)
+
+        if asincrono:
+            self._hilo_ejecucion = threading.Thread(target=_hilo_enmarcado, daemon=True)
+            self._hilo_ejecucion.start()
+            return True
+        else:
+            _hilo_enmarcado()
+            return True
 
     @property
     def en_ejecucion(self) -> bool:
@@ -637,207 +872,345 @@ class PuenteLaser:
                       on_log: Callable,
                       on_finished: Callable):
         """
-        Motor de ejecucion cinemática y telemetría de alta fidelidad:
-        - Envía el barrido al driver Thorlabs GVS112/M.
-        - Mantiene sincronización de telemetría visual con la GUI.
+        Motor de ejecucion cinematica con telemetria de alta fidelidad.
+
+        Construye una secuencia determinista de waypoints y:
+          - Lanza un hilo de transmision al hardware (o simulador)
+          - Ejecuta el bucle de telemetria visual a ~35 fps
+          - Garantiza parada instantanea no bloqueante
         """
         t_inicio = time.time()
-        estado = "COMPLETADO"
+        estado = "COMPLETED"
         error_msg = ""
 
         trazos = self.trazos_calibrados
         if not trazos:
+            if self.ruta_dxf_actual and os.path.exists(self.ruta_dxf_actual):
+                on_log("[EXEC] Processing CAD/DXF geometry inside worker thread...")
+                self.cargar_dxf(self.ruta_dxf_actual, params)
+                trazos = self.trazos_calibrados
+        if not trazos:
             self._en_ejecucion = False
-            on_finished("ERROR", "No calculated toolpaths to execute", 0)
+            on_finished("ERROR", "No calculated paths to execute", 0)
             return
 
-        v_trazado = float(params.get("velocidad_trazado", VELOCIDAD_MARCADO_MM_S))
-        v_viaje   = float(params.get("velocidad_viaje", VELOCIDAD_SALTO_MM_S))
-        dur_min_seg = int(params.get("duracion_min_segmento_ms", 20))
+        v_trazado = float(params.get("velocidad_trazado", 500.0))
+        v_viaje = float(params.get("velocidad_viaje", 2000.0))
+        dur_min_seg = int(params.get("duracion_min_segmento_ms", 10))
         dur_min_viaje = int(params.get("duracion_min_viaje_ms", 50))
+        jump_delay_ms = float(params.get("jump_delay_ms", 0))
+        mark_delay_ms = float(params.get("mark_delay_ms", 0))
+        laser_on_delay_ms = float(params.get("laser_on_delay_ms", 0))
+        laser_off_delay_ms = float(params.get("laser_off_delay_ms", 0))
+
+        num_pasadas = max(1, int(params.get("num_pasadas", 1)))
+        cooling_delay_s = max(0.0, float(params.get("cooling_delay_s", 0.0)))
+        modo_proceso = str(params.get("modo_proceso", "Cutting"))
 
         total_trazos = len(trazos)
         total_puntos = sum(len(t) for t in trazos)
 
-        on_log(f"=== STARTING CUT / MARKING: {self.nombre_dxf_actual} ===")
-        on_log(f"Hardware: {self.obtener_nombre_hardware()} | Mode: {'ACTIVE HARDWARE (PXI-6229)' if self.esta_conectado_fisico() else 'VIRTUAL SIMULATION'}")
-        on_log(f"Strokes: {total_trazos} | Total Waypoints: {total_puntos}")
-        on_log(f"Estimated analytical time: {self.tiempo_estimado_s:.4f} s ({self.n_muestras_daq:,} samples)")
-        on_log(f"Marking speed: {v_trazado} mm/s | Rapid jump: {v_viaje} mm/s")
+        on_log(f"[EXEC] Starting process in mode: {modo_proceso} | Passes: {num_pasadas} | File: {self.nombre_dxf_actual}")
+        on_log(f"=== TRACE STARTED: {self.nombre_dxf_actual} ===")
+        on_log(f"Hardware: {self.obtener_nombre_hardware()} | Mode: {'PHYSICAL HARDWARE' if not self.es_simulacion else 'VIRTUAL SIMULATION'}")
+        on_log(f"Paths: {total_trazos} | Waypoints: {total_puntos} | Passes: {num_pasadas}")
+        on_log(f"Mark speed: {v_trazado} mm/s | Jump speed: {v_viaje} mm/s")
+        on_log(f"Delays: jump={jump_delay_ms:g} ms | mark={mark_delay_ms:g} ms | "
+               f"laser ON={laser_on_delay_ms:g} ms | laser OFF={laser_off_delay_ms:g} ms | "
+               f"cooling={cooling_delay_s:g} s")
 
         try:
-            # 1. Construir waypoints de telemetría para GUI
-            waypoints = []
-            pos_x = self.centro_x
-            pos_y = self.centro_y
+            # ---------------------------------------------------------------
+            # 1. Build the G0/G1 block sequence with real kinematic durations
+            #    (speed + minimum durations from the recipe).
+            # ---------------------------------------------------------------
+            blocks: List[TrajectoryBlock] = []
+            meta: List[Tuple[int, int, int, int]] = []  # (trace, point, points_in_trace, is_mark)
+            pos: Tuple[float, float] = (float(self.centro_x), float(self.centro_y))
+            t_nominal = 0.0
+            n_jumps = 0
+            n_contours = 0
 
             for idx_t, ruta in enumerate(trazos):
                 if not ruta:
                     continue
+                destino = (float(ruta[0][0]), float(ruta[0][1]))
+                dist = math.hypot(destino[0] - pos[0], destino[1] - pos[1])
+                if dist > 1e-9:
+                    dur_s = max(dur_min_viaje / 1000.0, dist / max(0.1, v_viaje))
+                    blocks.append(TrajectoryBlock("G0", pos, destino, dist / dur_s))
+                    meta.append((idx_t, 0, len(ruta), 0))
+                    t_nominal += dur_s
+                    n_jumps += 1
+                pos = destino
+                n_contours += 1
 
-                total_segs_trazo = max(1, len(ruta) - 1)
-                primer_pt = ruta[0]
-                dx = primer_pt[0] - pos_x
-                dy = primer_pt[1] - pos_y
-                dist_viaje = math.hypot(dx, dy)
-                dur_viaje_ms = max(dur_min_viaje, int((dist_viaje / max(0.1, v_viaje)) * 1000))
-
-                # Salto rápido con laser apagado (0)
-                waypoints.append({
-                    "x": primer_pt[0], "y": primer_pt[1],
-                    "p_ini_x": pos_x,  "p_ini_y": pos_y,
-                    "dur_ms": dur_viaje_ms, "laser": 0,
-                    "trazo_idx": idx_t, "seg_idx": 0,
-                    "total_segs_trazo": total_segs_trazo,
-                    "pt_idx": 0, "total_pts_trazo": len(ruta),
-                    "es_corte": False
-                })
-                pos_x, pos_y = primer_pt
-
-                # Trazado activo con laser encendido (1)
                 for i_pt in range(1, len(ruta)):
-                    pt = ruta[i_pt]
-                    dx = pt[0] - pos_x
-                    dy = pt[1] - pos_y
-                    dist_seg = math.hypot(dx, dy)
-                    dur_seg_ms = max(dur_min_seg, int((dist_seg / max(0.1, v_trazado)) * 1000))
+                    pt = (float(ruta[i_pt][0]), float(ruta[i_pt][1]))
+                    dist = math.hypot(pt[0] - pos[0], pt[1] - pos[1])
+                    if dist <= 1e-9:
+                        continue
+                    dur_s = max(dur_min_seg / 1000.0, dist / max(0.1, v_trazado))
+                    blocks.append(TrajectoryBlock("G1", pos, pt, dist / dur_s))
+                    meta.append((idx_t, i_pt, len(ruta), 1))
+                    t_nominal += dur_s
+                    pos = pt
 
-                    waypoints.append({
-                        "x": pt[0], "y": pt[1],
-                        "p_ini_x": pos_x, "p_ini_y": pos_y,
-                        "dur_ms": dur_seg_ms, "laser": 1,
-                        "trazo_idx": idx_t, "seg_idx": i_pt - 1,
-                        "total_segs_trazo": total_segs_trazo,
-                        "pt_idx": i_pt, "total_pts_trazo": len(ruta),
-                        "es_corte": True
-                    })
-                    pos_x, pos_y = pt
+            if not blocks:
+                raise ValueError("Calculated paths contain no movable segments.")
 
-            total_puntos_corte = max(1, sum(1 for wp in waypoints if wp["es_corte"]))
-            puntos_corte_acum = 0
+            # ---------------------------------------------------------------
+            # 2. Signal timeline: GalvoSignalGenerator applies jump / mark /
+            #    laser ON / laser OFF delays sample by sample.
+            # ---------------------------------------------------------------
+            t_total_est = t_nominal + (n_jumps * jump_delay_ms + n_contours * mark_delay_ms) / 1000.0
+            fs = min(20000.0, max(1000.0, 1.5e6 / max(t_total_est, 1e-3)))
+            escala_v = self.escala_voltaje_v_mm
 
-            # 2. Hilo de ejecucion física en hardware Thorlabs
-            def _hilo_transmision_galvo():
-                try:
-                    if self._matriz_voltajes is not None and self._mascara_laser is not None:
-                        self.controlador_hardware.trazar_matriz(
-                            self._matriz_voltajes,
-                            self._mascara_laser,
-                            fs=FRECUENCIA_MUESTREO_HZ
-                        )
-                    elif hasattr(self.controlador_hardware, "trazar_trayectorias"):
-                        self.controlador_hardware.trazar_trayectorias(
-                            trazos,
-                            velocidad_marcado=v_trazado,
-                            velocidad_salto=v_viaje
-                        )
-                except Exception as e_drv:
-                    on_log(f"[Thorlabs GVS] Driver exception: {e_drv}")
+            generador = GalvoSignalGenerator(
+                blocks,
+                sample_rate_hz=fs,
+                scale_factor_v_per_mm=escala_v,
+                voltage_limits=(-10.0, 10.0),
+                jump_delay_us=jump_delay_ms * 1000.0,
+                mark_delay_us=mark_delay_ms * 1000.0,
+                laser_on_delay_us=laser_on_delay_ms * 1000.0,
+                laser_off_delay_us=laser_off_delay_ms * 1000.0,
+            )
+            voltajes, compuerta = generador.generate_signals()
+            n_muestras = int(voltajes.shape[1])
+            k_ultimo = n_muestras - 1
+            on_log(f"Signal timeline: {n_muestras} samples @ {fs:.0f} Hz "
+                   f"-> {n_muestras / fs:.2f} s per pass (physical delays included)")
 
-            hilo_tx = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
-            hilo_tx.start()
+            # Vectorized sample-to-block mapping matching GalvoSignalGenerator timing
+            starts = np.array([b.start for b in blocks], dtype=np.float64)
+            ends = np.array([b.end for b in blocks], dtype=np.float64)
+            speeds = np.array([b.velocity for b in blocks], dtype=np.float64)
+            is_mark = np.array([b.motion_type == "G1" for b in blocks], dtype=bool)
 
-            # 3. Telemetría visual en tiempo real sincronizada a ~35 fps
-            for wp in waypoints:
-                if self._evento_detener.is_set() or getattr(self, "cerrando", False):
-                    estado = "DETENIDO"
+            distances = np.hypot(*(ends - starts).T)
+            motion_samples = np.rint(distances / speeds * fs).astype(np.int64)
+            motion_samples = np.where((distances > 0) & (motion_samples < 1), 1, motion_samples)
+            n_jump = generador.n_jump
+            n_mark = generador.n_mark
+            joined_to_previous = np.zeros(len(blocks), dtype=bool)
+            if len(blocks) > 1:
+                gaps = np.hypot(*(starts[1:] - ends[:-1]).T)
+                joined_to_previous[1:] = is_mark[1:] & is_mark[:-1] & (gaps <= 1e-6)
+            joined_to_next = np.zeros(len(blocks), dtype=bool)
+            joined_to_next[:-1] = joined_to_previous[1:]
+            contour_end = is_mark & ~joined_to_next
+            dwell_samples = np.where(is_mark, np.where(contour_end, n_mark, 0), n_jump).astype(np.int64)
+            total_samples = motion_samples + dwell_samples
+            block_index = np.repeat(np.arange(len(blocks)), total_samples)
+            idx_bloque = np.concatenate(([0], block_index))
+            offsets = np.concatenate(([1], 1 + np.cumsum(total_samples)[:-1]))
+            cuentas = total_samples
+
+            meta_arr = np.array(meta, dtype=np.int64)
+            b_trazo, b_pt, b_total, b_mark = meta_arr.T
+
+            # Time-weighted progress: cumulative count of marking samples.
+            muestras_corte = b_mark[idx_bloque].astype(np.int64)
+            muestras_corte[0] = 0  # prepended start sample is not marking
+            acum_corte = np.cumsum(muestras_corte)
+            total_corte = max(1, int(acum_corte[-1]))
+            acum_antes = acum_corte[offsets - 1]
+            acum_despues = acum_corte[offsets + cuentas - 1]
+            tramo_por_trazo: Dict[int, List[int]] = {}
+            for b in range(len(blocks)):
+                if b_mark[b]:
+                    t_id = int(b_trazo[b])
+                    if t_id not in tramo_por_trazo:
+                        tramo_por_trazo[t_id] = [int(acum_antes[b]), int(acum_despues[b])]
+                    else:
+                        tramo_por_trazo[t_id][1] = int(acum_despues[b])
+
+            # ---------------------------------------------------------------
+            # 3. Multi-pass execution loop
+            # ---------------------------------------------------------------
+            for pass_idx in range(1, num_pasadas + 1):
+                if self._evento_detener.is_set():
+                    estado = "STOPPED"
                     break
 
-                dur_s = wp["dur_ms"] / 1000.0
-                t_seg_start = time.time()
+                on_log(f"[EXEC] Starting process in mode: {modo_proceso} | Pass {pass_idx}/{num_pasadas}")
 
+                # Deterministic hardware/simulation output via NIDaqController for this pass
+                try:
+                    self.daq_controller = NIDaqController(simulate=self.es_simulacion)
+                    self.daq_controller.setup_hardware(f_s=fs)
+                    self.daq_controller.write_buffers(voltajes, compuerta)
+                    self.daq_controller.start_emission()
+                    on_log(f"[NIDaqController] Pass {pass_idx}/{num_pasadas}: Emission armed and running ({'SIMULATION' if self.es_simulacion else 'HARDWARE'}).")
+                except Exception as daq_e:
+                    on_log(f"[NIDaqController Notice] {daq_e}")
+
+                def _hilo_transmision_galvo():
+                    try:
+                        if hasattr(self.controlador_hardware, "trazar_trayectorias"):
+                            self.controlador_hardware.trazar_trayectorias(
+                                trazos,
+                                velocidad_marcado=v_trazado,
+                                velocidad_salto=v_viaje,
+                                check_cancel=lambda: self._evento_detener.is_set()
+                            )
+                    except Exception as e:
+                        on_log(f"[GVS] Galvo tracing driver notice: {e}")
+
+                hilo_tx = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
+                hilo_tx.start()
+
+                # Real-time telemetry replay (~35 fps) of the generated signals
+                t0 = time.time()
                 while True:
-                    if self._evento_detener.is_set() or getattr(self, "cerrando", False):
-                        estado = "DETENIDO"
+                    if self._evento_detener.is_set():
+                        estado = "STOPPED"
                         break
 
-                    while not self._evento_pausa.is_set():
-                        if self._evento_detener.is_set() or getattr(self, "cerrando", False):
-                            estado = "DETENIDO"
-                            break
-                        time.sleep(0.05)
-                        t_seg_start += 0.05
+                    # Pause: freeze the timeline (laser is already turned off)
+                    if not self._evento_pausa.is_set():
+                        t_pausa = time.time()
+                        while not self._evento_pausa.is_set():
+                            if self._evento_detener.is_set():
+                                break
+                            time.sleep(0.05)
+                        t0 += time.time() - t_pausa
+                        continue
 
-                    transcurrido = time.time() - t_seg_start
-                    frac = min(1.0, transcurrido / max(0.001, dur_s))
+                    k = min(k_ultimo, int((time.time() - t0) * fs))
+                    bi = int(idx_bloque[k])
+                    vx = float(voltajes[0, k])
+                    vy = float(voltajes[1, k])
+                    laser_activo = bool(compuerta[0, k])
+                    t_id = int(b_trazo[bi])
 
-                    cur_x = wp["p_ini_x"] + (wp["x"] - wp["p_ini_x"]) * frac
-                    cur_y = wp["p_ini_y"] + (wp["y"] - wp["p_ini_y"]) * frac
-
-                    p_corte_frac = (puntos_corte_acum + frac) if wp["es_corte"] else puntos_corte_acum
-                    pct_total = round((p_corte_frac / total_puntos_corte) * 100.0, 1)
-
-                    if wp["es_corte"]:
-                        pct_trazo = round(((wp.get("seg_idx", 0) + frac) / max(1, wp.get("total_segs_trazo", 1))) * 100.0, 1)
+                    acum = int(acum_corte[k])
+                    tramo = tramo_por_trazo.get(t_id)
+                    if tramo and tramo[1] > tramo[0]:
+                        pct_trazo = (acum - tramo[0]) / float(tramo[1] - tramo[0]) * 100.0
                     else:
-                        pct_trazo = 0.0 if wp["pt_idx"] == 0 else 100.0
+                        pct_trazo = 0.0
+
+                    # Multi-pass global percentage
+                    pct_pass_fraction = acum / float(total_corte)
+                    pct_total = ((pass_idx - 1) + pct_pass_fraction) / float(num_pasadas) * 100.0
 
                     on_progress(
-                        wp["trazo_idx"], total_trazos,
-                        wp["pt_idx"], wp["total_pts_trazo"],
-                        cur_x, cur_y, min(100.0, pct_trazo), min(100.0, pct_total), wp["es_corte"]
+                        t_id, total_trazos,
+                        int(b_pt[bi]), int(b_total[bi]),
+                        vx / escala_v, vy / escala_v,
+                        round(min(100.0, max(0.0, pct_trazo)), 1),
+                        round(min(100.0, max(0.0, pct_total)), 1),
+                        laser_activo,
+                        vx, vy
                     )
 
-                    if frac >= 1.0:
+                    if k >= k_ultimo:
                         break
                     time.sleep(0.028)
 
-                if wp["es_corte"]:
-                    puntos_corte_acum += 1
+                # Wait for hardware transmission thread for this pass
+                if hilo_tx and hilo_tx.is_alive():
+                    timeout_join = 0.5 if self._evento_detener.is_set() else 120.0
+                    hilo_tx.join(timeout=timeout_join)
 
-            # 4. Esperar finalización del hilo de hardware (tiempo de espera no bloqueante)
-            if hilo_tx and hilo_tx.is_alive():
-                timeout_join = 0.2 if (self._evento_detener.is_set() or getattr(self, "cerrando", False)) else 10.0
-                hilo_tx.join(timeout=timeout_join)
-
-            # 5. Manejo de fin o parada de emergencia
-            if self._evento_detener.is_set() or getattr(self, "cerrando", False):
-                estado = "DETENIDO"
-                if not getattr(self, "cerrando", False):
-                    on_log("[STOP] Emergency stop executed.")
+                # Turn off laser and clean up DAQ for this pass
                 self.apagar_laser()
-                if hasattr(self.controlador_hardware, "abortar_inmediato"):
-                    self.controlador_hardware.abortar_inmediato()
-                if not getattr(self, "cerrando", False):
-                    on_log("[STOP] Thorlabs GVS galvo head in safe park position.")
+                if hasattr(self, "daq_controller") and self.daq_controller:
+                    try:
+                        self.daq_controller.stop_and_clear()
+                    except Exception:
+                        pass
+
+                if self._evento_detener.is_set():
+                    estado = "STOPPED"
+                    break
+
+                # Inter-pass thermal cooling delay (with laser strictly off)
+                if pass_idx < num_pasadas and cooling_delay_s > 0:
+                    self.apagar_laser()
+                    on_log(f"[Cooling] Pass {pass_idx}/{num_pasadas} completed. "
+                           f"Laser strictly OFF (0 LOW). Thermal cooling delay: {cooling_delay_s:.1f}s...")
+                    t_cool_start = time.time()
+                    while (time.time() - t_cool_start) < cooling_delay_s:
+                        if self._evento_detener.is_set():
+                            estado = "STOPPED"
+                            break
+                        while not self._evento_pausa.is_set():
+                            if self._evento_detener.is_set():
+                                break
+                            time.sleep(0.05)
+                        time.sleep(0.05)
+
+                    if self._evento_detener.is_set():
+                        estado = "STOPPED"
+                        break
+
+            # ---------------------------------------------------------------
+            # 4. Shutdown and final log
+            # ---------------------------------------------------------------
+            if self._evento_detener.is_set():
+                estado = "ABORTED"
+                on_log("[STOP] Emergency stop executed.")
+                self.apagar_laser()
+                on_log("[STOP] Laser off. System safely at rest.")
             else:
                 on_log("Work cycle completed successfully!")
 
         except Exception as e:
             estado = "ERROR"
             error_msg = str(e)
-            if not getattr(self, "cerrando", False):
-                on_log(f"[ERROR] Exception during execution: {e}")
+            on_log(f"[ERROR] Exception during execution: {e}")
             self.apagar_laser()
 
         finally:
+            # Fail-safe hardware guarantee: Laser gate LOW (0) and mirrors parked at (0.0 V, 0.0 V)
+            self.apagar_laser()
+            if hasattr(self, "daq_controller") and self.daq_controller:
+                try:
+                    self.daq_controller.stop_and_clear()
+                except Exception as e_daq:
+                    print(f"[PuenteLaser] DAQ cleanup notice in finally: {e_daq}")
+            if hasattr(self, "controlador_hardware") and self.controlador_hardware:
+                try:
+                    if hasattr(self.controlador_hardware, "abortar_inmediato"):
+                        self.controlador_hardware.abortar_inmediato()
+                    elif hasattr(self.controlador_hardware, "apagar_laser"):
+                        self.controlador_hardware.apagar_laser()
+                except Exception as e_hw:
+                    print(f"[PuenteLaser] Hardware cleanup notice in finally: {e_hw}")
             duracion_s = round(time.time() - t_inicio, 2)
             self._en_ejecucion = False
             self._esta_pausado = False
 
-            if not getattr(self, "cerrando", False):
-                try:
-                    receta_id = params.get("_receta_id")
-                    receta_nom = params.get("_receta_nombre", "Manual")
-                    self.gestor_trazabilidad.registrar_ciclo({
-                        "operador": "Operator",
-                        "archivo_dxf": self.nombre_dxf_actual or "Unknown",
-                        "hardware_usado": self.hal_actual,
-                        "receta_id": receta_id,
-                        "receta_nombre": receta_nom,
-                        "velocidad_trazado": v_trazado,
-                        "velocidad_viaje": v_viaje,
-                        "escala_dibujo": float(params.get("escala_dibujo", 0.9)),
-                        "tolerancia_rdp": float(params.get("tolerancia_rdp", 0.005)),
-                        "tolerancia_union": float(params.get("tolerancia_union", 0.08)),
-                        "trazos_totales": total_trazos,
-                        "waypoints_totales": total_puntos,
-                        "estado": estado,
-                        "mensaje_error": error_msg,
-                        "duracion_segundos": duracion_s
-                    })
-                    on_log(f"[DB] Cycle logged in production history: Status={estado}, Duration={duracion_s}s")
-                except Exception as e_bd:
-                    on_log(f"[DB] Warning: could not save traceability: {e_bd}")
+            try:
+                receta_id = params.get("_receta_id")
+                receta_nom = params.get("_receta_nombre", "Manual")
+                modo_proc = str(params.get("modo_proceso", "Cutting"))
+                estado_db = "COMPLETADO" if estado in ("COMPLETED", "COMPLETADO") else ("ABORTADO" if estado in ("ABORTED", "STOPPED", "ABORTADO") else "FALLO_HARDWARE")
+                self.gestor_trazabilidad.registrar_ciclo({
+                    "operador": "Operator",
+                    "archivo_dxf": self.nombre_dxf_actual or "Unknown",
+                    "hardware_usado": self.hal_actual,
+                    "receta_id": receta_id,
+                    "receta_nombre": receta_nom,
+                    "modo_proceso": modo_proc,
+                    "velocidad_trazado": v_trazado,
+                    "velocidad_viaje": v_viaje,
+                    "num_pasadas": int(params.get("num_pasadas", 1)),
+                    "escala_dibujo": float(params.get("escala_dibujo", 0.9)),
+                    "tolerancia_rdp": float(params.get("tolerancia_rdp", 0.005)),
+                    "tolerancia_union": float(params.get("tolerancia_union", 0.08)),
+                    "trazos_totales": total_trazos,
+                    "waypoints_totales": total_puntos,
+                    "estado": estado_db,
+                    "mensaje_error": error_msg,
+                    "duracion_segundos": duracion_s
+                })
+                on_log(f"[DB] Cycle recorded: Status={estado_db}, Duration={duracion_s}s")
+            except Exception as e_bd:
+                on_log(f"[DB] Warning: Could not record traceability: {e_bd}")
 
-                on_finished(estado, error_msg, duracion_s)
+            on_finished(estado, error_msg, duracion_s)

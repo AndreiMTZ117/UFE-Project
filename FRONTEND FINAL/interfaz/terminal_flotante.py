@@ -12,7 +12,7 @@ from tkinter import filedialog
 from typing import Callable, List, Dict, Optional
 
 from .constantes import (
-    COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
+    COLOR_BORDER,
     COLOR_GREEN, COLOR_YELLOW, COLOR_TERMINAL_BG,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
 )
@@ -24,16 +24,20 @@ class TerminalFlotante(ctk.CTkFrame):
     def __init__(self, master, on_cerrar: Optional[Callable[[], None]] = None,
                  obtener_historial: Optional[Callable[[], List[Dict]]] = None,
                  **kwargs):
+        self._ancho_fijo = 680
+        self._alto_fijo = 420
         super().__init__(
             master,
             fg_color=COLOR_TERMINAL_BG,
             border_color=COLOR_BORDER,
             border_width=BRUTAL_BORDER,
             corner_radius=BRUTAL_CORNER,
-            width=580,
-            height=360,
+            width=self._ancho_fijo,
+            height=self._alto_fijo,
             **kwargs
         )
+        # Evitar que los widgets internos reduzcan el tamaño del modal flotante
+        self.pack_propagate(False)
 
         self.on_cerrar = on_cerrar
         self.obtener_historial = obtener_historial
@@ -112,7 +116,7 @@ class TerminalFlotante(ctk.CTkFrame):
 
         # 3. Frame de historial (oculto por defecto)
         self.frame_historial = ctk.CTkFrame(self, fg_color=COLOR_TERMINAL_BG)
-        # No se empaca hasta que se active
+        self.frame_historial.pack_propagate(False)
 
     def _toggle_historial(self):
         """Alterna entre vista de logs y vista de historial de producción."""
@@ -125,7 +129,7 @@ class TerminalFlotante(ctk.CTkFrame):
             self._mostrar_historial()
 
     def _mostrar_historial(self):
-        """Carga y muestra el historial de producción."""
+        """Carga y muestra el historial de producción con ancho completo garantizado."""
         if not self.obtener_historial:
             return
 
@@ -145,14 +149,14 @@ class TerminalFlotante(ctk.CTkFrame):
         if not registros:
             lbl_empty = ctk.CTkLabel(
                 self.frame_historial,
-                text="No production records yet.",
+                text="No production records found.",
                 font=self.f_bold,
                 text_color="#94A3B8"
             )
             lbl_empty.pack(pady=40)
             return
 
-        # Tabla scrollable
+        # Tabla scrollable con ancho suficiente para todas las columnas
         scroll_frame = ctk.CTkScrollableFrame(
             self.frame_historial,
             fg_color=COLOR_TERMINAL_BG,
@@ -161,12 +165,12 @@ class TerminalFlotante(ctk.CTkFrame):
         scroll_frame.pack(fill="both", expand=True)
 
         # Cabecera de la tabla
-        header_frame = ctk.CTkFrame(scroll_frame, fg_color="#374151", height=28, corner_radius=BRUTAL_CORNER)
-        header_frame.pack(fill="x", pady=(0, 4))
+        header_frame = ctk.CTkFrame(scroll_frame, fg_color="#374151", height=30, corner_radius=BRUTAL_CORNER)
+        header_frame.pack(fill="x", padx=2, pady=(0, 4))
         header_frame.pack_propagate(False)
 
-        columnas = ["#", "Date", "File", "Recipe", "Status", "Duration"]
-        anchos = [30, 130, 120, 120, 80, 70]
+        columnas = ["#", "Fecha", "DXF", "Receta", "Modo", "Estado", "Duración"]
+        anchos = [32, 115, 125, 115, 75, 85, 60]
         for col, ancho in zip(columnas, anchos):
             ctk.CTkLabel(
                 header_frame,
@@ -179,31 +183,52 @@ class TerminalFlotante(ctk.CTkFrame):
 
         # Filas de datos
         self._datos_historial = registros
-        for i, reg in enumerate(registros[:50]):
+        for i, reg in enumerate(registros[:100]):
             color_bg = "#1E293B" if i % 2 == 0 else COLOR_TERMINAL_BG
-            row_frame = ctk.CTkFrame(scroll_frame, fg_color=color_bg, height=26, corner_radius=0)
-            row_frame.pack(fill="x")
+            row_frame = ctk.CTkFrame(scroll_frame, fg_color=color_bg, height=26, corner_radius=BRUTAL_CORNER)
+            row_frame.pack(fill="x", padx=2, pady=1)
             row_frame.pack_propagate(False)
 
-            estado = reg.get("estado", "?")
-            color_estado = COLOR_GREEN if estado == "COMPLETADO" else "#FF6B6B" if estado in ("ABORTADO", "DETENIDO") else "#FFB200"
+            estado_raw = str(reg.get("estado", "?")).strip().upper()
+            if estado_raw in ("COMPLETADO", "COMPLETED", "OK"):
+                color_estado = COLOR_GREEN
+                estado_display = "COMPLETED"
+            elif estado_raw in ("ABORTADO", "ABORTED", "STOPPED"):
+                color_estado = "#FF6B6B"
+                estado_display = "ABORTED"
+            else:
+                color_estado = "#F5A623"
+                estado_display = "FAILED"
 
-            timestamp = reg.get("timestamp", "")
+            timestamp = str(reg.get("timestamp", ""))
             if len(timestamp) > 16:
                 timestamp = timestamp[:16]
 
             dur = reg.get("duracion_segundos", 0)
-            dur_txt = f"{dur:.1f}s" if dur else "—"
+            dur_txt = f"{dur:.1f}s" if dur is not None else "—"
+
+            nombre_dxf = os.path.basename(str(reg.get("archivo_dxf", "")))
+            if len(nombre_dxf) > 18:
+                nombre_dxf = nombre_dxf[:15] + "..."
+
+            receta_txt = str(reg.get("receta_nombre", "Manual"))
+            if len(receta_txt) > 16:
+                receta_txt = receta_txt[:13] + "..."
+
+            modo_txt = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting")
+            if len(modo_txt) > 10:
+                modo_txt = modo_txt[:8] + ".."
 
             vals = [
                 str(reg.get("id", "")),
                 timestamp,
-                str(reg.get("archivo_dxf", ""))[:18],
-                str(reg.get("receta_nombre", ""))[:18],
-                estado,
+                nombre_dxf,
+                receta_txt,
+                modo_txt,
+                estado_display,
                 dur_txt
             ]
-            colores = ["#94A3B8", "#FFFFFF", "#FFFFFF", "#FFFFFF", color_estado, "#FFFFFF"]
+            colores = ["#94A3B8", "#FFFFFF", "#FFFFFF", "#FFFFFF", COLOR_YELLOW, color_estado, "#FFFFFF"]
 
             for val, ancho, color in zip(vals, anchos, colores):
                 ctk.CTkLabel(
@@ -222,7 +247,7 @@ class TerminalFlotante(ctk.CTkFrame):
 
         registros = self.obtener_historial()
         if not registros:
-            self.log("[Export] No records to export.")
+            self.log("[Export] No records found to export.")
             return
 
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -232,7 +257,7 @@ class TerminalFlotante(ctk.CTkFrame):
             title="Export Production History",
             defaultextension=".csv",
             initialfile=ruta_default,
-            filetypes=[("CSV Files (*.csv)", "*.csv"), ("All Files", "*.*")]
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
         )
 
         if not ruta:
@@ -241,10 +266,10 @@ class TerminalFlotante(ctk.CTkFrame):
         try:
             campos = [
                 "ID", "Fecha", "Hora", "Archivo_DXF", "Hardware",
-                "Receta", "Velocidad_Trazado_mms", "Velocidad_Viaje_mms",
-                "Escala", "Tolerancia_RDP_mm", "Tolerancia_Union_mm",
-                "Trazos", "Waypoints", "Duracion_Segundos",
-                "Estado", "Mensaje_Error"
+                "Receta", "Modo_Proceso", "Mark_Speed_mms", "Travel_Speed_mms",
+                "Scale", "RDP_Tolerance_mm", "Join_Tolerance_mm",
+                "Paths", "Waypoints", "Duration_Seconds",
+                "Status", "Error_Message"
             ]
 
             with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
@@ -256,6 +281,11 @@ class TerminalFlotante(ctk.CTkFrame):
                     fecha = partes[0] if len(partes) > 0 else ts
                     hora = partes[1] if len(partes) > 1 else ""
 
+                    st_raw = str(reg.get("estado", "")).upper()
+                    st_eng = "COMPLETED" if st_raw == "COMPLETADO" else "ABORTED" if st_raw == "ABORTADO" else st_raw
+
+                    modo_proc_csv = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting")
+
                     fila = {
                         "ID": reg.get("id", ""),
                         "Fecha": fecha,
@@ -263,22 +293,23 @@ class TerminalFlotante(ctk.CTkFrame):
                         "Archivo_DXF": reg.get("archivo_dxf", ""),
                         "Hardware": reg.get("hardware_usado", ""),
                         "Receta": reg.get("receta_nombre", ""),
-                        "Velocidad_Trazado_mms": reg.get("velocidad_trazado", ""),
-                        "Velocidad_Viaje_mms": reg.get("velocidad_viaje", ""),
-                        "Escala": reg.get("escala_dibujo", ""),
-                        "Tolerancia_RDP_mm": reg.get("tolerancia_rdp", ""),
-                        "Tolerancia_Union_mm": reg.get("tolerancia_union", ""),
-                        "Trazos": reg.get("trazos_totales", ""),
+                        "Modo_Proceso": modo_proc_csv,
+                        "Mark_Speed_mms": reg.get("velocidad_trazado", ""),
+                        "Travel_Speed_mms": reg.get("velocidad_viaje", ""),
+                        "Scale": reg.get("escala_dibujo", ""),
+                        "RDP_Tolerance_mm": reg.get("tolerancia_rdp", ""),
+                        "Join_Tolerance_mm": reg.get("tolerancia_union", ""),
+                        "Paths": reg.get("trazos_totales", ""),
                         "Waypoints": reg.get("waypoints_totales", ""),
-                        "Duracion_Segundos": reg.get("duracion_segundos", ""),
-                        "Estado": reg.get("estado", ""),
-                        "Mensaje_Error": reg.get("mensaje_error", "")
+                        "Duration_Seconds": reg.get("duracion_segundos", ""),
+                        "Status": st_eng,
+                        "Error_Message": reg.get("mensaje_error", "")
                     }
                     writer.writerow(fila)
 
             self.log(f"[Export] History successfully exported to: {os.path.basename(ruta)} ({len(registros)} records)")
         except Exception as e:
-            self.log(f"[Export] Error exporting history: {e}")
+            self.log(f"[Export] Export error: {e}")
 
     def toggle(self):
         if self.visible:
