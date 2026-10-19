@@ -651,7 +651,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         if activo:
             self.btn_frame.pack_forget()
             self.frame_running_box.pack(fill="x", padx=6, pady=4)
-            self.btn_frame_pause.configure(text="⏸ Pause", fg_color=COLOR_PAUSE)
+            self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}", fg_color=COLOR_PAUSE)
         else:
             self.frame_running_box.pack_forget()
             self.btn_frame.pack(fill="x", padx=6, pady=4)
@@ -660,9 +660,9 @@ class PanelConfiguracion(ctk.CTkFrame):
         """Actualiza el texto del botón Pause/Resume en el panel de configuración."""
         if hasattr(self, "btn_frame_pause"):
             if pausado:
-                self.btn_frame_pause.configure(text="▶ Resume", fg_color=COLOR_YELLOW)
+                self.btn_frame_pause.configure(text=f"▶ {tr('btn_resume')}", fg_color=COLOR_YELLOW)
             else:
-                self.btn_frame_pause.configure(text="⏸ Pause", fg_color=COLOR_PAUSE)
+                self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}", fg_color=COLOR_PAUSE)
 
     # =========================================================================
     # BLOQUEO Y CONSULTA / MODIFICACIÓN DE DATOS

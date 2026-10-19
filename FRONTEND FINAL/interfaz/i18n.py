@@ -217,7 +217,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     },
     "btn_framing_stop": {
         "EN": "STOP",
-        "CS": "STOP",
+        "CS": "ZASTAVIT",
     },
     "tooltip_btn_frame": {
         "EN": "Execute rapid perimeter check (laser gate strictly OFF) to verify workpiece alignment.",
@@ -367,7 +367,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     },
     "btn_start": {
         "EN": "START",
-        "CS": "START",
+        "CS": "SPUSTIT",
     },
     "btn_pause": {
         "EN": "PAUSE",
@@ -379,7 +379,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     },
     "btn_stop": {
         "EN": "STOP",
-        "CS": "STOP",
+        "CS": "ZASTAVIT",
     },
     "btn_home_tooltip": {
         "EN": "Open/close calibration panel to define resting center (Home).",
@@ -644,6 +644,128 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     "log_db_recorded": {
         "EN": "[DB] Cycle recorded: Status={status}, Duration={dur}s",
         "CS": "[DB] Záznam cyklu uložen: Stav={status}, Doba={dur}s",
+    },
+
+    # -------------------------------------------------------------------------
+    # Diálogos y Avisos de Inicio, Parada y Confirmación
+    # -------------------------------------------------------------------------
+    "dlg_hw_notice_title": {
+        "EN": "Hardware Notice",
+        "CS": "Upozornění na hardware",
+    },
+    "dlg_hw_notice_msg": {
+        "EN": "The Thorlabs GVS112/M system is not physically connected.\n\nDo you want to start execution in VIRTUAL SIMULATION MODE?",
+        "CS": "Systém Thorlabs GVS112/M není fyzicky připojen.\n\nChcete zahájit provádění v REŽIMU VIRTUÁLNÍ SIMULACE?",
+    },
+    "dlg_missing_dxf_title": {
+        "EN": "Missing DXF",
+        "CS": "Chybí soubor DXF",
+    },
+    "dlg_missing_dxf_msg": {
+        "EN": "You must load a DXF file with valid paths before starting.",
+        "CS": "Před spuštěním musíte načíst soubor DXF s platnými dráhami.",
+    },
+    "dlg_missing_geom_title": {
+        "EN": "Missing Geometry",
+        "CS": "Chybí geometrie",
+    },
+    "dlg_missing_geom_msg": {
+        "EN": "You must load a DXF file before running framing.",
+        "CS": "Před spuštěním ohraničení musíte načíst soubor DXF.",
+    },
+    "dlg_invalid_params_title": {
+        "EN": "Invalid Parameters",
+        "CS": "Neplatné parametry",
+    },
+    "dlg_invalid_params_msg": {
+        "EN": "Kinematic speeds must be greater than zero.",
+        "CS": "Kinematické rychlosti musí být větší než nula.",
+    },
+    "dlg_cancel_exec_title": {
+        "EN": "Cancel Execution",
+        "CS": "Zrušit provádění",
+    },
+    "dlg_cancel_exec_msg": {
+        "EN": "Are you sure you want to cancel the current cutting process?",
+        "CS": "Opravdu chcete zrušit aktuální proces řezání?",
+    },
+    "dlg_cancel_framing_title": {
+        "EN": "Cancel Framing",
+        "CS": "Zrušit ohraničení",
+    },
+    "dlg_cancel_framing_msg": {
+        "EN": "Are you sure you want to stop the framing process?\n\nThe optical head will be safely realigned to resting center (Home).",
+        "CS": "Opravdu chcete zastavit proces ohraničení?\n\nOptická hlava bude bezpečně vrácena do výchozího středu (Home).",
+    },
+    "dlg_cycle_finished_title": {
+        "EN": "Cycle Finished",
+        "CS": "Cyklus dokončen",
+    },
+    "dlg_cycle_finished_msg": {
+        "EN": "Job successfully completed in {dur} seconds.",
+        "CS": "Úloha byla úspěšně dokončena za {dur} sekund.",
+    },
+    "dlg_cycle_aborted_title": {
+        "EN": "Cycle Aborted",
+        "CS": "Cyklus přerušen",
+    },
+    "dlg_cycle_aborted_msg": {
+        "EN": "The job was immediately aborted by the operator.\nThe laser has been turned off and the head returned to resting center.",
+        "CS": "Úloha byla okamžitě přerušena operátorem.\nLaser byl vypnut a optická hlava vrácena do výchozího středu.",
+    },
+    "dlg_cycle_error_title": {
+        "EN": "Cycle Error",
+        "CS": "Chyba cyklu",
+    },
+    "dlg_cycle_error_msg": {
+        "EN": "An error occurred during tracing:\n{err}",
+        "CS": "Během vykreslování došlo k chybě:\n{err}",
+    },
+
+    # Diálogos de recetas
+    "dlg_save_recipe_title": {
+        "EN": "Save Parameters",
+        "CS": "Uložit parametry",
+    },
+    "dlg_save_recipe_msg": {
+        "EN": "Do you want to save the updated cutting parameters for '{name}'?",
+        "CS": "Chcete uložit aktualizované parametry řezání pro '{name}'?",
+    },
+    "dlg_save_recipe_ok": {
+        "EN": "Recipe '{name}' successfully updated.",
+        "CS": "Receptura '{name}' byla úspěšně aktualizována.",
+    },
+    "dlg_new_recipe_prompt": {
+        "EN": "Enter new recipe name:",
+        "CS": "Zadejte název nové receptury:",
+    },
+    "dlg_new_recipe_title": {
+        "EN": "New Recipe",
+        "CS": "Nová receptura",
+    },
+    "dlg_new_recipe_ok": {
+        "EN": "Recipe '{name}' successfully created.",
+        "CS": "Receptura '{name}' byla úspěšně vytvořena.",
+    },
+    "dlg_protected_recipe_title": {
+        "EN": "Protected Recipe",
+        "CS": "Chráněná receptura",
+    },
+    "dlg_protected_recipe_msg": {
+        "EN": "Recipe '{name}' is a factory preset and cannot be deleted.\n\nOnly custom recipes created by the user can be deleted.",
+        "CS": "Receptura '{name}' je tovární předvolba a nelze ji smazat.\n\nSmazat lze pouze vlastní receptury vytvořené uživatelem.",
+    },
+    "dlg_del_recipe_title": {
+        "EN": "Confirm Deletion",
+        "CS": "Potvrdit smazání",
+    },
+    "dlg_del_recipe_msg": {
+        "EN": "Delete recipe '{name}' from the database?",
+        "CS": "Smazat recepturu '{name}' z databáze?",
+    },
+    "dlg_del_recipe_ok": {
+        "EN": "Recipe '{name}' deleted.",
+        "CS": "Receptura '{name}' byla smazána.",
     },
 }
 

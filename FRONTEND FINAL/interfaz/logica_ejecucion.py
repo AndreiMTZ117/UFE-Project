@@ -27,9 +27,8 @@ class LogicaEjecucionMixin:
             # 1. Validacion de hardware / Simulacion
             if not self.puente.esta_conectado_fisico():
                 proceder = messagebox.askyesno(
-                    "Hardware Notice",
-                    "The Thorlabs GVS112/M system is not physically connected.\n\n"
-                    "Do you want to start execution in VIRTUAL SIMULATION MODE?"
+                    tr("dlg_hw_notice_title"),
+                    tr("dlg_hw_notice_msg")
                 )
                 if not proceder:
                     self._ejecutando_inicio = False
@@ -37,14 +36,14 @@ class LogicaEjecucionMixin:
 
             # 2. Validación de archivo DXF
             if not self.puente.trazos_calibrados:
-                messagebox.showwarning("Missing DXF", "You must load a DXF file with valid paths before starting.")
+                messagebox.showwarning(tr("dlg_missing_dxf_title"), tr("dlg_missing_dxf_msg"))
                 self._ejecutando_inicio = False
                 return
 
             # 3. Validación de parámetros cinemáticos
             params = self.panel_config.obtener_datos_formulario()
             if params.get("velocidad_trazado", 0) <= 0 or params.get("velocidad_viaje", 0) <= 0:
-                messagebox.showwarning("Invalid Parameters", "Kinematic speeds must be greater than zero.")
+                messagebox.showwarning(tr("dlg_invalid_params_title"), tr("dlg_invalid_params_msg"))
                 self._ejecutando_inicio = False
                 return
 
@@ -104,13 +103,8 @@ class LogicaEjecucionMixin:
                 self.panel_config.set_estado_pausa(True)
 
         es_framing = getattr(self, "_es_framing", False)
-        titulo = "Cancel Framing" if es_framing else "Cancel Execution"
-        pregunta = (
-            "Are you sure you want to stop the framing process?\n\n"
-            "The optical head will be safely realigned to resting center (Home)."
-            if es_framing else
-            "Are you sure you want to cancel the current cutting process?"
-        )
+        titulo = tr("dlg_cancel_framing_title") if es_framing else tr("dlg_cancel_exec_title")
+        pregunta = tr("dlg_cancel_framing_msg") if es_framing else tr("dlg_cancel_exec_msg")
 
         confirma = messagebox.askyesno(titulo, pregunta)
         if not confirma:
@@ -155,7 +149,7 @@ class LogicaEjecucionMixin:
             return
 
         if not self.puente.trazos_calibrados:
-            messagebox.showwarning("Missing Geometry", "You must load a DXF file before running framing.")
+            messagebox.showwarning(tr("dlg_missing_geom_title"), tr("dlg_missing_geom_msg"))
             return
 
         # 1. Mostrar marco naranja punteado en el canvas vectorial (1:1 isometric)
@@ -466,11 +460,11 @@ class LogicaEjecucionMixin:
                 return
             try:
                 if estado in ("COMPLETADO", "COMPLETED"):
-                    messagebox.showinfo("Cycle Finished", f"Job successfully completed in {duracion_s} seconds.")
+                    messagebox.showinfo(tr("dlg_cycle_finished_title"), tr("dlg_cycle_finished_msg", dur=duracion_s))
                 elif estado in ("DETENIDO", "ABORTADO", "ABORTED"):
-                    messagebox.showwarning("Cycle Aborted", "The job was immediately aborted by the operator.\nThe laser has been turned off and the head returned to resting center.")
+                    messagebox.showwarning(tr("dlg_cycle_aborted_title"), tr("dlg_cycle_aborted_msg"))
                 elif estado in ("ERROR", "FAILED"):
-                    messagebox.showerror("Cycle Error", f"An error occurred during tracing:\n{error_msg}")
+                    messagebox.showerror(tr("dlg_cycle_error_title"), tr("dlg_cycle_error_msg", err=error_msg))
             except Exception:
                 pass
 

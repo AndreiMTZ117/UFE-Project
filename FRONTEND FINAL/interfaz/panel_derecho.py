@@ -548,10 +548,12 @@ class PanelDerecho(ctk.CTkFrame):
         self.btn_start.configure(text=tr("btn_start"))
         self.set_estado_sistema("READY")
         self.actualizar_voltajes(0.0, 0.0, False)
+        self._esta_pausado = False
         # Reactivar botón de centrar puntero (Home) al volver a reposo
         self.btn_home.configure(state="normal")
 
     def set_estado_pausa(self, pausado: bool):
+        self._esta_pausado = pausado
         if pausado:
             self.btn_pause_resume.configure(text=tr("btn_resume"), fg_color=COLOR_YELLOW)
             self.set_estado_sistema("PAUSED")
@@ -828,6 +830,11 @@ class PanelDerecho(ctk.CTkFrame):
             self.btn_start.configure(text=tr("btn_start"))
         if hasattr(self, "btn_stop"):
             self.btn_stop.configure(text=tr("btn_stop"))
+        if hasattr(self, "btn_pause_resume"):
+            if getattr(self, "_esta_pausado", False):
+                self.btn_pause_resume.configure(text=tr("btn_resume"))
+            else:
+                self.btn_pause_resume.configure(text=tr("btn_pause"))
         if hasattr(self, "btn_home"):
             agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
         if hasattr(self, "btn_set_home"):

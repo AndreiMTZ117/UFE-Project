@@ -110,8 +110,8 @@ class EventosInteraccionMixin:
 
         nombre_receta = self.receta_activa.get("nombre", "Recipe")
         confirma = messagebox.askyesno(
-            "Save Parameters",
-            f"Do you want to save the updated cutting parameters for '{nombre_receta}'?"
+            tr("dlg_save_recipe_title"),
+            tr("dlg_save_recipe_msg", name=nombre_receta)
         )
         if not confirma:
             return
@@ -120,7 +120,7 @@ class EventosInteraccionMixin:
         receta_id = self.receta_activa.get("id")
         try:
             self.puente.guardar_o_actualizar_receta(datos, receta_id)
-            messagebox.showinfo("Recipe", f"Recipe '{nombre_receta}' successfully updated.")
+            messagebox.showinfo(tr("dlg_save_recipe_title"), tr("dlg_save_recipe_ok", name=nombre_receta))
             self.terminal.log(tr("log_recipe_saved", id=receta_id, name=nombre_receta))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save recipe: {e}")
@@ -129,7 +129,7 @@ class EventosInteraccionMixin:
         """Solicita nombre y crea una nueva receta en la base de datos."""
         if self.puente.en_ejecucion:
             return
-        dialog = ctk.CTkInputDialog(text="Enter new recipe name:", title="New Recipe")
+        dialog = ctk.CTkInputDialog(text=tr("dlg_new_recipe_prompt"), title=tr("dlg_new_recipe_title"))
         nombre = dialog.get_input()
         if not nombre or not nombre.strip():
             return
@@ -146,7 +146,7 @@ class EventosInteraccionMixin:
             self.receta_activa = self.puente.obtener_receta_por_id(nuevo_id)
             # Mostrar botón de eliminar para recetas personalizadas
             self.panel_config.set_delete_visible(True)
-            messagebox.showinfo("New Recipe", f"Recipe '{nombre}' successfully created.")
+            messagebox.showinfo(tr("dlg_new_recipe_title"), tr("dlg_new_recipe_ok", name=nombre))
         except Exception as e:
             messagebox.showerror("Error", f"Error creating recipe: {e}")
 
@@ -160,15 +160,14 @@ class EventosInteraccionMixin:
         # Proteger recetas predeterminadas
         if nombre in RECETAS_PREDETERMINADAS:
             messagebox.showwarning(
-                "Protected Recipe",
-                f"Recipe '{nombre}' is a factory preset and cannot be deleted.\n\n"
-                "Only custom recipes created by the user can be deleted."
+                tr("dlg_protected_recipe_title"),
+                tr("dlg_protected_recipe_msg", name=nombre)
             )
             return
 
         receta_id = self.receta_activa.get("id")
 
-        confirma = messagebox.askyesno("Confirm Deletion", f"Delete recipe '{nombre}' from the database?")
+        confirma = messagebox.askyesno(tr("dlg_del_recipe_title"), tr("dlg_del_recipe_msg", name=nombre))
         if confirma:
             exito = self.puente.eliminar_receta(receta_id)
             if exito:
@@ -178,7 +177,7 @@ class EventosInteraccionMixin:
                 if self.lista_recetas:
                     self._on_receta_seleccionada(self.lista_recetas[0]["nombre"])
                 self.terminal.log(tr("log_recipe_deleted", name=nombre))
-                messagebox.showinfo("Deleted", f"Recipe '{nombre}' deleted.")
+                messagebox.showinfo(tr("dlg_del_recipe_title"), tr("dlg_del_recipe_ok", name=nombre))
 
     def _on_centro_cambiado(self, x: float, y: float):
         """Actualiza el centro de reposo de la máquina y posiciona el puntero (alteración manual)."""
