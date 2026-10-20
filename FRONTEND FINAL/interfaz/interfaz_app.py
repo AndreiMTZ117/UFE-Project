@@ -15,11 +15,10 @@ Estructura modular segmentada en archivos dedicados:
   10. LÓGICA DE EJECUCIÓN: START, PAUSE/RESUME, STOP        -> interfaz/logica_ejecucion.py
 """
 
-from pyparsing import Optional
 import os
 import sys
 import customtkinter as ctk
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # Rutas del proyecto
 _DIR_ACTUAL = os.path.dirname(os.path.abspath(__file__))
