@@ -75,6 +75,9 @@ class PanelDerecho(ctk.CTkFrame):
         self.escala_referencia_px_cm = 20.0
         self.ancla_vivo: Optional[Tuple[float, float]] = None
 
+        # Hardware Feedback Tracking: trayectoria medida (cm), capa magenta opcional
+        self._fb_pts_cm: List[Tuple[float, float]] = []
+
         self._crear_widgets()
         registrar_observador(self.actualizar_idioma)
 
@@ -791,11 +794,29 @@ class PanelDerecho(ctk.CTkFrame):
         """Reinicia los segmentos completados, anclas y medidores circulares a 0%."""
         self.trazos_completados = []
         self.ancla_vivo = None
+        self.limpiar_feedback()
         self.pct_trace = 0.0
         self.pct_total = 0.0
         self.actualizar_voltajes(0.0, 0.0, False)
         self.dibujar_gauges(0.0, 0.0)
         self.centrar_en_laser()
+
+    # Hardware Feedback Tracking (capa medida)
+    def limpiar_feedback(self):
+        """Borra la trayectoria medida acumulada."""
+        self._fb_pts_cm = []
+
+    def agregar_puntos_feedback(self, puntos_cm: List[Tuple[float, float]]):
+        """Agrega puntos medidos (cm) con decimación espacial de 0.5 mm."""
+        pts = self._fb_pts_cm
+        for p in puntos_cm:
+            if not pts:
+                pts.append(p)
+                continue
+            if abs(p[0] - pts[-1][0]) >= 0.05 or abs(p[1] - pts[-1][1]) >= 0.05:
+                pts.append(p)
+        if len(pts) > 60000:
+            del pts[: len(pts) - 60000]
 
     # Renderizado Trace Point (Zoom 4x)
     def redibujar_trace(
@@ -941,6 +962,20 @@ class PanelDerecho(ctk.CTkFrame):
                     c.create_line(cx + (ax - cam_x) * zoom_factor, cy - (ay - cam_y) * zoom_factor,
                                   cx + (lx - cam_x) * zoom_factor, cy - (ly - cam_y) * zoom_factor,
                                   fill=COLOR_BLUE, width=4.5, capstyle="round")
+
+            # Trayectoria medida por feedback de hardware (magenta), visible solo si hay datos
+            if len(self._fb_pts_cm) >= 2:
+                coords_fb = []
+                for fx, fy in self._fb_pts_cm:
+                    if min_x <= fx <= max_x and min_y <= fy <= max_y:
+                        coords_fb.extend([cx + (fx - cam_x) * zoom_factor, cy - (fy - cam_y) * zoom_factor])
+                    elif len(coords_fb) >= 4:
+                        c.create_line(coords_fb, fill="#D946EF", width=2.5, capstyle="round", joinstyle="round")
+                        coords_fb = []
+                    else:
+                        coords_fb = []
+                if len(coords_fb) >= 4:
+                    c.create_line(coords_fb, fill="#D946EF", width=2.5, capstyle="round", joinstyle="round")
 
             # Punto blanco central (puntero del haz en coordenadas reales)
             lx, ly = self.pos_laser_actual

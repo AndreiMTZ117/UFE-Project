@@ -101,6 +101,7 @@ class AppLaserCTk(
 
         # Configurar valores iniciales de límites, centro y dimensiones en los paneles
         self._aplicar_limites_hardware()
+        self._iniciar_feedback_ui()
         self.panel_derecho.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_general.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_derecho.actualizar_coordenadas(self.puente.centro_cm_x, self.puente.centro_cm_y)
@@ -162,7 +163,8 @@ class AppLaserCTk(
             on_dxf_seleccionado=self._on_dxf_seleccionado,
             on_load_file_click=self._on_click_load_file,
             on_toggle_terminal=self._on_toggle_terminal,
-            on_idioma_cambiado=self._on_idioma_cambiado
+            on_idioma_cambiado=self._on_idioma_cambiado,
+            on_feedback_toggle=self._on_feedback_toggle
         )
         self.barra_superior.pack(fill="x", padx=16, pady=(10, 4))
 

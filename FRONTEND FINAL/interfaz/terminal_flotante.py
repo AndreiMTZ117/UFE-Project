@@ -275,11 +275,12 @@ class TerminalFlotante(ctk.CTkFrame):
 
         try:
             campos = [
-                "ID", "Fecha", "Hora", "Archivo_DXF", "Hardware",
-                "Receta", "Modo_Proceso", "Mark_Speed_mms", "Travel_Speed_mms",
+                "ID", "Date", "Time", "DXF_File", "Hardware",
+                "Recipe", "Process_Mode", "Mark_Speed_mms", "Travel_Speed_mms",
                 "Scale", "RDP_Tolerance_mm", "Join_Tolerance_mm",
                 "Paths", "Waypoints", "Duration_Seconds",
-                "Status", "Error_Message"
+                "Status", "Error_Message",
+                "Tracking_RMS_um", "Tracking_Max_um"
             ]
 
             with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
@@ -294,16 +295,22 @@ class TerminalFlotante(ctk.CTkFrame):
                     st_raw = str(reg.get("estado", "")).upper()
                     st_eng = "COMPLETED" if st_raw in ("COMPLETADO", "COMPLETED", "OK") else "ABORTED" if st_raw in ("ABORTADO", "ABORTED", "STOPPED") else st_raw
 
-                    modo_proc_csv = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting")
+                    modo_proc_csv = str(reg.get("modo_proceso") or reg.get("modo") or "Cutting").strip()
+                    if modo_proc_csv.lower() in ("cutting", "řezání", "corte"):
+                        modo_proc_csv = "Cutting"
+                    elif modo_proc_csv.lower() in ("welding", "svařování", "soldadura"):
+                        modo_proc_csv = "Welding"
+                    elif modo_proc_csv.lower() in ("marking", "značení", "marcado"):
+                        modo_proc_csv = "Marking"
 
                     fila = {
                         "ID": reg.get("id", ""),
-                        "Fecha": fecha,
-                        "Hora": hora,
-                        "Archivo_DXF": reg.get("archivo_dxf", ""),
+                        "Date": fecha,
+                        "Time": hora,
+                        "DXF_File": reg.get("archivo_dxf", ""),
                         "Hardware": reg.get("hardware_usado", ""),
-                        "Receta": reg.get("receta_nombre", ""),
-                        "Modo_Proceso": modo_proc_csv,
+                        "Recipe": reg.get("receta_nombre", ""),
+                        "Process_Mode": modo_proc_csv,
                         "Mark_Speed_mms": reg.get("velocidad_trazado", ""),
                         "Travel_Speed_mms": reg.get("velocidad_viaje", ""),
                         "Scale": reg.get("escala_dibujo", ""),
@@ -313,7 +320,9 @@ class TerminalFlotante(ctk.CTkFrame):
                         "Waypoints": reg.get("waypoints_totales", ""),
                         "Duration_Seconds": reg.get("duracion_segundos", ""),
                         "Status": st_eng,
-                        "Error_Message": reg.get("mensaje_error", "")
+                        "Error_Message": reg.get("mensaje_error", ""),
+                        "Tracking_RMS_um": "" if reg.get("tracking_rms_um") is None else reg.get("tracking_rms_um"),
+                        "Tracking_Max_um": "" if reg.get("tracking_max_um") is None else reg.get("tracking_max_um")
                     }
                     writer.writerow(fila)
 

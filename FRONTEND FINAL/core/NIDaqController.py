@@ -33,6 +33,12 @@ except Exception:  # pragma: no cover - depends on local installation
     DaqError = Exception  # type: ignore[assignment,misc]
     NIDAQMX_AVAILABLE = False
 
+try:  # Optional: only needed for the opt-in Hardware Feedback Tracking (AI readback).
+    from nidaqmx.constants import TerminalConfiguration, READ_ALL_AVAILABLE  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
+except Exception:  # pragma: no cover - depends on local installation
+    TerminalConfiguration = None  # type: ignore[assignment]
+    READ_ALL_AVAILABLE = -1  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 AO_VOLTAGE_MIN: float = -10.0
@@ -106,6 +112,11 @@ class NIDaqController:
         # Simulation bookkeeping (inspectable from unit tests).
         self.simulated_voltages: Optional[np.ndarray] = None
         self.simulated_gate: Optional[np.ndarray] = None
+
+        # Optional Hardware Feedback Tracking (AI readback). Inactive unless enabled.
+        self._ai_task: Any = None
+        self.feedback_active: bool = False
+        self._ai_channels: List[str] = []
 
         mode = "SIMULATION" if self.simulate else "HARDWARE"
         logger.info("NIDaqController created (%s mode).", mode)
@@ -291,6 +302,102 @@ class NIDaqController:
         self._state = self._STATE_LOADED
         logger.info("Loaded %d samples (%.3f ms).", n_samples, n_samples / self._sample_rate_hz * 1e3)
 
+    # ------------------------------------------------------ hardware feedback
+    def _feedback_cfg(self) -> Dict[str, Any]:
+        """Resolve feedback settings from the 'daq' config section."""
+        daq_cfg = self.config.get("daq", {})
+        device = str(daq_cfg.get("device_name", "Dev1")).strip().strip("/") or "Dev1"
+        channels = daq_cfg.get("ai_channels") or [f"{device}/ai0", f"{device}/ai1"]
+        return {
+            "device": device,
+            "channels": [str(c) for c in channels][:2],
+            "terminal": str(daq_cfg.get("ai_terminal_config", "DIFF")).strip().upper(),
+            "sign_x": -1.0 if float(daq_cfg.get("feedback_sign_x", 1)) < 0 else 1.0,
+            "sign_y": -1.0 if float(daq_cfg.get("feedback_sign_y", 1)) < 0 else 1.0,
+            "offset_x": float(daq_cfg.get("feedback_offset_x_v", 0.0)),
+            "offset_y": float(daq_cfg.get("feedback_offset_y_v", 0.0)),
+        }
+
+    def enable_feedback(self) -> bool:
+        """Create the optional AI task that reads the GVS position monitor.
+
+        Must be called after :meth:`write_buffers` and before :meth:`start_emission`.
+        The AI task is clocked by the AO sample clock (sample-aligned with the
+        command). Never raises: on any problem feedback stays disabled.
+
+        Returns:
+            ``True`` if feedback is active for this emission.
+        """
+        self.feedback_active = False
+        if self.simulate or not NIDAQMX_AVAILABLE or TerminalConfiguration is None:
+            return False
+        if self._state != self._STATE_LOADED or self._n_samples < 2:
+            return False
+        cfg = self._feedback_cfg()
+        if len(cfg["channels"]) != 2:
+            return False
+        try:
+            term = TerminalConfiguration.RSE if cfg["terminal"] == "RSE" else TerminalConfiguration.DIFF
+            task = nidaqmx.Task("GalvoFeedbackAI")
+            self._ai_task = task
+            for channel in cfg["channels"]:
+                task.ai_channels.add_ai_voltage_chan(
+                    channel, terminal_config=term, min_val=AO_VOLTAGE_MIN, max_val=AO_VOLTAGE_MAX
+                )
+            sync_clock_src = self._sync_clock if self._sync_clock else f"/{cfg['device']}/ao/SampleClock"
+            task.timing.cfg_samp_clk_timing(
+                rate=self._sample_rate_hz,
+                source=sync_clock_src,
+                sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=self._n_samples,
+            )
+            self._ai_channels = list(cfg["channels"])
+            self.feedback_active = True
+            logger.info("Hardware feedback armed on %s (%s).", self._ai_channels, cfg["terminal"])
+            return True
+        except BaseException as error:  # noqa: BLE001 - feedback is optional
+            logger.warning("Hardware feedback unavailable (%s). Continuing without feedback.", error)
+            self.disable_feedback()
+            return False
+
+    def read_feedback(self) -> Optional[np.ndarray]:
+        """Non-blocking read of the newly available feedback samples.
+
+        Returns:
+            Array ``(2, m)`` in volts, already corrected by the configured sign
+            and offset per axis, or ``None`` when nothing is available (or
+            feedback is not active). Never raises.
+        """
+        if not self.feedback_active or self._ai_task is None:
+            return None
+        try:
+            data = self._ai_task.read(number_of_samples_per_channel=READ_ALL_AVAILABLE, timeout=0.0)
+            arr = np.asarray(data, dtype=np.float64)
+            if arr.ndim != 2 or arr.shape[0] != 2 or arr.shape[1] == 0:
+                return None
+            cfg = self._feedback_cfg()
+            arr[0] = cfg["sign_x"] * (arr[0] - cfg["offset_x"])
+            arr[1] = cfg["sign_y"] * (arr[1] - cfg["offset_y"])
+            return arr
+        except BaseException as error:  # noqa: BLE001 - never interrupt the scan
+            if "-200284" in str(error) or "-200278" in str(error) or "timeout" in str(error).lower():
+                return None  # samples simply not available yet
+            logger.warning("Hardware feedback read failed (%s). Disabling feedback.", error)
+            self.disable_feedback()
+            return None
+
+    def disable_feedback(self) -> None:
+        """Release the AI task (idempotent, never raises)."""
+        self.feedback_active = False
+        task, self._ai_task = self._ai_task, None
+        if task is None:
+            return
+        for action in (task.stop, task.close):
+            try:
+                action()
+            except BaseException:  # noqa: BLE001
+                pass
+
     # ---------------------------------------------------------------- emission
     def start_emission(self) -> None:
         """Arm both tasks and release the master clock.
@@ -304,6 +411,13 @@ class NIDaqController:
         """
         if self._state != self._STATE_LOADED:
             raise NIDaqError(f"Cannot start emission in state '{self._state}'; load buffers first.")
+        # Optional feedback task: armed first so it waits for the AO sample clock.
+        if self._ai_task is not None:
+            try:
+                self._ai_task.start()
+            except BaseException as error:  # noqa: BLE001 - feedback must never break emission
+                logger.warning("Feedback AI task could not start (%s). Continuing without feedback.", error)
+                self.disable_feedback()
         if not self.simulate:
             try:
                 self._do_task.start()
@@ -392,7 +506,7 @@ class NIDaqController:
     # --------------------------------------------------------------- internals
     def _stop_tasks(self) -> None:
         """Stop the running timed tasks (DO first so the laser drops first)."""
-        for task in (self._do_task, self._ao_task):
+        for task in (self._do_task, self._ao_task, self._ai_task):
             if task is None:
                 continue
             try:
@@ -401,7 +515,8 @@ class NIDaqController:
                 logger.error("Error stopping task: %s", error)
 
     def _close_tasks(self) -> None:
-        """Release both DAQmx tasks."""
+        """Release the DAQmx tasks (including the optional feedback AI task)."""
+        self.disable_feedback()
         for name in ("_do_task", "_ao_task"):
             task = getattr(self, name)
             if task is None:
@@ -435,3 +550,34 @@ class NIDaqController:
                 ao_task.write([PARK_VOLTAGE, PARK_VOLTAGE], auto_start=True)
         except BaseException as error:  # noqa: BLE001
             logger.error("Could not park analog outputs at 0 V: %s", error)
+
+
+def probe_feedback_hardware(config: Optional[Dict[str, Any]] = None) -> tuple:
+    """Check (without side effects) whether AI feedback channels can be opened.
+
+    Returns:
+        ``(available, reason_key)`` where ``reason_key`` is ``"ok"``,
+        ``"no_driver"`` or ``"no_device"``. Never raises.
+    """
+    if not NIDAQMX_AVAILABLE or TerminalConfiguration is None:
+        return False, "no_driver"
+    try:
+        cfg = config if config is not None else load_hardware_config()
+        daq_cfg = cfg.get("daq", {})
+        device = str(daq_cfg.get("device_name", "Dev1")).strip().strip("/") or "Dev1"
+        channels = list(daq_cfg.get("ai_channels") or [f"{device}/ai0", f"{device}/ai1"])[:2]
+        term = (
+            TerminalConfiguration.RSE
+            if str(daq_cfg.get("ai_terminal_config", "DIFF")).strip().upper() == "RSE"
+            else TerminalConfiguration.DIFF
+        )
+        with nidaqmx.Task("ProbeFeedbackAI") as task:
+            for channel in channels:
+                task.ai_channels.add_ai_voltage_chan(
+                    channel, terminal_config=term, min_val=AO_VOLTAGE_MIN, max_val=AO_VOLTAGE_MAX
+                )
+            task.read(number_of_samples_per_channel=1, timeout=1.0)
+        return True, "ok"
+    except BaseException as error:  # noqa: BLE001
+        logger.info("Feedback probe failed: %s", error)
+        return False, "no_device"

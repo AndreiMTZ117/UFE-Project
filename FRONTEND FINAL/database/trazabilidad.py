@@ -136,14 +136,16 @@ class GestorTrazabilidad:
                 velocidad_trazado, velocidad_viaje, num_pasadas,
                 escala_dibujo, tolerancia_rdp, tolerancia_union,
                 trazos_totales, waypoints_totales, duracion_segundos,
-                estado, mensaje_error
+                estado, mensaje_error,
+                tracking_rms_um, tracking_max_um
             ) VALUES (
                 :operador, :receta_id, :receta_nombre, :modo_proceso,
                 :archivo_dxf, :hardware_usado,
                 :velocidad_trazado, :velocidad_viaje, :num_pasadas,
                 :escala_dibujo, :tolerancia_rdp, :tolerancia_union,
                 :trazos_totales, :waypoints_totales, :duracion_segundos,
-                :estado, :mensaje_error
+                :estado, :mensaje_error,
+                :tracking_rms_um, :tracking_max_um
             )
         """
         registro = self._aplicar_defaults_historial(datos)
@@ -341,6 +343,8 @@ class GestorTrazabilidad:
             "duracion_segundos":  0.0,
             "estado":             "COMPLETADO",
             "mensaje_error":      "",
+            "tracking_rms_um":    None,
+            "tracking_max_um":    None,
         }
         defaults.update(datos)
         return defaults

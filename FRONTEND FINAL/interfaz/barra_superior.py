@@ -30,6 +30,7 @@ class BarraSuperior(ctk.CTkFrame):
         on_load_file_click: Optional[Callable[[], None]] = None,
         on_toggle_terminal: Optional[Callable[[], None]] = None,
         on_idioma_cambiado: Optional[Callable[[str], None]] = None,
+        on_feedback_toggle: Optional[Callable[[bool], None]] = None,
         **kwargs
     ):
         super().__init__(master, fg_color="transparent", height=50, **kwargs)
@@ -39,6 +40,9 @@ class BarraSuperior(ctk.CTkFrame):
         self.on_load_file_click = on_load_file_click
         self.on_toggle_terminal = on_toggle_terminal
         self.on_idioma_cambiado = on_idioma_cambiado
+        self.on_feedback_toggle = on_feedback_toggle
+        self._fb_disponible = False
+        self._fb_clave = "checking"
 
         self._cached_puertos: List[str] = []
         self._cached_seleccionado_com: Optional[str] = None
@@ -148,6 +152,24 @@ class BarraSuperior(ctk.CTkFrame):
         self.opt_lang.set(obtener_idioma())
         self.opt_lang.pack(side="left", padx=(4, 6), pady=3)
 
+        # Separador vertical 3 (hacia Hardware Feedback Tracking)
+        sep3 = ctk.CTkFrame(self.capsule_box, width=2, fg_color=COLOR_BORDER, height=20)
+        sep3.pack(side="left", pady=4)
+
+        # Segmento 4: Hardware Feedback Tracking (opcional; deshabilitado si no hay hardware AI)
+        self.sw_feedback = ctk.CTkSwitch(
+            self.capsule_box,
+            text=tr("feedback_toggle"),
+            command=self._cb_feedback,
+            font=self.f_bold,
+            text_color=COLOR_TEXT,
+            progress_color="#D946EF",
+            switch_width=34,
+            switch_height=16
+        )
+        self.sw_feedback.pack(side="left", padx=(8, 10), pady=3)
+        self.sw_feedback.configure(state="disabled")
+
         # 3. Botón Terminal rectangular con borde grueso
         self.btn_terminal = ctk.CTkButton(
             self,
@@ -170,6 +192,7 @@ class BarraSuperior(ctk.CTkFrame):
         agregar_tooltip(self.opt_dxf, tr("tooltip_dxf"))
         agregar_tooltip(self.opt_lang, tr("tooltip_lang"))
         agregar_tooltip(self.btn_terminal, tr("tooltip_terminal"))
+        self._actualizar_tooltip_feedback()
 
     # Métodos de callback internos
     def _cb_com(self, val: str):
@@ -194,6 +217,40 @@ class BarraSuperior(ctk.CTkFrame):
         cambiar_idioma(val)
         if self.on_idioma_cambiado:
             self.on_idioma_cambiado(val)
+
+    def _cb_feedback(self):
+        """Conmuta el Hardware Feedback Tracking (solo si está disponible y no hay ejecución)."""
+        if getattr(self, "bloqueado_ejecucion", False) or not self._fb_disponible:
+            self.sw_feedback.deselect()
+            return
+        if self.on_feedback_toggle:
+            self.on_feedback_toggle(bool(self.sw_feedback.get()))
+
+    def _actualizar_tooltip_feedback(self):
+        clave = {
+            "ok": "tooltip_feedback_ok",
+            "simulation": "tooltip_feedback_simulation",
+            "no_driver": "tooltip_feedback_no_driver",
+            "no_device": "tooltip_feedback_no_device",
+        }.get(self._fb_clave, "tooltip_feedback_checking")
+        agregar_tooltip(self.sw_feedback, tr(clave))
+
+    def set_feedback_disponible(self, disponible: bool, clave: str = "ok"):
+        """Habilita o bloquea el selector de feedback según la disponibilidad real del hardware AI."""
+        self._fb_disponible = bool(disponible)
+        self._fb_clave = clave if clave else ("ok" if disponible else "no_device")
+        if not disponible:
+            self.sw_feedback.deselect()
+        bloqueado = getattr(self, "bloqueado_ejecucion", False)
+        self.sw_feedback.configure(state="normal" if (disponible and not bloqueado) else "disabled")
+        self._actualizar_tooltip_feedback()
+
+    def forzar_feedback(self, activo: bool):
+        """Fija visualmente el estado del selector (p. ej. para revertirlo)."""
+        if activo:
+            self.sw_feedback.select()
+        else:
+            self.sw_feedback.deselect()
 
     def _cb_load_file(self):
         if getattr(self, "bloqueado_ejecucion", False) or getattr(self, "bloqueado_carga", False):
@@ -229,6 +286,8 @@ class BarraSuperior(ctk.CTkFrame):
         agregar_tooltip(self.opt_dxf, tr("tooltip_dxf"))
         agregar_tooltip(self.opt_lang, tr("tooltip_lang"))
         agregar_tooltip(self.btn_terminal, tr("tooltip_terminal"))
+        self.sw_feedback.configure(text=tr("feedback_toggle"))
+        self._actualizar_tooltip_feedback()
 
     # Métodos públicos para actualización
     def set_bloqueo_carga(self, bloqueado: bool):
@@ -244,6 +303,8 @@ class BarraSuperior(ctk.CTkFrame):
         self.opt_com.configure(state=estado)
         self.opt_dxf.configure(state=estado)
         self.opt_lang.configure(state=estado)
+        # El feedback solo se habilita si el hardware AI está disponible y no hay ejecución
+        self.sw_feedback.configure(state="normal" if (not bloqueado and self._fb_disponible) else "disabled")
 
     def set_estado_com(self, conectado_fisico: bool):
         """Pone el LED en Verde (#16A34A) si está conectado físicamente, o Rojo (#DC2626) si no."""

@@ -99,7 +99,11 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
 
     -- Resultado final
     estado              TEXT    NOT NULL DEFAULT 'COMPLETADO',
-    mensaje_error       TEXT    DEFAULT ''
+    mensaje_error       TEXT    DEFAULT '',
+
+    -- Error de seguimiento del galvo (Hardware Feedback Tracking, NULL si no se uso)
+    tracking_rms_um     REAL,
+    tracking_max_um     REAL
 );
 """
 
@@ -230,6 +234,11 @@ class GestorDB:
             if "modo_proceso" not in info_cols_hist:
                 conn.execute("ALTER TABLE historial_produccion ADD COLUMN modo_proceso TEXT DEFAULT 'Cutting'")
                 migrated = True
+
+            # Migracion aditiva: columnas de error de seguimiento (no activa la normalizacion de datos)
+            for col_name in ("tracking_rms_um", "tracking_max_um"):
+                if col_name not in info_cols_hist:
+                    conn.execute(f"ALTER TABLE historial_produccion ADD COLUMN {col_name} REAL")
 
             # Normalizar modos de proceso únicamente si se acaba de aplicar una migración estructural
             if migrated:

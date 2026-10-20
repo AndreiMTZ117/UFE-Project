@@ -34,7 +34,7 @@ from core.generador_trayectorias import transformar_y_escalar_dxf
 from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
-from core.NIDaqController import NIDaqController
+from core.NIDaqController import NIDaqController, probe_feedback_hardware
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
 from interfaz.i18n import tr
@@ -205,6 +205,12 @@ class PuenteLaser:
         self._en_ejecucion = False
         self._esta_pausado = False
 
+        # Hardware Feedback Tracking (opcional; OFF por defecto)
+        self.feedback_habilitado = False
+        self.on_feedback_cb: Optional[Callable] = None  # callback(lista_de_puntos_xy_mm)
+        self.ultimo_tracking_rms_um: Optional[float] = None
+        self.ultimo_tracking_max_um: Optional[float] = None
+
         # Iniciar hardware o simulador automaticamente
         self._inicializar_hardware()
 
@@ -328,6 +334,28 @@ class PuenteLaser:
     def esta_conectado_fisico(self) -> bool:
         """Informa si hay hardware real listo (no simulacion)."""
         return not self.es_simulacion and self.controlador_hardware is not None
+
+    def feedback_soportado(self) -> Tuple[bool, str]:
+        """Informa si el Hardware Feedback Tracking puede activarse.
+
+        Returns:
+            (disponible, clave) con clave in {"ok", "simulation", "no_driver", "no_device"}.
+            Nunca lanza excepciones.
+        """
+        try:
+            if self.es_simulacion or self.controlador_hardware is None:
+                return False, "simulation"
+            return probe_feedback_hardware()
+        except Exception:
+            return False, "no_device"
+
+    def set_feedback(self, habilitar: bool) -> bool:
+        """Activa/desactiva el feedback. Solo se activa si no es simulacion. Devuelve el estado final."""
+        if habilitar and self.es_simulacion:
+            self.feedback_habilitado = False
+        else:
+            self.feedback_habilitado = bool(habilitar)
+        return self.feedback_habilitado
 
     def obtener_nombre_hardware(self) -> str:
         if self.es_simulacion:
@@ -920,6 +948,10 @@ class PuenteLaser:
         on_log(tr("log_trace_speeds", mark=v_trazado, jump=v_viaje))
         on_log(tr("log_trace_delays", jump=jump_delay_ms, mark=mark_delay_ms, on=laser_on_delay_ms, off=laser_off_delay_ms, cooling=cooling_delay_s))
 
+        fb: Dict[str, Any] = {"on": False, "idx": 0, "sumsq": 0.0, "max": 0.0, "n": 0}
+        self.ultimo_tracking_rms_um = None
+        self.ultimo_tracking_max_um = None
+
         try:
             # ---------------------------------------------------------------
             # 1. Build the G0/G1 block sequence with real kinematic durations
@@ -984,6 +1016,42 @@ class PuenteLaser:
             on_log(f"Signal timeline: {n_muestras} samples @ {fs:.0f} Hz "
                    f"-> {n_muestras / fs:.2f} s per pass (physical delays included)")
 
+            def _drenar_feedback(final: bool = False) -> None:
+                """Lee muestras AI nuevas, acumula el error de seguimiento y emite puntos medidos."""
+                if not fb["on"] or not self.daq_controller:
+                    return
+                intentos = 15 if final else 1
+                for _ in range(intentos):
+                    chunk = self.daq_controller.read_feedback()
+                    if chunk is None:
+                        if not self.daq_controller.feedback_active:
+                            fb["on"] = False
+                            on_log("[Feedback] Hardware feedback became unavailable; continuing without it.")
+                            return
+                        if final and fb["idx"] < n_muestras:
+                            time.sleep(0.02)
+                            continue
+                        return
+                    i0 = fb["idx"]
+                    i1 = min(i0 + int(chunk.shape[1]), n_muestras)
+                    if i1 > i0:
+                        meas = chunk[:, : i1 - i0]
+                        cmd = voltajes[:, i0:i1]
+                        err_mm = np.hypot(meas[0] - cmd[0], meas[1] - cmd[1]) / escala_v
+                        fb["sumsq"] += float(np.sum(err_mm * err_mm))
+                        fb["max"] = max(fb["max"], float(np.max(err_mm)))
+                        fb["n"] += int(err_mm.size)
+                        fb["idx"] = i1
+                        if self.on_feedback_cb is not None:
+                            paso = max(1, (i1 - i0) // 10)
+                            sub = meas[:, ::paso] / escala_v
+                            try:
+                                self.on_feedback_cb(list(zip(sub[0].tolist(), sub[1].tolist())))
+                            except Exception:
+                                pass
+                    if not final or fb["idx"] >= n_muestras:
+                        return
+
             # Vectorized sample-to-block mapping matching GalvoSignalGenerator timing
             starts = np.array([b.start for b in blocks], dtype=np.float64)
             ends = np.array([b.end for b in blocks], dtype=np.float64)
@@ -1043,9 +1111,18 @@ class PuenteLaser:
                     self.daq_controller = NIDaqController(simulate=self.es_simulacion)
                     self.daq_controller.setup_hardware(f_s=fs)
                     self.daq_controller.write_buffers(voltajes, compuerta)
+                    fb["on"] = False
+                    fb["idx"] = 0
+                    if self.feedback_habilitado:
+                        fb["on"] = bool(self.daq_controller.enable_feedback())
+                        if fb["on"]:
+                            on_log(f"[Feedback] Hardware feedback tracking active (pass {pass_idx}/{num_pasadas}).")
+                        else:
+                            on_log("[Feedback] Hardware feedback unavailable; running without it.")
                     self.daq_controller.start_emission()
                     on_log(f"[NIDaqController] Pass {pass_idx}/{num_pasadas}: Emission armed and running ({'SIMULATION' if self.es_simulacion else 'HARDWARE'}).")
                 except Exception as daq_e:
+                    fb["on"] = False
                     on_log(f"[NIDaqController Notice] {daq_e}")
 
                 def _hilo_transmision_galvo():
@@ -1079,6 +1156,8 @@ class PuenteLaser:
                             time.sleep(0.05)
                         t0 += time.time() - t_pausa
                         continue
+
+                    _drenar_feedback()
 
                     k = min(k_ultimo, int((time.time() - t0) * fs))
                     bi = int(idx_bloque[k])
@@ -1116,6 +1195,10 @@ class PuenteLaser:
                 if hilo_tx and hilo_tx.is_alive():
                     timeout_join = 0.5 if self._evento_detener.is_set() else 120.0
                     hilo_tx.join(timeout=timeout_join)
+
+                # Drain remaining feedback samples before the DAQ is released
+                if fb["on"] and not self._evento_detener.is_set():
+                    _drenar_feedback(final=True)
 
                 # Turn off laser and clean up DAQ for this pass
                 self.apagar_laser()
@@ -1183,6 +1266,19 @@ class PuenteLaser:
                 except Exception as e_hw:
                     print(f"[PuenteLaser] Hardware cleanup notice in finally: {e_hw}")
             duracion_s = round(time.time() - t_inicio, 2)
+
+            # Tracking error metrics (only when hardware feedback produced samples)
+            trk_rms_um: Optional[float] = None
+            trk_max_um: Optional[float] = None
+            if fb["n"] > 0:
+                trk_rms_um = round(math.sqrt(fb["sumsq"] / fb["n"]) * 1000.0, 1)
+                trk_max_um = round(fb["max"] * 1000.0, 1)
+                self.ultimo_tracking_rms_um = trk_rms_um
+                self.ultimo_tracking_max_um = trk_max_um
+                try:
+                    on_log(f"[TELEMETRY] Tracking Error: RMS = {trk_rms_um:.1f} \u00b5m | Max = {trk_max_um:.1f} \u00b5m")
+                except Exception:
+                    pass
             self._en_ejecucion = False
             self._esta_pausado = False
 
@@ -1208,7 +1304,9 @@ class PuenteLaser:
                     "waypoints_totales": total_puntos,
                     "estado": estado_db,
                     "mensaje_error": error_msg,
-                    "duracion_segundos": duracion_s
+                    "duracion_segundos": duracion_s,
+                    "tracking_rms_um": trk_rms_um,
+                    "tracking_max_um": trk_max_um
                 })
                 on_log(tr("log_db_recorded", status=estado_db, dur=duracion_s))
             except Exception as e_bd:

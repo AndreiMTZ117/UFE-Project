@@ -10,6 +10,8 @@ Módulo encargado de controlar el ciclo de vida de ejecución del corte/grabado:
 """
 
 import time
+import threading
+from collections import deque
 from tkinter import messagebox
 from .conexion_interfaz import HARDWARE_CONFIG
 from interfaz.i18n import tr
@@ -209,6 +211,97 @@ class LogicaEjecucionMixin:
             datos[9] if len(datos) > 9 else None,
             datos[10] if len(datos) > 10 else None
         )
+
+    # =========================================================================
+    # HARDWARE FEEDBACK TRACKING (opcional)
+    # =========================================================================
+    def _hw_a_cm(self, x_hw: float, y_hw: float):
+        """Convierte coordenadas de hardware (mm, mismo marco que on_progress) a cm del canvas."""
+        cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
+        cal_ancho = cfg.get("marco_ancho_cm", 10.0)
+        cal_alto = cfg.get("marco_alto_cm", 10.0)
+        rango_x = self.puente.x_max_limit - self.puente.x_min_limit
+        rango_y = self.puente.y_max_limit - self.puente.y_min_limit
+        kx = cal_ancho / rango_x if rango_x > 0 else 1.0
+        ky = cal_alto / rango_y if rango_y > 0 else 1.0
+        return (
+            self.puente.ancho_base_cm / 2.0 + (x_hw - self.puente.centro_x) * kx,
+            self.puente.alto_base_cm / 2.0 + (y_hw - self.puente.centro_y) * ky,
+        )
+
+    def _iniciar_feedback_ui(self):
+        """Conecta el callback de feedback y evalúa la disponibilidad del hardware AI.
+
+        En simulación se resuelve de forma síncrona (sin tocar DAQmx). Con hardware real,
+        la sonda de AI corre en un hilo para no bloquear la GUI.
+        """
+        self._fb_cola = deque()
+        self._fb_programado = False
+        self.puente.on_feedback_cb = self._cb_feedback
+        if self.puente.es_simulacion:
+            self._aplicar_disponibilidad_feedback(False, "simulation")
+            return
+
+        def _sonda():
+            disponible, clave = self.puente.feedback_soportado()
+            try:
+                self.after(0, self._aplicar_disponibilidad_feedback, disponible, clave)
+            except Exception:
+                pass
+        threading.Thread(target=_sonda, daemon=True).start()
+
+    def _aplicar_disponibilidad_feedback(self, disponible: bool, clave: str):
+        if getattr(self, '_cerrando', False):
+            return
+        self.barra_superior.set_feedback_disponible(disponible, clave)
+        if not disponible:
+            self.puente.set_feedback(False)
+            self.panel_general.set_feedback_visible(False)
+
+    def _on_feedback_toggle(self, activo: bool):
+        """Activa/desactiva el Hardware Feedback Tracking desde el selector superior."""
+        if self.puente.en_ejecucion:
+            self.barra_superior.forzar_feedback(self.puente.feedback_habilitado)
+            return
+        estado = self.puente.set_feedback(activo)
+        if activo and not estado:
+            self.barra_superior.set_feedback_disponible(False, "simulation")
+        self.panel_general.set_feedback_visible(estado)
+        if not estado:
+            self.panel_derecho.limpiar_feedback()
+        self.terminal.log(tr("log_feedback_on") if estado else tr("log_feedback_off"))
+
+    def _cb_feedback(self, puntos_xy_mm):
+        """Callback (hilo de trabajo): encola puntos medidos y agenda un único volcado a la GUI."""
+        if getattr(self, '_cerrando', False):
+            return
+        self._fb_cola.append(puntos_xy_mm)
+        if not self._fb_programado:
+            self._fb_programado = True
+            try:
+                self.after(33, self._despachar_feedback_gui)
+            except Exception:
+                self._fb_programado = False
+
+    def _despachar_feedback_gui(self):
+        """Vuelca los puntos medidos acumulados a las vistas 1:1 y zoom (hilo GUI)."""
+        self._fb_programado = False
+        if getattr(self, '_cerrando', False):
+            self._fb_cola.clear()
+            return
+        if not self.puente.en_ejecucion or not self.puente.feedback_habilitado:
+            self._fb_cola.clear()
+            return
+        pts_cm = []
+        try:
+            while self._fb_cola:
+                for x_hw, y_hw in self._fb_cola.popleft():
+                    pts_cm.append(self._hw_a_cm(x_hw, y_hw))
+            if pts_cm:
+                self.panel_general.agregar_puntos_feedback(pts_cm)
+                self.panel_derecho.agregar_puntos_feedback(pts_cm)
+        except Exception:
+            pass
 
     def _actualizar_progreso_gui(
         self,

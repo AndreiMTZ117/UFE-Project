@@ -25,6 +25,13 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "f_s": 100000.0,
         "sample_rate_hz": 100000.0,
         "sync_clock": "/Dev1/ao/SampleClock",
+        # Hardware Feedback Tracking (optional AI readback of GVS position monitor)
+        "device_name": "Dev1",
+        "ai_terminal_config": "DIFF",   # "DIFF" or "RSE"
+        "feedback_sign_x": 1,
+        "feedback_sign_y": 1,
+        "feedback_offset_x_v": 0.0,
+        "feedback_offset_y_v": 0.0,
     },
     "galvo_dynamics": {
         "voltage_limits": {

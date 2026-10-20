@@ -56,6 +56,46 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "Interface language selector (English / Čeština).",
         "CS": "Výběr jazyka uživatelského rozhraní (English / Čeština).",
     },
+    "feedback_toggle": {
+        "EN": "HW Feedback",
+        "CS": "HW zpětná vazba",
+    },
+    "tooltip_feedback_ok": {
+        "EN": "Enable Hardware Feedback Tracking: reads the real mirror position from AI channels and draws it in magenta.",
+        "CS": "Zapnout sledování zpětné vazby hardwaru: čte skutečnou polohu zrcadel z AI kanálů a vykresluje ji purpurově.",
+    },
+    "tooltip_feedback_simulation": {
+        "EN": "Hardware Feedback Tracking is unavailable in simulation mode.",
+        "CS": "Sledování zpětné vazby hardwaru není v simulačním režimu dostupné.",
+    },
+    "tooltip_feedback_no_driver": {
+        "EN": "Hardware Feedback Tracking is unavailable: NI-DAQmx driver not found.",
+        "CS": "Sledování zpětné vazby hardwaru není dostupné: ovladač NI-DAQmx nebyl nalezen.",
+    },
+    "tooltip_feedback_no_device": {
+        "EN": "Hardware Feedback Tracking is unavailable: AI channels (ai0/ai1) could not be opened.",
+        "CS": "Sledování zpětné vazby hardwaru není dostupné: AI kanály (ai0/ai1) nelze otevřít.",
+    },
+    "tooltip_feedback_checking": {
+        "EN": "Checking Hardware Feedback availability...",
+        "CS": "Kontroluje se dostupnost zpětné vazby hardwaru...",
+    },
+    "legend_measured": {
+        "EN": "Measured (Feedback)",
+        "CS": "Naměřeno (zpětná vazba)",
+    },
+    "legend_measured_desc": {
+        "EN": "Real mirror position from AI monitor",
+        "CS": "Skutečná poloha zrcadel z AI monitoru",
+    },
+    "log_feedback_on": {
+        "EN": "[Feedback] Hardware Feedback Tracking enabled.",
+        "CS": "[Feedback] Sledování zpětné vazby hardwaru zapnuto.",
+    },
+    "log_feedback_off": {
+        "EN": "[Feedback] Hardware Feedback Tracking disabled.",
+        "CS": "[Feedback] Sledování zpětné vazby hardwaru vypnuto.",
+    },
 
     # -------------------------------------------------------------------------
     # Panel Izquierdo: Configuración y Recetas

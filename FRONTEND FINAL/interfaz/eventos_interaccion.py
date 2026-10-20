@@ -29,6 +29,8 @@ class EventosInteraccionMixin:
         self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
         modo = "Physical Hardware" if conectado else "Virtual Simulation"
         self.terminal.log(tr("log_hw_mode", mode=modo))
+        if hasattr(self, "_iniciar_feedback_ui"):
+            self._iniciar_feedback_ui()
 
     def _on_click_load_file(self):
         """Opens file browser to select a DXF drawing for CAD/CAM G-code conversion and tracing."""
