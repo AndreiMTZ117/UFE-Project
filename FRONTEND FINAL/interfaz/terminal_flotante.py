@@ -43,7 +43,7 @@ class TerminalFlotante(ctk.CTkFrame):
         self.on_cerrar = on_cerrar
         self.obtener_historial = obtener_historial
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=12, weight="bold")
-        self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=10)
+        self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=11)
         self.visible = False
         self._modo_historial = False
 

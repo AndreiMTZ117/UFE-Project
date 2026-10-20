@@ -11,7 +11,8 @@ from typing import Callable, List, Optional, Tuple
 from .constantes import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
     COLOR_BLUE, COLOR_VECTOR_GRAY, COLOR_GRID, COLOR_ORANGE,
-    FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER,
+    COLOR_YELLOW, COLOR_MUTED,
+    FONT_TEACHERS, FONT_SEGOE, BRUTAL_CORNER, BRUTAL_BORDER,
     agregar_tooltip
 )
 from .i18n import tr, registrar_observador, obtener_idioma
@@ -32,6 +33,8 @@ class PanelGeneral(ctk.CTkFrame):
         self.f_head = ctk.CTkFont(family=FONT_TEACHERS, size=13, weight="bold")
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
         self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=11)
+        self.f_leg = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
+        self.f_sub_leg = ctk.CTkFont(family=FONT_TEACHERS, size=10)
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
@@ -40,6 +43,10 @@ class PanelGeneral(ctk.CTkFrame):
         self.centro_home = (14.0, 12.5)
         self.pos_puntero: Tuple[float, float] = (14.0, 12.5)
         self.frame_box_cm: Optional[Tuple[float, float, float, float]] = None
+
+        # Estado responsivo de la leyenda (Modo extendido vs Botón compacto desplegable)
+        self._modo_compacto_leyenda = False
+        self._popup_abierto = False
 
         # Parametros de escala para renderizado incremental
         self._escala_pixel = None
@@ -53,11 +60,12 @@ class PanelGeneral(ctk.CTkFrame):
 
     def _crear_widgets(self):
         # 1. Título "General" y Leyenda de Trazos (top)
-        top_header = ctk.CTkFrame(self, fg_color="transparent")
-        top_header.pack(side="top", fill="x", pady=(2, 4))
+        self.top_header = ctk.CTkFrame(self, fg_color="transparent")
+        self.top_header.pack(side="top", fill="x", pady=(2, 4))
+        self.top_header.bind("<Configure>", self._on_header_configure)
 
         self.lbl_title = ctk.CTkLabel(
-            top_header,
+            self.top_header,
             text=tr("canvas_title"),
             font=self.f_head,
             text_color=COLOR_TEXT,
@@ -65,9 +73,9 @@ class PanelGeneral(ctk.CTkFrame):
         )
         self.lbl_title.pack(side="left")
 
-        # Leyenda de trazos horizontal arriba del recuadro
+        # Leyenda de trazos horizontal arriba del recuadro (Modo extendido / Pantalla completa)
         self.legend_frame = ctk.CTkFrame(
-            top_header,
+            self.top_header,
             fg_color=COLOR_CARD,
             border_color=COLOR_BORDER,
             border_width=BRUTAL_BORDER,
@@ -76,7 +84,7 @@ class PanelGeneral(ctk.CTkFrame):
         )
         self.legend_frame.pack(side="right")
 
-        f_leg = ctk.CTkFont(family=FONT_TEACHERS, size=9, weight="bold")
+        f_leg = self.f_leg
 
         # 1. Guía CAD (Gris)
         box_guide = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
@@ -124,8 +132,7 @@ class PanelGeneral(ctk.CTkFrame):
         c_pointer = tk.Canvas(box_pointer, width=16, height=14, bg=COLOR_CARD, highlightthickness=0)
         c_pointer.pack(side="left")
         c_pointer.create_oval(4, 3, 12, 11, fill="#22C55E", outline="#15803D", width=1.0)
-        pointer_txt = "Beam Cursor" if obtener_idioma() == "EN" else "Kurzor paprsku"
-        self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=pointer_txt, font=f_leg, text_color=COLOR_TEXT)
+        self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=tr("legend_pointer"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_pointer.pack(side="left", padx=(3, 2))
 
         agregar_tooltip(
@@ -136,6 +143,29 @@ class PanelGeneral(ctk.CTkFrame):
             "• Blue: Laser-processed toolpath\n"
             "• Green dot: Real-time beam / cursor position"
         )
+
+        # Botón compacto desplegable (Modo reducido / cuando no hay espacio suficiente)
+        self.btn_legend_toggle = ctk.CTkButton(
+            self.top_header,
+            text=f"{tr('legend_btn_guide')}",
+            command=self._toggle_popup_leyenda,
+            font=self.f_leg,
+            height=26,
+            width=88,
+            fg_color=COLOR_CARD,
+            text_color=COLOR_TEXT,
+            hover_color=COLOR_YELLOW,
+            border_color=COLOR_BORDER,
+            border_width=BRUTAL_BORDER,
+            corner_radius=BRUTAL_CORNER
+        )
+        agregar_tooltip(self.btn_legend_toggle, tr("legend_btn_tooltip"))
+
+        # Construir tarjeta popover flotante con la guía de líneas
+        self._crear_popup_leyenda()
+
+        # Comprobación de tamaño inicial tras renderizado
+        self.after(50, lambda: self._ajustar_modo_leyenda(self.top_header.winfo_width()))
 
         # 2. Footer Area size (anclado abajo primero, EDITABLE)
         self.footer_area = ctk.CTkFrame(self, fg_color="transparent", height=34)
@@ -225,6 +255,7 @@ class PanelGeneral(ctk.CTkFrame):
         )
         self.canvas.pack(fill="both", expand=True, padx=4, pady=4)
         self.canvas.bind("<Configure>", lambda e: self.redibujar())
+        self.canvas.bind("<ButtonPress-1>", lambda e: self._cerrar_popup_leyenda(), add="+")
 
     def set_bloqueo_ejecucion(self, bloqueado: bool):
         """Bloquea o habilita la edición de dimensiones de la base durante la ejecución."""
@@ -663,7 +694,7 @@ class PanelGeneral(ctk.CTkFrame):
             c.create_line(x0 - 5, y_pos, x0, y_pos, fill=COLOR_BORDER, width=1.5)
             # Etiqueta numérica
             texto_y = f"{int(val_y)}" if abs(val_y - round(val_y)) < 1e-4 else f"{val_y:.1f}"
-            c.create_text(x0 - 8, y_pos, text=texto_y, font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="e")
+            c.create_text(x0 - 8, y_pos, text=texto_y, font=(FONT_TEACHERS, 9), fill=COLOR_TEXT, anchor="e")
 
         # Eje X: Ticks, etiquetas y grilla interna
         rango_x = max(0.1, self.ancho_base_cm)
@@ -675,15 +706,158 @@ class PanelGeneral(ctk.CTkFrame):
             c.create_line(x_pos, y1, x_pos, y1 + 5, fill=COLOR_BORDER, width=1.5)
             # Etiqueta numérica
             texto_x = f"{int(val_x)}" if abs(val_x - round(val_x)) < 1e-4 else f"{val_x:.1f}"
-            c.create_text(x_pos, y1 + 7, text=texto_x, font=(FONT_TEACHERS, 8), fill=COLOR_TEXT, anchor="n")
+            c.create_text(x_pos, y1 + 7, text=texto_x, font=(FONT_TEACHERS, 9), fill=COLOR_TEXT, anchor="n")
 
         # 3. Ejes principales sólidos en borde carbón (pegados a los bordes izquierdo e inferior)
         c.create_line(x0, y0, x0, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  # Eje Y
         c.create_line(x0, y1, x1, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  # Eje X
 
         # 4. Rótulos de ejes: "Y [cm]" arriba del eje Y y "X [cm]" a la derecha del eje X
-        c.create_text(x0 - 4, y0 - 8, text="Y [cm]", font=(FONT_TEACHERS, 8, "bold"), fill=COLOR_TEXT, anchor="sw")
-        c.create_text(x1 + 6, y1, text="X [cm]", font=(FONT_TEACHERS, 8, "bold"), fill=COLOR_TEXT, anchor="w")
+        c.create_text(x0 - 4, y0 - 8, text="Y [cm]", font=(FONT_TEACHERS, 9, "bold"), fill=COLOR_TEXT, anchor="sw")
+        c.create_text(x1 + 6, y1, text="X [cm]", font=(FONT_TEACHERS, 9, "bold"), fill=COLOR_TEXT, anchor="w")
+
+    # =========================================================================
+    # LEYENDA RESPONSIVA Y POPOVER FLOTANTE
+    # =========================================================================
+    def _crear_popup_leyenda(self):
+        """Crea la tarjeta flotante emergente con la guía de líneas detallada."""
+        self.legend_popup = ctk.CTkFrame(
+            self,
+            fg_color=COLOR_CARD,
+            border_color=COLOR_BORDER,
+            border_width=BRUTAL_BORDER,
+            corner_radius=BRUTAL_CORNER,
+            width=280
+        )
+
+        # Header de la tarjeta emergente
+        header_pop = ctk.CTkFrame(self.legend_popup, fg_color="#F1F5F9", corner_radius=BRUTAL_CORNER, height=28)
+        header_pop.pack(fill="x", padx=4, pady=(4, 4))
+
+        self.lbl_popup_title = ctk.CTkLabel(
+            header_pop,
+            text=f"ℹ {tr('legend_popup_title')}",
+            font=ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold"),
+            text_color=COLOR_TEXT
+        )
+        self.lbl_popup_title.pack(side="left", padx=6)
+
+        btn_close_pop = ctk.CTkButton(
+            header_pop,
+            text="✕",
+            width=20,
+            height=20,
+            command=self._cerrar_popup_leyenda,
+            fg_color="transparent",
+            text_color=COLOR_MUTED,
+            hover_color="#E2E8F0",
+            font=ctk.CTkFont(family=FONT_SEGOE, size=11, weight="bold")
+        )
+        btn_close_pop.pack(side="right", padx=2)
+
+        # 1. Guía CAD (Gris)
+        row1 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
+        row1.pack(fill="x", padx=8, pady=3)
+        c1 = tk.Canvas(row1, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
+        c1.pack(side="left", padx=(0, 6))
+        c1.create_line(2, 9, 20, 9, fill=COLOR_VECTOR_GRAY, width=2.5, capstyle="round")
+        t1 = ctk.CTkFrame(row1, fg_color="transparent")
+        t1.pack(side="left", fill="x", expand=True)
+        self.lbl_pop_guide = ctk.CTkLabel(t1, text=tr("legend_guide"), font=self.f_leg, text_color=COLOR_TEXT, anchor="w")
+        self.lbl_pop_guide.pack(anchor="w")
+        self.lbl_pop_guide_desc = ctk.CTkLabel(t1, text=tr("legend_guide_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
+        self.lbl_pop_guide_desc.pack(anchor="w")
+
+        # 2. Salto en vacío (Naranja punteado)
+        row2 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
+        row2.pack(fill="x", padx=8, pady=3)
+        c2 = tk.Canvas(row2, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
+        c2.pack(side="left", padx=(0, 6))
+        for bx in (4.0, 11.0, 18.0):
+            c2.create_oval(bx - 2.5, 9.0 - 2.5, bx + 2.5, 9.0 + 2.5, fill=COLOR_ORANGE, outline="")
+        t2 = ctk.CTkFrame(row2, fg_color="transparent")
+        t2.pack(side="left", fill="x", expand=True)
+        self.lbl_pop_jump = ctk.CTkLabel(t2, text=tr("legend_jump"), font=self.f_leg, text_color=COLOR_TEXT, anchor="w")
+        self.lbl_pop_jump.pack(anchor="w")
+        self.lbl_pop_jump_desc = ctk.CTkLabel(t2, text=tr("legend_jump_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
+        self.lbl_pop_jump_desc.pack(anchor="w")
+
+        # 3. Trazo ejecutado activo (Azul eléctrico)
+        row3 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
+        row3.pack(fill="x", padx=8, pady=3)
+        c3 = tk.Canvas(row3, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
+        c3.pack(side="left", padx=(0, 6))
+        c3.create_line(2, 9, 20, 9, fill=COLOR_BLUE, width=3.5, capstyle="round")
+        t3 = ctk.CTkFrame(row3, fg_color="transparent")
+        t3.pack(side="left", fill="x", expand=True)
+        self.lbl_pop_trail = ctk.CTkLabel(t3, text=tr("legend_trace"), font=self.f_leg, text_color=COLOR_TEXT, anchor="w")
+        self.lbl_pop_trail.pack(anchor="w")
+        self.lbl_pop_trail_desc = ctk.CTkLabel(t3, text=tr("legend_trace_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
+        self.lbl_pop_trail_desc.pack(anchor="w")
+
+        # 4. Puntero del haz (Punto verde)
+        row4 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
+        row4.pack(fill="x", padx=8, pady=(3, 6))
+        c4 = tk.Canvas(row4, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
+        c4.pack(side="left", padx=(0, 6))
+        c4.create_oval(7, 5, 15, 13, fill="#22C55E", outline="#15803D", width=1.0)
+        t4 = ctk.CTkFrame(row4, fg_color="transparent")
+        t4.pack(side="left", fill="x", expand=True)
+        self.lbl_pop_pointer = ctk.CTkLabel(t4, text=tr("legend_pointer"), font=self.f_leg, text_color=COLOR_TEXT, anchor="w")
+        self.lbl_pop_pointer.pack(anchor="w")
+        self.lbl_pop_pointer_desc = ctk.CTkLabel(t4, text=tr("legend_pointer_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
+        self.lbl_pop_pointer_desc.pack(anchor="w")
+
+    def _toggle_popup_leyenda(self):
+        """Muestra u oculta la tarjeta flotante con la guía de trazos."""
+        if getattr(self, "_popup_abierto", False):
+            self._cerrar_popup_leyenda()
+        else:
+            self._abrir_popup_leyenda()
+
+    def _abrir_popup_leyenda(self):
+        self._popup_abierto = True
+        self.legend_popup.place(relx=1.0, x=-2, y=34, anchor="ne")
+        try:
+            self.legend_popup.lift()
+        except Exception:
+            pass
+        if hasattr(self, "btn_legend_toggle"):
+            self.btn_legend_toggle.configure(
+                fg_color=COLOR_YELLOW,
+                text=f"{tr('legend_btn_guide')}"
+            )
+
+    def _cerrar_popup_leyenda(self):
+        self._popup_abierto = False
+        if hasattr(self, "legend_popup"):
+            self.legend_popup.place_forget()
+        if hasattr(self, "btn_legend_toggle"):
+            self.btn_legend_toggle.configure(
+                fg_color=COLOR_CARD,
+                text=f"{tr('legend_btn_guide')}"
+            )
+
+    def _on_header_configure(self, event):
+        ancho = event.width
+        if ancho <= 50:
+            return
+        self._ajustar_modo_leyenda(ancho)
+
+    def _ajustar_modo_leyenda(self, ancho: int):
+        # 780px es el límite donde el título y el rectángulo horizontal colisionan
+        limite = 780
+        if ancho < limite:
+            if not getattr(self, "_modo_compacto_leyenda", False):
+                self._modo_compacto_leyenda = True
+                self.legend_frame.pack_forget()
+                self.btn_legend_toggle.pack(side="right")
+        else:
+            if getattr(self, "_modo_compacto_leyenda", False):
+                self._modo_compacto_leyenda = False
+                self._cerrar_popup_leyenda()
+                self.btn_legend_toggle.pack_forget()
+                self.legend_frame.pack(side="right")
 
     def actualizar_idioma(self):
         """Actualiza títulos, leyendas y tooltips del panel central al cambiar el idioma."""
@@ -696,8 +870,31 @@ class PanelGeneral(ctk.CTkFrame):
         if hasattr(self, "lbl_legend_trail"):
             self.lbl_legend_trail.configure(text=tr("legend_trace"))
         if hasattr(self, "lbl_legend_pointer"):
-            ptr_txt = "Beam Cursor" if obtener_idioma() == "EN" else "Kurzor paprsku"
-            self.lbl_legend_pointer.configure(text=ptr_txt)
+            self.lbl_legend_pointer.configure(text=tr("legend_pointer"))
+
+        if hasattr(self, "btn_legend_toggle"):
+            self.btn_legend_toggle.configure(text=f"{tr('legend_btn_guide')}")
+            agregar_tooltip(self.btn_legend_toggle, tr("legend_btn_tooltip"))
+
+        if hasattr(self, "lbl_popup_title"):
+            self.lbl_popup_title.configure(text=f"ℹ {tr('legend_popup_title')}")
+        if hasattr(self, "lbl_pop_guide"):
+            self.lbl_pop_guide.configure(text=tr("legend_guide"))
+        if hasattr(self, "lbl_pop_guide_desc"):
+            self.lbl_pop_guide_desc.configure(text=tr("legend_guide_desc"))
+        if hasattr(self, "lbl_pop_jump"):
+            self.lbl_pop_jump.configure(text=tr("legend_jump"))
+        if hasattr(self, "lbl_pop_jump_desc"):
+            self.lbl_pop_jump_desc.configure(text=tr("legend_jump_desc"))
+        if hasattr(self, "lbl_pop_trail"):
+            self.lbl_pop_trail.configure(text=tr("legend_trace"))
+        if hasattr(self, "lbl_pop_trail_desc"):
+            self.lbl_pop_trail_desc.configure(text=tr("legend_trace_desc"))
+        if hasattr(self, "lbl_pop_pointer"):
+            self.lbl_pop_pointer.configure(text=tr("legend_pointer"))
+        if hasattr(self, "lbl_pop_pointer_desc"):
+            self.lbl_pop_pointer_desc.configure(text=tr("legend_pointer_desc"))
+
         if hasattr(self, "lbl_area"):
             self.lbl_area.configure(text=f"{tr('base_dim_title')}:")
 
@@ -709,6 +906,12 @@ class PanelGeneral(ctk.CTkFrame):
                 "• Dashed Orange: Rapid traverse without laser\n"
                 "• Blue: Laser-processed toolpath\n"
                 "• Green dot: Real-time beam / cursor position"
+                if obtener_idioma() == "EN" else
+                "Vodítko drah nástroje:\n"
+                "• Šedá: Cílová CAD geometrie\n"
+                "• Oranžová přerušovaná: Rychlý přejezd bez laseru\n"
+                "• Modrá: Vypálená dráha laseru\n"
+                "• Zelený bod: Reálná poloha paprsku / kurzor"
             )
         if hasattr(self, "pill_x"):
             agregar_tooltip(

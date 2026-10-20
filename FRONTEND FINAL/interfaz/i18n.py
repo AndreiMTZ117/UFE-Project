@@ -317,6 +317,38 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "Live Trace (G1, Laser ON)",
         "CS": "Živá trať (G1, Laser ZAPNUT)",
     },
+    "legend_pointer": {
+        "EN": "Beam Cursor",
+        "CS": "Kurzor paprsku",
+    },
+    "legend_btn_guide": {
+        "EN": "Guides",
+        "CS": "Průvodce",
+    },
+    "legend_btn_tooltip": {
+        "EN": "Show/hide toolpath line guide and color legend.",
+        "CS": "Zobrazit/skrýt legendu a barevné vodítko drah.",
+    },
+    "legend_popup_title": {
+        "EN": "TOOLPATH GUIDES",
+        "CS": "PRŮVODCE DRÁHAMI",
+    },
+    "legend_guide_desc": {
+        "EN": "Target CAD geometry to trace",
+        "CS": "Cílová CAD geometrie ke zpracování",
+    },
+    "legend_jump_desc": {
+        "EN": "Rapid traverse (laser strictly OFF)",
+        "CS": "Rychlý přejezd (laser přísně VYPNUT)",
+    },
+    "legend_trace_desc": {
+        "EN": "Laser processed toolpath",
+        "CS": "Vypálená dráha laseru",
+    },
+    "legend_pointer_desc": {
+        "EN": "Real-time beam focal position",
+        "CS": "Okamžitá poloha ohniska paprsku",
+    },
     "base_dim_title": {
         "EN": "BASE DIMENSIONS",
         "CS": "ROZMĚRY ZÁKLADNY",

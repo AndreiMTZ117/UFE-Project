@@ -185,7 +185,7 @@ class ToolTip:
             etiqueta = tk.Label(
                 ventana, text=self.texto, justify="left", anchor="w",
                 bg=COLOR_TERMINAL_BG, fg="#FFFFFF", bd=0,
-                font=(FONT_TEACHERS, 9), wraplength=self.ancho_px,
+                font=(FONT_TEACHERS, 10), wraplength=self.ancho_px,
                 padx=10, pady=6, highlightthickness=2, highlightbackground=COLOR_YELLOW
             )
             etiqueta.pack()

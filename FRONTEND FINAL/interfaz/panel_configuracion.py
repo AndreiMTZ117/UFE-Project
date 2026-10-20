@@ -130,8 +130,8 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.f_head = ctk.CTkFont(family=FONT_TEACHERS, size=13, weight="bold")
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
         self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=11)
-        self.f_unit = ctk.CTkFont(family=FONT_TEACHERS, size=9, weight="bold")
-        self.f_div = ctk.CTkFont(family=FONT_TEACHERS, size=9, weight="bold")
+        self.f_unit = ctk.CTkFont(family=FONT_TEACHERS, size=10, weight="bold")
+        self.f_div = ctk.CTkFont(family=FONT_TEACHERS, size=10, weight="bold")
 
         self.inputs: Dict[str, ctk.CTkEntry] = {}
         self._div_labels: Dict[str, ctk.CTkLabel] = {}

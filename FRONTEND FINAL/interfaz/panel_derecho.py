@@ -41,15 +41,16 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.f_head = ctk.CTkFont(family=FONT_TEACHERS, size=12, weight="bold")
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
-        self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=10)
+        self.f_regular = ctk.CTkFont(family=FONT_TEACHERS, size=11)
         self.f_bruno_btn = ctk.CTkFont(family=FONT_BRUNO, size=13, weight="bold")
         self.f_bruno_timer = ctk.CTkFont(family=FONT_BRUNO, size=16, weight="bold")
-        self.f_dmm_lbl = ctk.CTkFont(family=FONT_SEGOE, size=8, weight="bold")
+        self.f_dmm_lbl = ctk.CTkFont(family=FONT_SEGOE, size=9, weight="bold")
         self.f_dmm_val = ctk.CTkFont(family=FONT_CONSOLAS, size=15, weight="bold")
-        self.f_pill = ctk.CTkFont(family=FONT_CONSOLAS, size=10, weight="bold")
+        self.f_pill = ctk.CTkFont(family=FONT_CONSOLAS, size=11, weight="bold")
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        self._trazos_bboxes: Optional[List[Tuple[float, float, float, float]]] = None
         self.centro_home = (14.00, 12.50)
         self.pos_laser_actual = (14.00, 12.50)
         self._ultimo_estado = "READY"
@@ -197,7 +198,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.badge_status = ctk.CTkLabel(
             header_telem,
             text=f"● {tr('status_ready')}",
-            font=ctk.CTkFont(family=FONT_SEGOE, size=9, weight="bold"),
+            font=ctk.CTkFont(family=FONT_SEGOE, size=10, weight="bold"),
             text_color=COLOR_GREEN,
             fg_color="#DCFCE7",
             corner_radius=BRUTAL_CORNER,
@@ -654,7 +655,7 @@ class PanelDerecho(ctk.CTkFrame):
 
     def _dibujar_un_gauge(self, c: tk.Canvas, cx: float, cy: float, r: float, grosor: float, pct: float, titulo: str):
         pct_clean = max(0.0, min(100.0, float(pct)))
-        c.create_text(cx, cy - r - 9, text=titulo, font=(FONT_TEACHERS, 9, "bold"), fill=COLOR_TEXT)
+        c.create_text(cx, cy - r - 9, text=titulo, font=(FONT_TEACHERS, 10, "bold"), fill=COLOR_TEXT)
         c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=COLOR_BORDER, width=BRUTAL_BORDER)
 
         grados_arco = -(pct_clean / 100.0) * 360.0
@@ -690,8 +691,9 @@ class PanelDerecho(ctk.CTkFrame):
     ):
         try:
             if trazos is not None:
-                self.trazos_actuales = trazos
-                self._trazos_bboxes = None
+                if self.trazos_actuales is not trazos:
+                    self.trazos_actuales = trazos
+                    self._trazos_bboxes = None
 
             if trazos_completados is not None:
                 self.trazos_completados = trazos_completados
@@ -719,7 +721,7 @@ class PanelDerecho(ctk.CTkFrame):
             max_y = ly + margin_cm
 
             if self.trazos_actuales:
-                if not hasattr(self, '_trazos_bboxes') or len(self._trazos_bboxes) != len(self.trazos_actuales):
+                if self._trazos_bboxes is None or len(self._trazos_bboxes) != len(self.trazos_actuales):
                     bboxes = []
                     for r in self.trazos_actuales:
                         if r and len(r) >= 2:
