@@ -15,6 +15,7 @@ Estructura modular segmentada en archivos dedicados:
   10. LÓGICA DE EJECUCIÓN: START, PAUSE/RESUME, STOP        -> interfaz/logica_ejecucion.py
 """
 
+from pyparsing import Optional
 import os
 import sys
 import customtkinter as ctk
@@ -202,7 +203,8 @@ class AppLaserCTk(
             on_click_start=self._on_click_start,
             on_click_pause_resume=self._on_click_pause_resume,
             on_click_stop=self._on_click_stop,
-            on_centro_cambiado=self._on_centro_cambiado
+            on_centro_cambiado=self._on_centro_cambiado,
+            on_viewport_cambiado=self._on_viewport_zoom_cambiado
         )
         self.panel_derecho.grid(row=0, column=2, sticky="nsew", padx=(8, 0))
 
@@ -212,6 +214,14 @@ class AppLaserCTk(
             on_cerrar=lambda: self.barra_superior.set_terminal_activo(False),
             obtener_historial=lambda: self.puente.gestor_trazabilidad.listar_historial(limite=50)
         )
+
+    def _on_viewport_zoom_cambiado(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
+        """Sincroniza el marco visual de la cámara de zoom en el Canvas 1:1."""
+        if hasattr(self, "panel_general"):
+            if bbox_cm is not None:
+                self.panel_general.actualizar_frustum_zoom(bbox_cm)
+            else:
+                self.panel_general.ocultar_frustum_zoom()
 
     def _on_idioma_cambiado(self, nuevo_idioma: str):
         """Notificación cuando el usuario cambia el idioma (EN / CS)."""

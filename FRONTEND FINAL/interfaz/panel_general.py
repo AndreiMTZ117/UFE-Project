@@ -43,6 +43,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.centro_home = (14.0, 12.5)
         self.pos_puntero: Tuple[float, float] = (14.0, 12.5)
         self.frame_box_cm: Optional[Tuple[float, float, float, float]] = None
+        self._frustum_zoom_cm: Optional[Tuple[float, float, float, float]] = None
 
         # Estado responsivo de la leyenda (Modo extendido vs Botón compacto desplegable)
         self._modo_compacto_leyenda = False
@@ -394,6 +395,8 @@ class PanelGeneral(ctk.CTkFrame):
                 pass
             if getattr(self, "pos_puntero", None) is not None:
                 self.actualizar_puntero(self.pos_puntero[0], self.pos_puntero[1])
+            if getattr(self, "_frustum_zoom_cm", None) is not None:
+                self._dibujar_frustum_zoom(c)
             return
 
         # Helper: mapear coordenada fisica metrica (cm) -> pixel del canvas
@@ -490,6 +493,10 @@ class PanelGeneral(ctk.CTkFrame):
         if getattr(self, "pos_puntero", None) is not None:
             self.actualizar_puntero(self.pos_puntero[0], self.pos_puntero[1])
 
+        # 6. Redibujar encuadre de cámara zoom (rectángulo verde punteado) si está en modo libre
+        if getattr(self, "_frustum_zoom_cm", None) is not None:
+            self._dibujar_frustum_zoom(c)
+
     def actualizar_puntero(self, x_cm: float, y_cm: float):
         """Actualiza la posición visual del puntero/cursor láser (puntito verde) en el canvas 1:1."""
         try:
@@ -572,6 +579,58 @@ class PanelGeneral(ctk.CTkFrame):
         self.frame_box_cm = None
         try:
             self.canvas.delete("frame_dxf")
+        except Exception:
+            pass
+
+    def actualizar_frustum_zoom(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
+        """Dibuja o actualiza el recuadro verde punteado que representa el encuadre de la cámara de zoom."""
+        self._frustum_zoom_cm = bbox_cm
+        self._dibujar_frustum_zoom(self.canvas)
+
+    def ocultar_frustum_zoom(self):
+        """Elimina el recuadro verde punteado del encuadre de la cámara de zoom."""
+        self._frustum_zoom_cm = None
+        try:
+            self.canvas.delete("frustum_zoom_cam")
+        except Exception:
+            pass
+
+    def _dibujar_frustum_zoom(self, c: tk.Canvas):
+        """Renderiza en el canvas 1:1 el rectángulo verde punteado delgado de la cámara zoom."""
+        if getattr(self, "_frustum_zoom_cm", None) is None:
+            try:
+                c.delete("frustum_zoom_cam")
+            except Exception:
+                pass
+            return
+        if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
+            return
+
+        try:
+            c.delete("frustum_zoom_cam")
+            min_x, max_x, min_y, max_y = self._frustum_zoom_cm
+
+            def to_px(x_cm, y_cm):
+                px = self._base_x0 + float(x_cm) * self._escala_pixel
+                py = (self._base_y0 + self._base_h_px) - (float(y_cm) * self._escala_pixel)
+                return px, py
+
+            px1, py1 = to_px(min_x, min_y)
+            px2, py2 = to_px(max_x, max_y)
+
+            coords = [px1, py1, px2, py1, px2, py2, px1, py2, px1, py1]
+            c.create_line(
+                coords,
+                fill="#22C55E",
+                width=2.5,
+                dash=(5, 4),
+                capstyle="round",
+                joinstyle="round",
+                tags="frustum_zoom_cam"
+            )
+            c.tag_raise("frustum_zoom_cam")
+            if getattr(self, "pos_puntero", None) is not None:
+                c.tag_raise("puntero_laser")
         except Exception:
             pass
 

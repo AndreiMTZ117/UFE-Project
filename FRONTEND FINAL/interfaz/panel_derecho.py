@@ -30,6 +30,7 @@ class PanelDerecho(ctk.CTkFrame):
         on_click_pause_resume: Optional[Callable[[], None]] = None,
         on_click_stop: Optional[Callable[[], None]] = None,
         on_centro_cambiado: Optional[Callable[[float, float], None]] = None,
+        on_viewport_cambiado: Optional[Callable[[Optional[Tuple[float, float, float, float]]], None]] = None,
         **kwargs
     ):
         super().__init__(master, fg_color="transparent", **kwargs)
@@ -38,6 +39,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.on_click_pause_resume = on_click_pause_resume
         self.on_click_stop = on_click_stop
         self.on_centro_cambiado = on_centro_cambiado
+        self.on_viewport_cambiado = on_viewport_cambiado
 
         self.f_head = ctk.CTkFont(family=FONT_TEACHERS, size=12, weight="bold")
         self.f_bold = ctk.CTkFont(family=FONT_TEACHERS, size=11, weight="bold")
@@ -54,6 +56,15 @@ class PanelDerecho(ctk.CTkFrame):
         self.centro_home = (14.00, 12.50)
         self.pos_laser_actual = (14.00, 12.50)
         self._ultimo_estado = "READY"
+
+        # Navegación libre / Modo cámara de seguimiento
+        self.modo_auto_centrado = True
+        self.centro_camara_cm = (14.00, 12.50)
+        self._pan_iniciado = False
+        self._pan_arrastrando = False
+        self._pan_start_x = 0
+        self._pan_start_y = 0
+        self._pan_cam_start = (14.00, 12.50)
 
         self.pct_trace = 0.0
         self.pct_total = 0.0
@@ -335,8 +346,16 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold
         )
         self.btn_zoom_menos.pack(side="right", padx=(0, 4))
+        self.btn_auto_center = ctk.CTkButton(
+            header_trace, text="⦾", width=28, height=22, command=self.centrar_en_laser,
+            fg_color=COLOR_YELLOW, text_color=COLOR_TEXT, hover_color=COLOR_YELLOW,
+            border_color=COLOR_BORDER, border_width=BRUTAL_BORDER, corner_radius=BRUTAL_CORNER,
+            font=self.f_bold
+        )
+        self.btn_auto_center.pack(side="right", padx=(0, 6))
         agregar_tooltip(self.btn_zoom_mas, "Increase laser tracking zoom (higher beam detail).")
         agregar_tooltip(self.btn_zoom_menos, "Decrease laser tracking zoom (wider surrounding area).")
+        agregar_tooltip(self.btn_auto_center, tr("btn_auto_center_tooltip"))
         self._actualizar_titulo_zoom()
 
         self.card_trace = ctk.CTkFrame(
@@ -350,7 +369,10 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.canvas_trace = tk.Canvas(self.card_trace, bg=COLOR_CARD, highlightthickness=0)
         self.canvas_trace.pack(fill="both", expand=True, padx=4, pady=4)
-        self.canvas_trace.bind("<Configure>", lambda e: self.redibujar_trace())
+        self.canvas_trace.bind("<Configure>", lambda e: (self.redibujar_trace(), self._notificar_viewport()))
+        self.canvas_trace.bind("<ButtonPress-1>", self._on_pan_start)
+        self.canvas_trace.bind("<B1-Motion>", self._on_pan_drag)
+        self.canvas_trace.bind("<ButtonRelease-1>", self._on_pan_end)
 
         # Badge flotante de coordenadas dentro de la tarjeta
         self.coord_badge = ctk.CTkFrame(
@@ -460,6 +482,96 @@ class PanelDerecho(ctk.CTkFrame):
         self.zoom_relativo = niveles[idx]
         self._actualizar_titulo_zoom()
         self.redibujar_trace()
+        self._notificar_viewport()
+
+    # Navegación libre (Pan & Drag) y Auto-centrado
+    def centrar_en_laser(self):
+        """Vuelve a centrar la cámara de zoom en la posición actual del láser y reanuda el seguimiento dinámico."""
+        self.modo_auto_centrado = True
+        self.centro_camara_cm = self.pos_laser_actual
+        self._actualizar_estilo_boton_centrado()
+        self.redibujar_trace()
+        self._notificar_viewport()
+
+    def _actualizar_estilo_boton_centrado(self):
+        if hasattr(self, "btn_auto_center"):
+            if self.modo_auto_centrado:
+                self.btn_auto_center.configure(fg_color=COLOR_YELLOW, hover_color=COLOR_YELLOW)
+            else:
+                self.btn_auto_center.configure(fg_color=COLOR_CARD, hover_color=COLOR_YELLOW)
+
+    def _on_pan_start(self, event):
+        self._pan_iniciado = True
+        self._pan_arrastrando = False
+        self._pan_start_x = event.x
+        self._pan_start_y = event.y
+        if self.modo_auto_centrado:
+            self._pan_cam_start = self.pos_laser_actual
+        else:
+            self._pan_cam_start = self.centro_camara_cm
+        try:
+            self.canvas_trace.configure(cursor="fleur")
+        except Exception:
+            pass
+
+    def _on_pan_drag(self, event):
+        if not getattr(self, "_pan_iniciado", False):
+            return
+        dx_px = event.x - self._pan_start_x
+        dy_px = event.y - self._pan_start_y
+
+        if not self._pan_arrastrando and (abs(dx_px) > 2 or abs(dy_px) > 2):
+            self._pan_arrastrando = True
+            if self.modo_auto_centrado:
+                self.modo_auto_centrado = False
+                self._actualizar_estilo_boton_centrado()
+
+        if self._pan_arrastrando:
+            zoom_factor = max(1.0, self.escala_referencia_px_cm) * self.zoom_relativo
+            # Arrastre 1:1 en pantalla: mover cursor a la derecha tira del canvas a la derecha (cámara resta dx)
+            # Mover cursor abajo tira del canvas abajo (cámara suma dy en coordenadas cartesianas físicas)
+            dx_cm = dx_px / zoom_factor
+            dy_cm = dy_px / zoom_factor
+
+            c_ini_x, c_ini_y = self._pan_cam_start
+            nueva_cam_x = c_ini_x - dx_cm
+            nueva_cam_y = c_ini_y + dy_cm
+            self.centro_camara_cm = (nueva_cam_x, nueva_cam_y)
+
+            self.redibujar_trace()
+            self._notificar_viewport()
+
+    def _on_pan_end(self, event):
+        self._pan_iniciado = False
+        self._pan_arrastrando = False
+        try:
+            self.canvas_trace.configure(cursor="")
+        except Exception:
+            pass
+
+    def _obtener_bbox_camara_cm(self) -> Optional[Tuple[float, float, float, float]]:
+        """Calcula el rectángulo envolvente visible (min_x, max_x, min_y, max_y) en coordenadas físicas cm."""
+        try:
+            w = self.canvas_trace.winfo_width()
+            h = self.canvas_trace.winfo_height()
+            if w <= 20 or h <= 20:
+                return None
+            zoom_factor = max(1.0, self.escala_referencia_px_cm) * self.zoom_relativo
+            cam_x, cam_y = self.pos_laser_actual if self.modo_auto_centrado else self.centro_camara_cm
+            half_w_cm = (w / 2.0) / zoom_factor
+            half_h_cm = (h / 2.0) / zoom_factor
+            return (cam_x - half_w_cm, cam_x + half_w_cm, cam_y - half_h_cm, cam_y + half_h_cm)
+        except Exception:
+            return None
+
+    def _notificar_viewport(self):
+        """Notifica al observador externo (Canvas 1:1) sobre el estado del encuadre de cámara."""
+        if not self.on_viewport_cambiado:
+            return
+        if self.modo_auto_centrado:
+            self.on_viewport_cambiado(None)
+        else:
+            self.on_viewport_cambiado(self._obtener_bbox_camara_cm())
 
     # Callbacks internos
     def _cb_start(self):
@@ -503,7 +615,10 @@ class PanelDerecho(ctk.CTkFrame):
             self.entry_home_y.delete(0, "end")
             self.entry_home_y.insert(0, f"{y_val:.2f}")
             self.actualizar_coordenadas(x_val, y_val)
+            if self.modo_auto_centrado:
+                self.centro_camara_cm = (x_val, y_val)
             self.redibujar_trace()
+            self._notificar_viewport()
         except Exception:
             pass
 
@@ -680,7 +795,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.pct_total = 0.0
         self.actualizar_voltajes(0.0, 0.0, False)
         self.dibujar_gauges(0.0, 0.0)
-        self.redibujar_trace(trazos_completados=[])
+        self.centrar_en_laser()
 
     # Renderizado Trace Point (Zoom 4x)
     def redibujar_trace(
@@ -711,14 +826,19 @@ class PanelDerecho(ctk.CTkFrame):
             cx = w / 2.0
             cy = h / 2.0
 
-            lx, ly = self.pos_laser_actual
+            if self.modo_auto_centrado:
+                cam_x, cam_y = self.pos_laser_actual
+                self.centro_camara_cm = (cam_x, cam_y)
+            else:
+                cam_x, cam_y = self.centro_camara_cm
+
             zoom_factor = max(1.0, self.escala_referencia_px_cm) * self.zoom_relativo
 
             margin_cm = (max(w, h) / 2.0) / zoom_factor + 0.8
-            min_x = lx - margin_cm
-            max_x = lx + margin_cm
-            min_y = ly - margin_cm
-            max_y = ly + margin_cm
+            min_x = cam_x - margin_cm
+            max_x = cam_x + margin_cm
+            min_y = cam_y - margin_cm
+            max_y = cam_y + margin_cm
 
             if self.trazos_actuales:
                 if self._trazos_bboxes is None or len(self._trazos_bboxes) != len(self.trazos_actuales):
@@ -760,10 +880,10 @@ class PanelDerecho(ctk.CTkFrame):
                     if (p_fin[0] < min_x and p_ini[0] < min_x) or (p_fin[0] > max_x and p_ini[0] > max_x) or \
                        (p_fin[1] < min_y and p_ini[1] < min_y) or (p_fin[1] > max_y and p_ini[1] > max_y):
                         continue
-                    px1 = cx + (p_fin[0] - lx) * zoom_factor
-                    py1 = cy - (p_fin[1] - ly) * zoom_factor
-                    px2 = cx + (p_ini[0] - lx) * zoom_factor
-                    py2 = cy - (p_ini[1] - ly) * zoom_factor
+                    px1 = cx + (p_fin[0] - cam_x) * zoom_factor
+                    py1 = cy - (p_fin[1] - cam_y) * zoom_factor
+                    px2 = cx + (p_ini[0] - cam_x) * zoom_factor
+                    py2 = cy - (p_ini[1] - cam_y) * zoom_factor
                     c.create_line(px1, py1, px2, py2, fill=COLOR_ORANGE, width=2.0, dash=(4, 3), capstyle="round")
 
                 # Rutas vectoriales CAD base
@@ -774,8 +894,8 @@ class PanelDerecho(ctk.CTkFrame):
                         continue
 
                     if len(ruta) == 1:
-                        px = cx + (ruta[0][0] - lx) * zoom_factor
-                        py = cy - (ruta[0][1] - ly) * zoom_factor
+                        px = cx + (ruta[0][0] - cam_x) * zoom_factor
+                        py = cy - (ruta[0][1] - cam_y) * zoom_factor
                         c.create_oval(px - 2, py - 2, px + 2, py + 2, fill=COLOR_VECTOR_GRAY, outline="")
                         continue
 
@@ -792,8 +912,8 @@ class PanelDerecho(ctk.CTkFrame):
 
                     coords = []
                     for pt in pts_sub:
-                        px = cx + (pt[0] - lx) * zoom_factor
-                        py = cy - (pt[1] - ly) * zoom_factor
+                        px = cx + (pt[0] - cam_x) * zoom_factor
+                        py = cy - (pt[1] - cam_y) * zoom_factor
                         coords.extend([px, py])
                     if len(coords) >= 4:
                         c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=3.0, capstyle="round")
@@ -808,21 +928,27 @@ class PanelDerecho(ctk.CTkFrame):
                     if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x) or \
                        (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
                         continue
-                    px1 = cx + (p1[0] - lx) * zoom_factor
-                    py1 = cy - (p1[1] - ly) * zoom_factor
-                    px2 = cx + (p2[0] - lx) * zoom_factor
-                    py2 = cy - (p2[1] - ly) * zoom_factor
+                    px1 = cx + (p1[0] - cam_x) * zoom_factor
+                    py1 = cy - (p1[1] - cam_y) * zoom_factor
+                    px2 = cx + (p2[0] - cam_x) * zoom_factor
+                    py2 = cy - (p2[1] - cam_y) * zoom_factor
                     c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=4.5, capstyle="round")
 
                 # Tramo vivo: del ultimo segmento dibujado hasta el puntero (sin retraso visual)
                 if self.ancla_vivo is not None and len(self.ancla_vivo) >= 2:
                     ax, ay = self.ancla_vivo
-                    c.create_line(cx + (ax - lx) * zoom_factor, cy - (ay - ly) * zoom_factor,
-                                  cx, cy, fill=COLOR_BLUE, width=4.5, capstyle="round")
+                    lx, ly = self.pos_laser_actual
+                    c.create_line(cx + (ax - cam_x) * zoom_factor, cy - (ay - cam_y) * zoom_factor,
+                                  cx + (lx - cam_x) * zoom_factor, cy - (ly - cam_y) * zoom_factor,
+                                  fill=COLOR_BLUE, width=4.5, capstyle="round")
 
-            # Punto blanco central (puntero del haz)
-            r_pt = 5
-            c.create_oval(cx - r_pt, cy - r_pt, cx + r_pt, cy + r_pt, fill="#FFFFFF", outline=COLOR_BORDER, width=BRUTAL_BORDER)
+            # Punto blanco central (puntero del haz en coordenadas reales)
+            lx, ly = self.pos_laser_actual
+            pt_px = cx + (lx - cam_x) * zoom_factor
+            pt_py = cy - (ly - cam_y) * zoom_factor
+            if -25 <= pt_px <= w + 25 and -25 <= pt_py <= h + 25:
+                r_pt = 5
+                c.create_oval(pt_px - r_pt, pt_py - r_pt, pt_px + r_pt, pt_py + r_pt, fill="#FFFFFF", outline=COLOR_BORDER, width=BRUTAL_BORDER)
         except Exception:
             pass
 
@@ -839,6 +965,8 @@ class PanelDerecho(ctk.CTkFrame):
                 self.btn_pause_resume.configure(text=tr("btn_pause"))
         if hasattr(self, "btn_home"):
             agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
+        if hasattr(self, "btn_auto_center"):
+            agregar_tooltip(self.btn_auto_center, tr("btn_auto_center_tooltip"))
         if hasattr(self, "btn_set_home"):
             self.btn_set_home.configure(text=tr("btn_apply"))
         if hasattr(self, "lbl_center_title"):

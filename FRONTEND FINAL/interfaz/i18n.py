@@ -397,6 +397,10 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "TRACE VIEW",
         "CS": "POHLED STOPY",
     },
+    "btn_auto_center_tooltip": {
+        "EN": "Center and lock view on laser beam (click & drag canvas to pan freely)",
+        "CS": "Vycentrovat a uzamknout pohled na paprsek (tažením myši volný posun)",
+    },
     "btn_start": {
         "EN": "START",
         "CS": "SPUSTIT",
