@@ -280,7 +280,7 @@ class TerminalFlotante(ctk.CTkFrame):
                 "Scale", "RDP_Tolerance_mm", "Join_Tolerance_mm",
                 "Paths", "Waypoints", "Duration_Seconds",
                 "Status", "Error_Message",
-                "Tracking_RMS_um", "Tracking_Max_um"
+                "Tracking_RMS_um", "Tracking_Max_um", "Tracking_Lag_ms"
             ]
 
             with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
@@ -322,7 +322,8 @@ class TerminalFlotante(ctk.CTkFrame):
                         "Status": st_eng,
                         "Error_Message": reg.get("mensaje_error", ""),
                         "Tracking_RMS_um": "" if reg.get("tracking_rms_um") is None else reg.get("tracking_rms_um"),
-                        "Tracking_Max_um": "" if reg.get("tracking_max_um") is None else reg.get("tracking_max_um")
+                        "Tracking_Max_um": "" if reg.get("tracking_max_um") is None else reg.get("tracking_max_um"),
+                        "Tracking_Lag_ms": "" if reg.get("tracking_lag_ms") is None else reg.get("tracking_lag_ms")
                     }
                     writer.writerow(fila)
 

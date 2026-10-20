@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
 
     -- Error de seguimiento del galvo (Hardware Feedback Tracking, NULL si no se uso)
     tracking_rms_um     REAL,
-    tracking_max_um     REAL
+    tracking_max_um     REAL,
+    tracking_lag_ms     REAL
 );
 """
 
@@ -236,7 +237,7 @@ class GestorDB:
                 migrated = True
 
             # Migracion aditiva: columnas de error de seguimiento (no activa la normalizacion de datos)
-            for col_name in ("tracking_rms_um", "tracking_max_um"):
+            for col_name in ("tracking_rms_um", "tracking_max_um", "tracking_lag_ms"):
                 if col_name not in info_cols_hist:
                     conn.execute(f"ALTER TABLE historial_produccion ADD COLUMN {col_name} REAL")
 

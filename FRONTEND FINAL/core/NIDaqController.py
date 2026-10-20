@@ -21,7 +21,7 @@ import time
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Sequence, Type
 import numpy as np
-from core.config_loader import load_hardware_config
+from core.config_loader import get_volts_per_mm, load_hardware_config
 try:  # The driver is optional so the module can be imported on any machine.
     import nidaqmx  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     from nidaqmx.constants import AcquisitionType, LineGrouping  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
@@ -88,8 +88,7 @@ class NIDaqController:
         # Resolve configuration dictionary (explicit dict or from file/fallback)
         self.config: Dict[str, Any] = config if config is not None else load_hardware_config(config_path)
 
-        dyn_cfg = self.config.get("galvo_dynamics", {})
-        raw_v_limits = dyn_cfg.get("voltage_limits", {})
+        raw_v_limits = self.config.get("voltage_limits") or self.config.get("galvo_dynamics", {}).get("voltage_limits", {})
         if isinstance(raw_v_limits, dict):
             self.voltage_min = float(raw_v_limits.get("min", AO_VOLTAGE_MIN))
             self.voltage_max = float(raw_v_limits.get("max", AO_VOLTAGE_MAX))
@@ -316,6 +315,7 @@ class NIDaqController:
             "sign_y": -1.0 if float(daq_cfg.get("feedback_sign_y", 1)) < 0 else 1.0,
             "offset_x": float(daq_cfg.get("feedback_offset_x_v", 0.0)),
             "offset_y": float(daq_cfg.get("feedback_offset_y_v", 0.0)),
+            "volts_per_mm": get_volts_per_mm(self.config),
         }
 
     def enable_feedback(self) -> bool:

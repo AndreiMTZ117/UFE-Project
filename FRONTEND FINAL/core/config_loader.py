@@ -19,30 +19,24 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
+    "volts_per_mm": 0.200,
+    "voltage_limits": {
+        "min": -10.0,
+        "max": 10.0,
+    },
     "daq": {
+        "device_name": "Dev1",
         "analog_channels": ["Dev1/ao0", "Dev1/ao1"],
         "laser_gate_channel": "Dev1/port0/line0",
+        "ai_channels": ["Dev1/ai0", "Dev1/ai1"],
+        "ai_terminal_config": "DIFF",   # "DIFF" or "RSE"
         "f_s": 100000.0,
         "sample_rate_hz": 100000.0,
         "sync_clock": "/Dev1/ao/SampleClock",
-        # Hardware Feedback Tracking (optional AI readback of GVS position monitor)
-        "device_name": "Dev1",
-        "ai_terminal_config": "DIFF",   # "DIFF" or "RSE"
         "feedback_sign_x": 1,
         "feedback_sign_y": 1,
         "feedback_offset_x_v": 0.0,
         "feedback_offset_y_v": 0.0,
-    },
-    "galvo_dynamics": {
-        "voltage_limits": {
-            "min": -10.0,
-            "max": 10.0,
-        },
-        "volts_per_mm": 0.1,
-        "jump_delay_us": 150,
-        "mark_delay_us": 50,
-        "laser_on_delay_us": 20,
-        "laser_off_delay_us": 20,
     },
     "cad_cam": {
         "freecad_cmd": "FreeCADcmd",
@@ -98,3 +92,20 @@ def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         logger.warning(msg)
         warnings.warn(msg, UserWarning, stacklevel=2)
         return copy.deepcopy(DEFAULT_HARDWARE_CONFIG)
+
+
+def get_volts_per_mm(config: Optional[Dict[str, Any]] = None) -> float:
+    """Retrieve the canonical spatial-to-voltage scale factor in V/mm.
+
+    Args:
+        config: Optional pre-loaded hardware configuration dictionary.
+
+    Returns:
+        float: Spatial scale factor (V/mm), nominally 0.200 V/mm for +/-10V over +/-50mm.
+    """
+    cfg = config if config is not None else load_hardware_config()
+    if "volts_per_mm" in cfg:
+        return float(cfg["volts_per_mm"])
+    if "galvo_dynamics" in cfg and "volts_per_mm" in cfg["galvo_dynamics"]:
+        return float(cfg["galvo_dynamics"]["volts_per_mm"])
+    return 0.200

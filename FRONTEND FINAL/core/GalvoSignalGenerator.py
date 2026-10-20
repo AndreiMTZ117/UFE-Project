@@ -14,7 +14,7 @@ import logging
 from typing import Any, Dict, Optional, Sequence, Tuple
 import numpy as np
 from core.GCodeParser import TrajectoryBlock
-from core.config_loader import load_hardware_config
+from core.config_loader import get_volts_per_mm, load_hardware_config
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +73,11 @@ class GalvoSignalGenerator:
 
         # Resolve spatial-to-voltage scale
         if scale_factor_v_per_mm is None:
-            scale_factor_v_per_mm = float(dyn_cfg.get("volts_per_mm", 0.1))
+            scale_factor_v_per_mm = get_volts_per_mm(cfg)
 
         # Resolve voltage limits
         if voltage_limits is None:
-            raw_v_limits = dyn_cfg.get("voltage_limits", {})
+            raw_v_limits = cfg.get("voltage_limits", dyn_cfg.get("voltage_limits", {}))
             if isinstance(raw_v_limits, dict):
                 voltage_limits = (float(raw_v_limits.get("min", -10.0)), float(raw_v_limits.get("max", 10.0)))
             elif isinstance(raw_v_limits, (list, tuple)) and len(raw_v_limits) == 2:

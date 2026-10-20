@@ -14,6 +14,7 @@ import threading
 from collections import deque
 from tkinter import messagebox
 from .conexion_interfaz import HARDWARE_CONFIG
+from core.config_loader import get_volts_per_mm
 from interfaz.i18n import tr
 
 
@@ -438,7 +439,7 @@ class LogicaEjecucionMixin:
                 vx = max(-10.0, min(10.0, round(volt_x, 3)))
                 vy = max(-10.0, min(10.0, round(volt_y, 3)))
             else:
-                scale_v = getattr(self.puente, "escala_voltaje_v_mm", 0.200)
+                scale_v = getattr(self.puente, "escala_voltaje_v_mm", None) or get_volts_per_mm()
                 vx = max(-10.0, min(10.0, round((x - self.puente.centro_x) * scale_v, 3)))
                 vy = max(-10.0, min(10.0, round((y - self.puente.centro_y) * scale_v, 3)))
             self.panel_derecho.actualizar_voltajes(vx, vy, laser_on)

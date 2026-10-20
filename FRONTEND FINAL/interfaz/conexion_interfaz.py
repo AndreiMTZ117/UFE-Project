@@ -35,9 +35,98 @@ from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController, probe_feedback_hardware
+from core.config_loader import get_volts_per_mm, load_hardware_config
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
 from interfaz.i18n import tr
+
+try:
+    from scipy import signal as scipy_signal
+except ImportError:
+    scipy_signal = None
+
+
+def calcular_retardo_inercial_ms(
+    meas: np.ndarray,
+    cmd: np.ndarray,
+    sample_rate_hz: float,
+    max_lag_ms: float = 50.0,
+    min_lag_ms: float = -5.0,
+) -> float:
+    """Calcula el retardo inercial fisico de los espejos en milisegundos mediante correlacion cruzada.
+
+    Args:
+        meas: Matriz de voltajes medidos con forma (2, N).
+        cmd: Matriz de voltajes comandados con forma (2, N).
+        sample_rate_hz: Frecuencia de muestreo fs en Hz.
+        max_lag_ms: Limite superior de busqueda en ms (por defecto 50.0 ms).
+        min_lag_ms: Limite inferior de busqueda en ms (por defecto -5.0 ms).
+
+    Returns:
+        float: Retardo temporal en ms cuantificado entre la senal de comando y la respuesta real.
+    """
+    if meas.ndim == 1:
+        meas = meas.reshape(1, -1)
+    if cmd.ndim == 1:
+        cmd = cmd.reshape(1, -1)
+
+    n = min(meas.shape[1], cmd.shape[1])
+    if n < 10 or sample_rate_hz <= 0:
+        return 0.0
+
+    meas = meas[:, :n]
+    cmd = cmd[:, :n]
+
+    # Submuestreo adaptativo si la senal es muy extensa para mantener ejecucion instantanea
+    step = max(1, n // 100000)
+    if step > 1:
+        meas = meas[:, ::step]
+        cmd = cmd[:, ::step]
+        effective_fs = sample_rate_hz / step
+        n = meas.shape[1]
+    else:
+        effective_fs = sample_rate_hz
+
+    # Restar la componente DC para correlacionar sobre la dinamica de movimiento
+    meas_0 = meas[0] - np.mean(meas[0])
+    meas_1 = meas[1] - np.mean(meas[1])
+    cmd_0 = cmd[0] - np.mean(cmd[0])
+    cmd_1 = cmd[1] - np.mean(cmd[1])
+
+    std_m = np.std(meas_0) + np.std(meas_1)
+    std_c = np.std(cmd_0) + np.std(cmd_1)
+    if std_m < 1e-6 or std_c < 1e-6:
+        return 0.0
+
+    if scipy_signal is not None:
+        corr0 = scipy_signal.correlate(meas_0, cmd_0, mode="full", method="fft")
+        corr1 = scipy_signal.correlate(meas_1, cmd_1, mode="full", method="fft")
+        corr_total = corr0 + corr1
+        lags = scipy_signal.correlation_lags(n, n)
+    else:
+        n_fft = 2 ** int(np.ceil(np.log2(2 * n - 1)))
+        fft_c0 = np.fft.rfft(cmd_0, n_fft)
+        fft_m0 = np.fft.rfft(meas_0, n_fft)
+        corr0 = np.fft.irfft(fft_m0 * np.conj(fft_c0), n_fft)
+        fft_c1 = np.fft.rfft(cmd_1, n_fft)
+        fft_m1 = np.fft.rfft(meas_1, n_fft)
+        corr1 = np.fft.irfft(fft_m1 * np.conj(fft_c1), n_fft)
+        corr_total = np.concatenate([corr0[-(n - 1):], corr0[:n]]) + np.concatenate([corr1[-(n - 1):], corr1[:n]])
+        lags = np.arange(-(n - 1), n)
+
+    k_min = int(round((min_lag_ms / 1000.0) * effective_fs))
+    k_max = int(round((max_lag_ms / 1000.0) * effective_fs))
+    mask = (lags >= k_min) & (lags <= k_max)
+
+    if not np.any(mask):
+        best_lag_samples = lags[np.argmax(corr_total)]
+    else:
+        masked_lags = lags[mask]
+        masked_corr = corr_total[mask]
+        best_lag_samples = masked_lags[np.argmax(masked_corr)]
+
+    lag_ms = (best_lag_samples / effective_fs) * 1000.0
+    return float(round(lag_ms, 2))
 
 
 def cargar_perfil_hardware() -> Dict[str, Any]:
@@ -185,7 +274,8 @@ class PuenteLaser:
         self.alto_base_cm = cfg["alto_base_cm"]
         self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
         self.centro_cm_y = round(self.alto_base_cm / 2.0, 2)
-        self.escala_voltaje_v_mm = 0.200  # Thorlabs GVS112/M: +/-10V for +/-50mm (0.200 V/mm)
+        self.hardware_cfg = load_hardware_config()
+        self.escala_voltaje_v_mm = get_volts_per_mm(self.hardware_cfg)
 
         # Archivo DXF y geometrias
         self.ruta_dxf_actual: Optional[str] = None
@@ -210,6 +300,7 @@ class PuenteLaser:
         self.on_feedback_cb: Optional[Callable] = None  # callback(lista_de_puntos_xy_mm)
         self.ultimo_tracking_rms_um: Optional[float] = None
         self.ultimo_tracking_max_um: Optional[float] = None
+        self.ultimo_tracking_lag_ms: Optional[float] = None
 
         # Iniciar hardware o simulador automaticamente
         self._inicializar_hardware()
@@ -948,9 +1039,18 @@ class PuenteLaser:
         on_log(tr("log_trace_speeds", mark=v_trazado, jump=v_viaje))
         on_log(tr("log_trace_delays", jump=jump_delay_ms, mark=mark_delay_ms, on=laser_on_delay_ms, off=laser_off_delay_ms, cooling=cooling_delay_s))
 
-        fb: Dict[str, Any] = {"on": False, "idx": 0, "sumsq": 0.0, "max": 0.0, "n": 0}
+        fb: Dict[str, Any] = {
+            "on": False,
+            "idx": 0,
+            "sumsq": 0.0,
+            "max": 0.0,
+            "n": 0,
+            "chunks_meas": [],
+            "chunks_cmd": [],
+        }
         self.ultimo_tracking_rms_um = None
         self.ultimo_tracking_max_um = None
+        self.ultimo_tracking_lag_ms = None
 
         try:
             # ---------------------------------------------------------------
@@ -1041,6 +1141,8 @@ class PuenteLaser:
                         fb["sumsq"] += float(np.sum(err_mm * err_mm))
                         fb["max"] = max(fb["max"], float(np.max(err_mm)))
                         fb["n"] += int(err_mm.size)
+                        fb["chunks_meas"].append(meas)
+                        fb["chunks_cmd"].append(cmd)
                         fb["idx"] = i1
                         if self.on_feedback_cb is not None:
                             paso = max(1, (i1 - i0) // 10)
@@ -1267,16 +1369,34 @@ class PuenteLaser:
                     print(f"[PuenteLaser] Hardware cleanup notice in finally: {e_hw}")
             duracion_s = round(time.time() - t_inicio, 2)
 
-            # Tracking error metrics (only when hardware feedback produced samples)
+            # Tracking error and dynamic lag metrics (only when hardware feedback produced samples)
             trk_rms_um: Optional[float] = None
             trk_max_um: Optional[float] = None
+            trk_lag_ms: Optional[float] = None
             if fb["n"] > 0:
                 trk_rms_um = round(math.sqrt(fb["sumsq"] / fb["n"]) * 1000.0, 1)
                 trk_max_um = round(fb["max"] * 1000.0, 1)
+                if fb["chunks_meas"] and fb["chunks_cmd"]:
+                    try:
+                        meas_full = np.hstack(fb["chunks_meas"])
+                        cmd_full = np.hstack(fb["chunks_cmd"])
+                        trk_lag_ms = calcular_retardo_inercial_ms(meas_full, cmd_full, fs)
+                    except Exception as e_lag:
+                        print(f"[PuenteLaser] Lag estimation notice: {e_lag}")
+                        trk_lag_ms = 0.0
+                else:
+                    trk_lag_ms = 0.0
+
                 self.ultimo_tracking_rms_um = trk_rms_um
                 self.ultimo_tracking_max_um = trk_max_um
+                self.ultimo_tracking_lag_ms = trk_lag_ms
+                telemetry_msg = (
+                    f"[TELEMETRY] Tracking Error: RMS = {trk_rms_um:.1f} \u00b5m | "
+                    f"Max = {trk_max_um:.1f} \u00b5m | Lag = {trk_lag_ms:.2f} ms"
+                )
+                print(telemetry_msg)
                 try:
-                    on_log(f"[TELEMETRY] Tracking Error: RMS = {trk_rms_um:.1f} \u00b5m | Max = {trk_max_um:.1f} \u00b5m")
+                    on_log(telemetry_msg)
                 except Exception:
                     pass
             self._en_ejecucion = False
@@ -1306,7 +1426,8 @@ class PuenteLaser:
                     "mensaje_error": error_msg,
                     "duracion_segundos": duracion_s,
                     "tracking_rms_um": trk_rms_um,
-                    "tracking_max_um": trk_max_um
+                    "tracking_max_um": trk_max_um,
+                    "tracking_lag_ms": trk_lag_ms
                 })
                 on_log(tr("log_db_recorded", status=estado_db, dur=duracion_s))
             except Exception as e_bd:

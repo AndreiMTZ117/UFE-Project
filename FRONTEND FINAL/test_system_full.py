@@ -40,6 +40,7 @@ from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController
+from core.config_loader import get_volts_per_mm
 from database.gestor_db import GestorDB
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
@@ -116,12 +117,8 @@ def phase_1_environment_health() -> Dict[str, Any]:
         import customtkinter
         gui_framework_detected = f"CustomTkinter v{getattr(customtkinter, '__version__', 'unknown')}"
     except ImportError:
-        try:
-            import PyQt6
-            gui_framework_detected = "PyQt6"
-        except ImportError:
-            pass
-    assert gui_framework_detected is not None, "Neither CustomTkinter nor PyQt6 is importable."
+        pass
+    assert gui_framework_detected is not None, "CustomTkinter is not importable."
 
     # National Instruments DAQmx import or mock verification
     nidaqmx_available = False
@@ -340,7 +337,7 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     ]
 
     fs = 100_000.0  # 100 kHz (delta_t = 10 us)
-    v_per_mm = 0.200  # Thorlabs +/-50 mm -> +/-10 V (0.200 V/mm)
+    v_per_mm = get_volts_per_mm()  # Canonical Thorlabs +/-50 mm -> +/-10 V (0.200 V/mm)
     v_limits = (-10.0, 10.0)
 
     jump_delay_us = 150.0   # 15 samples

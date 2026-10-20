@@ -1,29 +1,27 @@
 {
+  "volts_per_mm": 0.200,
+  "voltage_limits": {
+    "min": -10.0,
+    "max": 10.0
+  },
   "daq": {
+    "device_name": "Dev1",
     "analog_channels": [
       "Dev1/ao0",
       "Dev1/ao1"
     ],
     "laser_gate_channel": "Dev1/port0/line0",
+    "ai_channels": [
+      "Dev1/ai0",
+      "Dev1/ai1"
+    ],
+    "ai_terminal_config": "DIFF",
     "sample_rate_hz": 100000.0,
     "sync_clock": "/Dev1/ao/SampleClock",
-    "device_name": "Dev1",
-    "ai_terminal_config": "DIFF",
     "feedback_sign_x": 1,
     "feedback_sign_y": 1,
     "feedback_offset_x_v": 0.0,
     "feedback_offset_y_v": 0.0
-  },
-  "galvo_dynamics": {
-    "voltage_limits": {
-      "min": -10.0,
-      "max": 10.0
-    },
-    "volts_per_mm": 0.1,
-    "jump_delay_us": 150,
-    "mark_delay_us": 50,
-    "laser_on_delay_us": 20,
-    "laser_off_delay_us": 20
   },
   "cad_cam": {
     "freecad_cmd": "FreeCADcmd",
