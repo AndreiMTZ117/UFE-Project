@@ -1091,6 +1091,19 @@ class PuenteLaser:
                     t_nominal += dur_s
                     pos = pt
 
+            # Retorno cinemático suave a Home/Centro (0V, 0V) al finalizar la pasada
+            p_home = (float(self.centro_x), float(self.centro_y))
+            dist_home = math.hypot(p_home[0] - pos[0], p_home[1] - pos[1])
+            if dist_home > 1e-9:
+                dur_home_s = max(dur_min_viaje / 1000.0, dist_home / max(0.1, v_viaje))
+                blocks.append(TrajectoryBlock("G0", pos, p_home, dist_home / dur_home_s))
+                ultimo_idx_t = max(0, len(trazos) - 1)
+                pts_ultimo = len(trazos[ultimo_idx_t]) if trazos and trazos[ultimo_idx_t] else 0
+                meta.append((ultimo_idx_t, pts_ultimo, pts_ultimo, 0))
+                t_nominal += dur_home_s
+                n_jumps += 1
+                pos = p_home
+
             if not blocks:
                 raise ValueError("Calculated paths contain no movable segments.")
 
@@ -1236,20 +1249,22 @@ class PuenteLaser:
                     fb["on"] = False
                     on_log(f"[NIDaqController Notice] {daq_e}")
 
-                def _hilo_transmision_galvo():
-                    try:
-                        if hasattr(self.controlador_hardware, "trazar_trayectorias"):
+                # Hardware driver notification / trace (only for physical hardware)
+                hilo_tx = None
+                if not self.es_simulacion and hasattr(self.controlador_hardware, "trazar_trayectorias"):
+                    def _hilo_transmision_galvo():
+                        try:
                             self.controlador_hardware.trazar_trayectorias(
                                 trazos,
                                 velocidad_marcado=v_trazado,
                                 velocidad_salto=v_viaje,
                                 check_cancel=lambda: self._evento_detener.is_set()
                             )
-                    except Exception as e:
-                        on_log(f"[GVS] Galvo tracing driver notice: {e}")
+                        except Exception as e:
+                            on_log(f"[GVS] Galvo tracing driver notice: {e}")
 
-                hilo_tx = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
-                hilo_tx.start()
+                    hilo_tx = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
+                    hilo_tx.start()
 
                 # Real-time telemetry replay (~35 fps) of the generated signals
                 t0 = time.time()
@@ -1302,9 +1317,9 @@ class PuenteLaser:
                         break
                     time.sleep(0.028)
 
-                # Wait for hardware transmission thread for this pass
+                # Wait for hardware transmission thread for this pass (non-blocking if already complete)
                 if hilo_tx and hilo_tx.is_alive():
-                    timeout_join = 0.5 if self._evento_detener.is_set() else 120.0
+                    timeout_join = 0.5 if self._evento_detener.is_set() else 0.05
                     hilo_tx.join(timeout=timeout_join)
 
                 # Drain remaining feedback samples before the DAQ is released
