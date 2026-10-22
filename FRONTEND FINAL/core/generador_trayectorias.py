@@ -13,7 +13,7 @@ import math
 from .lector_dxf import obtener_limites_dxf
 from .PathOptimizer import optimizar_y_unir_trazos, simplificar_trayectoria_rdp
 
-def transformar_y_escalar_dxf(trayectorias,
+def transform_and_scale_dxf(trayectorias,
                                x_min_limit, x_max_limit,
                                y_min_limit, y_max_limit,
                                escala=0.75,

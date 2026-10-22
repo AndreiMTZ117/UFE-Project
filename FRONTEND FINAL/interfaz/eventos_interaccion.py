@@ -21,9 +21,9 @@ class EventosInteraccionMixin:
 
     def _on_com_seleccionado(self, val: str):
         """Maneja la detección/re-escaneo del sistema Thorlabs GVS112/M."""
-        if hasattr(self.puente, "detectar_hardware"):
-            self.puente.detectar_hardware()
-        conectado = self.puente.esta_conectado_fisico()
+        if hasattr(self.puente, "detect_hardware"):
+            self.puente.detect_hardware()
+        conectado = self.puente.is_physically_connected()
         self.barra_superior.set_estado_com(conectado)
         estado_hw = "Thorlabs GVS112/M" if conectado else "Virtual Simulation"
         self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
@@ -34,14 +34,14 @@ class EventosInteraccionMixin:
 
     def _on_click_load_file(self):
         """Opens file browser to select a DXF drawing for CAD/CAM G-code conversion and tracing."""
-        if self.puente.en_ejecucion or getattr(self, "_cargando_dxf", False):
+        if self.puente.is_running or getattr(self, "_cargando_dxf", False):
             return
         ruta = filedialog.askopenfilename(
             title="Load DXF Drawing",
             filetypes=[("DXF Drawing Files (*.dxf)", "*.dxf"), ("All Files (*.*)", "*.*")]
         )
         if ruta:
-            dxfs = self.puente.listar_archivos_dxf()
+            dxfs = self.puente.list_dxf_files()
             nombres = [os.path.basename(f) for f in dxfs]
             if os.path.basename(ruta) not in nombres:
                 nombres.append(os.path.basename(ruta))
@@ -50,12 +50,12 @@ class EventosInteraccionMixin:
 
     def _on_dxf_seleccionado(self, val: str):
         """Loads a selected DXF or triggers file browser."""
-        if self.puente.en_ejecucion or getattr(self, "_cargando_dxf", False):
+        if self.puente.is_running or getattr(self, "_cargando_dxf", False):
             return
         if val in ("[ Load File... ]", "[ Načíst soubor... ]", tr("dxf_load_file")):
             self._on_click_load_file()
         else:
-            dxfs = self.puente.listar_archivos_dxf()
+            dxfs = self.puente.list_dxf_files()
             for f in dxfs:
                 if os.path.basename(f) == val:
                     self._cargar_archivo_dxf(f)
@@ -68,7 +68,7 @@ class EventosInteraccionMixin:
 
     def _on_receta_seleccionada(self, nombre_receta: str):
         """Carga los parámetros de una receta seleccionada en el formulario."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
         for r in self.lista_recetas:
             if r["nombre"] == nombre_receta:
@@ -80,34 +80,34 @@ class EventosInteraccionMixin:
                 self.panel_config.set_delete_visible(not es_default)
 
                 if self.puente.ruta_dxf_actual:
-                    self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
+                    self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
                     self._actualizar_vistas_canvases()
                 self.terminal.log(tr("log_recipe_sel", name=nombre_receta))
                 break
 
     def _on_rotacion_cambiada(self, angulo: float):
         """Recalcula las trayectorias cuando cambia el ángulo de rotación (0°-360°)."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
         if self.puente.ruta_dxf_actual:
-            self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
+            self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
             self._actualizar_vistas_canvases()
 
     def _on_parametro_cambiado(self, clave: str, valor: float):
         """Recalcula las trayectorias inmediatamente cuando cambia la escala, rotación o tolerancias en el formulario."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
         if clave in (
             "escala_dibujo", "rotacion_grados", "tolerancia_rdp", "tolerancia_union",
             "longitud_min_trazo", "invert_x", "invert_y", "swap_xy"
         ):
             if self.puente.ruta_dxf_actual:
-                self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
+                self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
                 self._actualizar_vistas_canvases()
 
     def _on_guardar_receta(self):
         """Persiste los cambios del formulario en la receta actual (SQLite3)."""
-        if self.puente.en_ejecucion or not self.receta_activa:
+        if self.puente.is_running or not self.receta_activa:
             return
 
         nombre_receta = self.receta_activa.get("nombre", "Recipe")
@@ -121,7 +121,7 @@ class EventosInteraccionMixin:
         datos = self.panel_config.obtener_datos_formulario()
         receta_id = self.receta_activa.get("id")
         try:
-            self.puente.guardar_o_actualizar_receta(datos, receta_id)
+            self.puente.save_or_update_recipe(datos, receta_id)
             messagebox.showinfo(tr("dlg_save_recipe_title"), tr("dlg_save_recipe_ok", name=nombre_receta))
             self.terminal.log(tr("log_recipe_saved", id=receta_id, name=nombre_receta))
         except Exception as e:
@@ -129,7 +129,7 @@ class EventosInteraccionMixin:
 
     def _on_crear_receta(self):
         """Solicita nombre y crea una nueva receta en la base de datos."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
         dialog = ctk.CTkInputDialog(text=tr("dlg_new_recipe_prompt"), title=tr("dlg_new_recipe_title"))
         nombre = dialog.get_input()
@@ -141,11 +141,11 @@ class EventosInteraccionMixin:
         datos["polimero"] = "Custom Polymer"
 
         try:
-            nuevo_id = self.puente.guardar_o_actualizar_receta(datos)
-            self.lista_recetas = self.puente.obtener_recetas()
+            nuevo_id = self.puente.save_or_update_recipe(datos)
+            self.lista_recetas = self.puente.get_recipes()
             nombres = [r["nombre"] for r in self.lista_recetas]
             self.panel_config.set_recetas(nombres, seleccionada=nombre.strip())
-            self.receta_activa = self.puente.obtener_receta_por_id(nuevo_id)
+            self.receta_activa = self.puente.get_recipe_by_id(nuevo_id)
             # Mostrar botón de eliminar para recetas personalizadas
             self.panel_config.set_delete_visible(True)
             messagebox.showinfo(tr("dlg_new_recipe_title"), tr("dlg_new_recipe_ok", name=nombre))
@@ -154,7 +154,7 @@ class EventosInteraccionMixin:
 
     def _on_eliminar_receta(self):
         """Elimina la receta activa de la base de datos SQLite3 (solo personalizadas)."""
-        if self.puente.en_ejecucion or not self.receta_activa:
+        if self.puente.is_running or not self.receta_activa:
             return
 
         nombre = self.receta_activa.get("nombre", "")
@@ -171,9 +171,9 @@ class EventosInteraccionMixin:
 
         confirma = messagebox.askyesno(tr("dlg_del_recipe_title"), tr("dlg_del_recipe_msg", name=nombre))
         if confirma:
-            exito = self.puente.eliminar_receta(receta_id)
+            exito = self.puente.delete_recipe(receta_id)
             if exito:
-                self.lista_recetas = self.puente.obtener_recetas()
+                self.lista_recetas = self.puente.get_recipes()
                 nombres = [r["nombre"] for r in self.lista_recetas]
                 self.panel_config.set_recetas(nombres)
                 if self.lista_recetas:
@@ -183,24 +183,24 @@ class EventosInteraccionMixin:
 
     def _on_centro_cambiado(self, x: float, y: float):
         """Actualiza el centro de reposo de la máquina y posiciona el puntero (alteración manual)."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
-        self.puente.set_centro_cm(x, y)
+        self.puente.set_center_cm(x, y)
         self.pos_laser_actual = (x, y)
         self.panel_general.set_centro(x, y)
         self.panel_derecho.actualizar_coordenadas(x, y)
-        if not self.puente.en_ejecucion:
-            self.puente.centrar_galvos()
+        if not self.puente.is_running:
+            self.puente.center_galvos()
         self.terminal.log(tr("log_home_set", x=x, y=y))
         if self.puente.ruta_dxf_actual:
-            self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
+            self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
         self._actualizar_vistas_canvases()
 
     def _on_dimensiones_cambiadas(self, ancho_cm: float, alto_cm: float):
         """Actualiza las dimensiones de la base física de trabajo, recalcula el centro automáticamente y trazos."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
-        self.puente.set_dimensiones_base(ancho_cm, alto_cm)
+        self.puente.set_base_dimensions(ancho_cm, alto_cm)
         cx = self.puente.centro_cm_x
         cy = self.puente.centro_cm_y
         self.pos_laser_actual = (cx, cy)
@@ -209,7 +209,7 @@ class EventosInteraccionMixin:
         self.panel_derecho.actualizar_coordenadas(cx, cy)
 
         if self.puente.ruta_dxf_actual:
-            self.puente.recalcular_trayectorias(self.panel_config.obtener_datos_formulario())
+            self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
             self._actualizar_vistas_canvases()
             self.terminal.log(tr("log_base_recalc", w=ancho_cm, h=alto_cm, cx=cx, cy=cy))
         else:

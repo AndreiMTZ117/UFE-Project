@@ -24,7 +24,7 @@ from .PathOptimizer import (
 from .GalvoSignalGenerator import GalvoSignalGenerator
 from .NIDaqController import NIDaqController, NIDaqError
 from .lector_dxf import LectorDXF, obtener_limites_dxf
-from .generador_trayectorias import transformar_y_escalar_dxf
+from .generador_trayectorias import transform_and_scale_dxf
 
 __all__ = [
     "load_hardware_config",
@@ -41,6 +41,6 @@ __all__ = [
     "obtener_limites_dxf",
     "optimizar_y_unir_trazos",
     "simplificar_trayectoria_rdp",
-    "transformar_y_escalar_dxf",
+    "transform_and_scale_dxf",
 ]
 

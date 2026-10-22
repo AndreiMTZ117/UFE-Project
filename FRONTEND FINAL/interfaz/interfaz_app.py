@@ -135,11 +135,11 @@ class AppLaserCTk(
         # Detener la ejecucion y apagar laser de inmediato
         try:
             if hasattr(self, 'puente'):
-                if self.puente.en_ejecucion:
-                    self.puente.detener_ejecucion()
+                if self.puente.is_running:
+                    self.puente.stop_execution()
                 if self.puente.controlador_hardware:
                     try:
-                        self.puente.apagar_laser()
+                        self.puente.laser_off()
                         self.puente.controlador_hardware.cerrar()
                     except Exception:
                         pass

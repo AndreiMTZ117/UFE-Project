@@ -18,11 +18,11 @@ class GestionDatosMixin:
     def _cargar_datos_iniciales(self):
         """Carga inicial de recetas de SQLite3, estado del hardware y archivos DXF."""
         # 1. Recetas SQLite3
-        self.lista_recetas = self.puente.obtener_recetas()
+        self.lista_recetas = self.puente.get_recipes()
         nombres_recetas = [r["nombre"] for r in self.lista_recetas] if self.lista_recetas else ["Acrylic — Standard"]
         self.panel_config.set_recetas(nombres_recetas)
 
-        receta_def = self.puente.obtener_receta_default()
+        receta_def = self.puente.get_default_recipe()
         if receta_def:
             self.receta_activa = receta_def
             self.panel_config.set_recetas(nombres_recetas, seleccionada=receta_def["nombre"])
@@ -32,7 +32,7 @@ class GestionDatosMixin:
             self.panel_config.set_delete_visible(not es_default)
 
         # 2. Estado del hardware Thorlabs GVS112/M
-        conectado_fisico = self.puente.esta_conectado_fisico()
+        conectado_fisico = self.puente.is_physically_connected()
         self.barra_superior.set_estado_com(conectado_fisico)
         if conectado_fisico:
             self.terminal.log(tr("log_hw_connected"))
@@ -44,7 +44,7 @@ class GestionDatosMixin:
         self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
 
         # 3. Archivos DXF
-        dxfs = self.puente.listar_archivos_dxf()
+        dxfs = self.puente.list_dxf_files()
         nombres_dxf = [os.path.basename(f) for f in dxfs]
 
         archivo_sel = dxfs[0] if dxfs else None
@@ -98,7 +98,7 @@ class GestionDatosMixin:
 
         if not asincrono:
             try:
-                res = self.puente.cargar_dxf(ruta, params)
+                res = self.puente.load_dxf(ruta, params)
                 _aplicar_exito(res)
             except Exception as e:
                 _aplicar_error(e)
@@ -106,7 +106,7 @@ class GestionDatosMixin:
 
         def worker():
             try:
-                res = self.puente.cargar_dxf(ruta, params)
+                res = self.puente.load_dxf(ruta, params)
                 try:
                     self.after(0, _aplicar_exito, res)
                 except Exception:

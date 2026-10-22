@@ -4,7 +4,7 @@ interfaz/conexion_interfaz.py — Puente de Conexion Backend <-> Interfaz Grafic
 
 Gestiona:
   1. Base de datos SQLite3 (GestorRecetas y GestorTrazabilidad)
-  2. Procesamiento de archivos DXF (LectorDXF y transformar_y_escalar_dxf)
+  2. Procesamiento de archivos DXF (LectorDXF y transform_and_scale_dxf)
   3. Conexion al sistema Thorlabs GVS112/M (fisico o simulacion automatica)
   4. Hilo asincrono de ejecucion con telemetria en tiempo real,
      control estricto del laser y parada instantanea no bloqueante.
@@ -30,7 +30,7 @@ if _DIR_RAIZ not in sys.path:
     sys.path.insert(0, _DIR_RAIZ)
 
 from core.lector_dxf import LectorDXF, obtener_limites_dxf
-from core.generador_trayectorias import transformar_y_escalar_dxf
+from core.generador_trayectorias import transform_and_scale_dxf
 from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
@@ -46,7 +46,7 @@ except ImportError:
     scipy_signal = None
 
 
-def calcular_retardo_inercial_ms(
+def calc_inertial_lag_ms(
     meas: np.ndarray,
     cmd: np.ndarray,
     sample_rate_hz: float,
@@ -129,7 +129,7 @@ def calcular_retardo_inercial_ms(
     return float(round(lag_ms, 2))
 
 
-def cargar_perfil_hardware() -> Dict[str, Any]:
+def load_hardware_profile() -> Dict[str, Any]:
     """Carga el perfil cinematico y geometrico del Thorlabs GVS112/M."""
     try:
         from hardware.config_galvo import (
@@ -174,7 +174,7 @@ def cargar_perfil_hardware() -> Dict[str, Any]:
 
 
 HARDWARE_CONFIG = {
-    "thorlabs_galvo": cargar_perfil_hardware()
+    "thorlabs_galvo": load_hardware_profile()
 }
 
 
@@ -228,7 +228,7 @@ PRESETS_MODO_PROCESO: Dict[str, Dict[str, Any]] = {
 }
 
 
-def obtener_preset_modo(modo: str) -> Dict[str, Any]:
+def get_mode_preset(modo: str) -> Dict[str, Any]:
     """Return recommended process parameters dictionary for Cutting, Welding, or Marking.
 
     Args:
@@ -301,14 +301,14 @@ class PuenteLaser:
         self.ultimo_tracking_lag_ms: Optional[float] = None
 
         #start hardware or simulator
-        self._inicializar_hardware()
+        self._init_hardware()
 
-    def _inicializar_hardware(self):
+    def _init_hardware(self):
         """Intenta inicializar el hardware Thorlabs. Si esta en modo simulacion o falla, activa simulador."""
         try:
             from hardware.config_galvo import TIPO_INTERFAZ_DAC
             if TIPO_INTERFAZ_DAC == "SIMULACION":
-                self._activar_simulador()
+                self._enable_simulator()
                 return
 
             from hardware.controlador_thorlabs import ControladorThorlabsGVS
@@ -318,9 +318,9 @@ class PuenteLaser:
             print("[PuenteLaser] Thorlabs GVS112/M physical hardware detected and ready.")
         except Exception as e:
             print(f"[PuenteLaser] Hardware fisico no disponible ({e}). Activando simulador.")
-            self._activar_simulador()
+            self._enable_simulator()
 
-    def _activar_simulador(self):
+    def _enable_simulator(self):
         """Instancia el simulador Thorlabs como fallback."""
         try:
             from hardware.simulador_thorlabs import SimuladorThorlabsGVS
@@ -332,12 +332,12 @@ class PuenteLaser:
             self.controlador_hardware = None
             self.es_simulacion = True
 
-    def detectar_hardware(self) -> bool:
+    def detect_hardware(self) -> bool:
         """Intenta inicializar o detectar el hardware Thorlabs GVS112/M fisico."""
-        self._inicializar_hardware()
-        return self.esta_conectado_fisico()
+        self._init_hardware()
+        return self.is_physically_connected()
 
-    def set_dimensiones_base(self, ancho_cm: float, alto_cm: float):
+    def set_base_dimensions(self, ancho_cm: float, alto_cm: float):
         """Define las dimensiones fisicas de la base y recalcula el centro."""
         self.ancho_base_cm = float(ancho_cm)
         self.alto_base_cm = float(alto_cm)
@@ -347,7 +347,7 @@ class PuenteLaser:
         self.centro_y = HARDWARE_CONFIG["thorlabs_galvo"]["centro_y"]
         print(f"[PuenteLaser] Dimensiones base: {self.ancho_base_cm:.1f} x {self.alto_base_cm:.1f} cm")
 
-    def set_centro_cm(self, x_cm: float, y_cm: float):
+    def set_center_cm(self, x_cm: float, y_cm: float):
         """Define el centro en centimetros (ajuste manual del usuario)."""
         self.centro_cm_x = float(x_cm)
         self.centro_cm_y = float(y_cm)
@@ -373,54 +373,54 @@ class PuenteLaser:
         print(f"[PuenteLaser] Centro manual: ({self.centro_cm_x:.2f}, {self.centro_cm_y:.2f}) cm -> HW: ({self.centro_x:.2f}, {self.centro_y:.2f})")
 
     #recipes db
-    def obtener_recetas(self) -> List[Dict]:
+    def get_recipes(self) -> List[Dict]:
         try:
             return self.gestor_recetas.listar_recetas()
         except Exception as e:
             print(f"[Conexion] Error al listar recetas: {e}")
             return []
 
-    def obtener_receta_por_id(self, receta_id: int) -> Dict:
+    def get_recipe_by_id(self, receta_id: int) -> Dict:
         try:
             return self.gestor_recetas.obtener_receta(receta_id)
         except Exception as e:
             print(f"[Conexion] Error al obtener receta {receta_id}: {e}")
             return {}
 
-    def obtener_receta_default(self) -> Dict:
-        recipes = self.obtener_recetas()
+    def get_default_recipe(self) -> Dict:
+        recipes = self.get_recipes()
         for r in recipes:
             name = r.get("nombre", "").lower()
             if "acrylic" in name or "acrilico" in name or "standard" in name or "estandar" in name:
                 return r
         return recipes[0] if recipes else {}
 
-    def guardar_o_actualizar_receta(self, datos: Dict, receta_id: Optional[int] = None) -> int:
+    def save_or_update_recipe(self, datos: Dict, receta_id: Optional[int] = None) -> int:
         if receta_id is not None:
             self.gestor_recetas.actualizar_receta(receta_id, datos)
             return receta_id
         else:
             return self.gestor_recetas.crear_receta(datos)
 
-    def eliminar_receta(self, receta_id: int) -> bool:
+    def delete_recipe(self, receta_id: int) -> bool:
         try:
             return self.gestor_recetas.eliminar_receta(receta_id)
         except Exception as e:
             print(f"[Conexion] Error al eliminar receta {receta_id}: {e}")
             return False
 
-    def obtener_preset_modo(self, modo: str) -> Dict[str, Any]:
+    def get_mode_preset(self, modo: str) -> Dict[str, Any]:
         """
         Returns recommended process parameters for Cutting, Welding, or Marking.
         """
-        return obtener_preset_modo(modo)
+        return get_mode_preset(modo)
 
     #hardware state
-    def esta_conectado_fisico(self) -> bool:
+    def is_physically_connected(self) -> bool:
         """Informa si hay hardware real listo (no simulacion)."""
         return not self.es_simulacion and self.controlador_hardware is not None
 
-    def feedback_soportado(self) -> Tuple[bool, str]:
+    def is_feedback_supported(self) -> Tuple[bool, str]:
         """Informa si el Hardware Feedback Tracking puede activarse.
 
         Returns:
@@ -442,12 +442,12 @@ class PuenteLaser:
             self.feedback_habilitado = bool(habilitar)
         return self.feedback_habilitado
 
-    def obtener_nombre_hardware(self) -> str:
+    def get_hardware_name(self) -> str:
         if self.es_simulacion:
             return "Thorlabs GVS112/M (Simulation)"
         return HARDWARE_CONFIG["thorlabs_galvo"].get("nombre", "Thorlabs GVS112/M")
 
-    def apagar_laser(self):
+    def laser_off(self):
         """Apaga el laser de forma segura."""
         if self.controlador_hardware:
             try:
@@ -456,7 +456,7 @@ class PuenteLaser:
             except Exception as e:
                 print(f"[PuenteLaser] Error apagando laser: {e}")
 
-    def centrar_galvos(self):
+    def center_galvos(self):
         """Posiciona los espejos galvanometricos en reposo Home (0.0 V, 0.0 V) de forma segura."""
         if self.controlador_hardware:
             try:
@@ -468,7 +468,7 @@ class PuenteLaser:
                 print(f"[PuenteLaser] Error centrando galvos: {e}")
 
     #hardware coordinate transform
-    def transformar_coordenada_hardware(
+    def transform_hardware_coordinate(
         self,
         x: float,
         y: float,
@@ -500,7 +500,7 @@ class PuenteLaser:
 
         return (round(x, 4), round(y, 4))
 
-    def aplicar_transformacion_hardware(
+    def apply_hardware_transform(
         self,
         trazos: List[List[Tuple[float, float]]],
         invert_x: bool = False,
@@ -516,7 +516,7 @@ class PuenteLaser:
         paths_tf: List[List[Tuple[float, float]]] = []
         for route in trazos:
             route_tf = [
-                self.transformar_coordenada_hardware(
+                self.transform_hardware_coordinate(
                     float(pt[0]), float(pt[1]),
                     invert_x=invert_x,
                     invert_y=invert_y,
@@ -528,7 +528,7 @@ class PuenteLaser:
         return paths_tf
 
     #dxf files
-    def listar_archivos_dxf(self) -> List[str]:
+    def list_dxf_files(self) -> List[str]:
         patterns = [
             os.path.join(_DIR_RAIZ, "dxf", "*.dxf"),
             os.path.join(_DIR_RAIZ, "*.dxf")
@@ -545,7 +545,7 @@ class PuenteLaser:
                 result.append(f)
         return result
 
-    def _generar_gcode_desde_dxf(self, fuente_dxf_o_trazos: Any, ruta_gcode: str):
+    def _generate_gcode_from_dxf(self, fuente_dxf_o_trazos: Any, ruta_gcode: str):
         """Generates standard ISO 6983 G-code from DXF vector contours or pre-extracted paths."""
         if isinstance(fuente_dxf_o_trazos, list):
             paths = fuente_dxf_o_trazos
@@ -574,7 +574,7 @@ class PuenteLaser:
         with open(ruta_gcode, "w", encoding="ascii", newline="\n") as fh:
             fh.write("\n".join(lines) + "\n")
 
-    def cargar_dxf(self, ruta_archivo: str, params_receta: Dict) -> Dict:
+    def load_dxf(self, ruta_archivo: str, params_receta: Dict) -> Dict:
         """
         Loads DXF with 100% entity preservation via high-performance LectorDXF (ezdxf),
         generates standard ISO 6983 G-code, parses blocks, and optimizes trajectories.
@@ -597,7 +597,7 @@ class PuenteLaser:
         output_gcode_path = base_name + ".gcode"
 
         #generate gcode from all paths
-        self._generar_gcode_desde_dxf(dxf_paths, output_gcode_path)
+        self._generate_gcode_from_dxf(dxf_paths, output_gcode_path)
 
         #parse gcode
         v_mark = float(params_receta.get("velocidad_trazado", 2.0))
@@ -615,9 +615,9 @@ class PuenteLaser:
         )
         self.bloques_gcode_optimizados = optimizer.optimize(self.bloques_gcode_crudos)
 
-        return self.recalcular_trayectorias(params_receta)
+        return self.recalculate_paths(params_receta)
 
-    def recalcular_trayectorias(self, params_receta: Dict) -> Dict:
+    def recalculate_paths(self, params_receta: Dict) -> Dict:
         """Aplica escala, rotación y optimización espacial preservando todas las figuras geométricas."""
         if not self.trazos_originales:
             return {}
@@ -644,7 +644,7 @@ class PuenteLaser:
         cal_width = cfg.get("marco_ancho_cm", 10.0)
         cal_height = cfg.get("marco_alto_cm", 10.0)
 
-        self.trazos_calibrados = transformar_y_escalar_dxf(
+        self.trazos_calibrados = transform_and_scale_dxf(
             self.trazos_originales,
             x_min_limit=self.x_min_limit,
             x_max_limit=self.x_max_limit,
@@ -671,7 +671,7 @@ class PuenteLaser:
         swap_xy = bool(params_receta.get("swap_xy", False))
 
         if invert_x or invert_y or swap_xy:
-            self.trazos_calibrados = self.aplicar_transformacion_hardware(
+            self.trazos_calibrados = self.apply_hardware_transform(
                 self.trazos_calibrados,
                 invert_x=invert_x,
                 invert_y=invert_y,
@@ -715,7 +715,7 @@ class PuenteLaser:
         }
 
     #async execution
-    def iniciar_ejecucion(self,
+    def start_execution(self,
                           params_receta: Dict,
                           on_progress: Callable,
                           on_log: Callable,
@@ -731,13 +731,13 @@ class PuenteLaser:
         self._esta_pausado = False
 
         self._hilo_ejecucion = threading.Thread(
-            target=self._hilo_trabajo,
+            target=self._worker_thread,
             args=(params_receta, on_progress, on_log, on_finished, on_pass_change),
             daemon=True
         )
         self._hilo_ejecucion.start()
 
-    def pausar_o_reanudar(self) -> bool:
+    def toggle_pause(self) -> bool:
         """Alterna entre pausa y reanudacion de forma no bloqueante."""
         if not self._en_ejecucion:
             return False
@@ -754,17 +754,17 @@ class PuenteLaser:
         else:
             self._esta_pausado = True
             self._evento_pausa.clear()
-            self.apagar_laser()
+            self.laser_off()
             return True
 
-    def pausar_por_seguridad(self):
+    def pause_for_safety(self):
         """Pausa inmediata preventiva."""
         if not self._en_ejecucion:
             return
         self._esta_pausado = True
         self._evento_pausa.clear()
 
-    def detener_ejecucion(self):
+    def stop_execution(self):
         """Detiene la ejecucion activa inmediatamente con parada atomica E-STOP."""
         self._evento_detener.set()
         self._evento_pausa.set()
@@ -778,13 +778,13 @@ class PuenteLaser:
                 if hasattr(self.controlador_hardware, "abortar_inmediato"):
                     self.controlador_hardware.abortar_inmediato()
                 else:
-                    self.apagar_laser()
+                    self.laser_off()
             except Exception as e:
                 print(f"[PuenteLaser] Error al abortar hardware en E-STOP: {e}")
-        self.apagar_laser()
-        self.centrar_galvos()
+        self.laser_off()
+        self.center_galvos()
 
-    def ejecutar_enmarcado(
+    def run_framing(
         self,
         params: Optional[Dict[str, Any]] = None,
         on_progress: Optional[Callable] = None,
@@ -856,7 +856,7 @@ class PuenteLaser:
             dur_s = max(0.010, dist_home / max(0.1, v_jump))
             blocks.append(TrajectoryBlock("G0", pos, p_home, dist_home / dur_s))
 
-        def _hilo_enmarcado():
+        def _framing_thread():
             t_start = time.time()
             self._en_ejecucion = True
             self._evento_detener.clear()
@@ -865,7 +865,7 @@ class PuenteLaser:
             error_msg = ""
 
             #make sure laser is off
-            self.apagar_laser()
+            self.laser_off()
 
             if on_log:
                 s_suf = 's' if num_laps > 1 else ''
@@ -948,7 +948,7 @@ class PuenteLaser:
                 if on_log:
                     on_log(f"[Framing ERROR] {e}")
             finally:
-                self.apagar_laser()
+                self.laser_off()
                 if hasattr(self, "daq_controller") and self.daq_controller:
                     try:
                         self.daq_controller.stop_and_clear()
@@ -960,22 +960,22 @@ class PuenteLaser:
                     on_finished(state, error_msg, dur_s)
 
         if asincrono:
-            self._hilo_ejecucion = threading.Thread(target=_hilo_enmarcado, daemon=True)
+            self._hilo_ejecucion = threading.Thread(target=_framing_thread, daemon=True)
             self._hilo_ejecucion.start()
             return True
         else:
-            _hilo_enmarcado()
+            _framing_thread()
             return True
 
     @property
-    def en_ejecucion(self) -> bool:
+    def is_running(self) -> bool:
         return self._en_ejecucion
 
     @property
-    def esta_pausado(self) -> bool:
+    def is_paused(self) -> bool:
         return self._esta_pausado
 
-    def _hilo_trabajo(self,
+    def _worker_thread(self,
                       params: Dict,
                       on_progress: Callable,
                       on_log: Callable,
@@ -997,7 +997,7 @@ class PuenteLaser:
         if not paths:
             if self.ruta_dxf_actual and os.path.exists(self.ruta_dxf_actual):
                 on_log(tr("log_exec_processing"))
-                self.cargar_dxf(self.ruta_dxf_actual, params)
+                self.load_dxf(self.ruta_dxf_actual, params)
                 paths = self.trazos_calibrados
         if not paths:
             self._en_ejecucion = False
@@ -1023,7 +1023,7 @@ class PuenteLaser:
         hw_mode = 'PHYSICAL HARDWARE' if not self.es_simulacion else 'VIRTUAL SIMULATION'
         on_log(tr("log_trace_start", mode=process_mode, passes=num_passes, file=self.nombre_dxf_actual))
         on_log(tr("log_trace_header", file=self.nombre_dxf_actual))
-        on_log(tr("log_trace_hw", hw=self.obtener_nombre_hardware(), mode=hw_mode))
+        on_log(tr("log_trace_hw", hw=self.get_hardware_name(), mode=hw_mode))
         on_log(tr("log_trace_paths", paths=total_paths, waypoints=total_points, passes=num_passes))
         on_log(tr("log_trace_speeds", mark=v_mark, jump=v_jump))
         on_log(tr("log_trace_delays", jump=jump_delay_ms, mark=mark_delay_ms, on=laser_on_delay_ms, off=laser_off_delay_ms, cooling=cooling_delay_s))
@@ -1112,7 +1112,7 @@ class PuenteLaser:
             on_log(f"Signal timeline: {n_samples} samples @ {fs:.0f} Hz "
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
 
-            def _drenar_feedback(final: bool = False) -> None:
+            def _drain_feedback(final: bool = False) -> None:
                 """Lee muestras AI nuevas, acumula el error de seguimiento y emite puntos medidos."""
                 if not fb["on"] or not self.daq_controller:
                     return
@@ -1230,7 +1230,7 @@ class PuenteLaser:
                 #hardware driver trace
                 tx_thread = None
                 if not self.es_simulacion and hasattr(self.controlador_hardware, "trazar_trayectorias"):
-                    def _hilo_transmision_galvo():
+                    def _galvo_tx_thread():
                         try:
                             self.controlador_hardware.trazar_trayectorias(
                                 paths,
@@ -1241,7 +1241,7 @@ class PuenteLaser:
                         except Exception as e:
                             on_log(f"[GVS] Galvo tracing driver notice: {e}")
 
-                    tx_thread = threading.Thread(target=_hilo_transmision_galvo, daemon=True)
+                    tx_thread = threading.Thread(target=_galvo_tx_thread, daemon=True)
                     tx_thread.start()
 
                 #telemetry replay ~35fps
@@ -1261,7 +1261,7 @@ class PuenteLaser:
                         t0 += time.time() - t_pausa
                         continue
 
-                    _drenar_feedback()
+                    _drain_feedback()
 
                     k = min(k_last, int((time.time() - t0) * fs))
                     block_i = int(block_idx[k])
@@ -1302,10 +1302,10 @@ class PuenteLaser:
 
                 #read remaining feedback
                 if fb["on"] and not self._evento_detener.is_set():
-                    _drenar_feedback(final=True)
+                    _drain_feedback(final=True)
 
                 #laser off, clear daq
-                self.apagar_laser()
+                self.laser_off()
                 if hasattr(self, "daq_controller") and self.daq_controller:
                     try:
                         self.daq_controller.stop_and_clear()
@@ -1339,7 +1339,7 @@ class PuenteLaser:
             if self._evento_detener.is_set():
                 state = "ABORTED"
                 on_log(tr("log_stop_executed"))
-                self.apagar_laser()
+                self.laser_off()
                 on_log(tr("log_stop_rest"))
             else:
                 on_log(tr("log_work_completed"))
@@ -1351,7 +1351,7 @@ class PuenteLaser:
 
         finally:
             #failsafe: laser off, mirrors home
-            self.apagar_laser()
+            self.laser_off()
             if hasattr(self, "daq_controller") and self.daq_controller:
                 try:
                     self.daq_controller.stop_and_clear()
@@ -1378,7 +1378,7 @@ class PuenteLaser:
                     try:
                         meas_full = np.hstack(fb["chunks_meas"])
                         cmd_full = np.hstack(fb["chunks_cmd"])
-                        trk_lag_ms = calcular_retardo_inercial_ms(meas_full, cmd_full, fs)
+                        trk_lag_ms = calc_inertial_lag_ms(meas_full, cmd_full, fs)
                     except Exception as e_lag:
                         print(f"[PuenteLaser] Lag estimation notice: {e_lag}")
                         trk_lag_ms = 0.0

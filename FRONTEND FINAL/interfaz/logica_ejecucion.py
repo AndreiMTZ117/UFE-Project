@@ -23,12 +23,12 @@ class LogicaEjecucionMixin:
 
     def _on_click_start(self):
         """Inicia el trabajo de corte/grabado tras validar requisitos."""
-        if getattr(self, "_ejecutando_inicio", False) or self.puente.en_ejecucion:
+        if getattr(self, "_ejecutando_inicio", False) or self.puente.is_running:
             return
         self._ejecutando_inicio = True
         try:
             # 1. Validacion de hardware / Simulacion
-            if not self.puente.esta_conectado_fisico():
+            if not self.puente.is_physically_connected():
                 proceder = messagebox.askyesno(
                     tr("dlg_hw_notice_title"),
                     tr("dlg_hw_notice_msg")
@@ -71,7 +71,7 @@ class LogicaEjecucionMixin:
                 params["_receta_nombre"] = self.receta_activa.get("nombre", "Manual")
 
             self._pass_actual = 1
-            self.puente.iniciar_ejecucion(
+            self.puente.start_execution(
                 params_receta=params,
                 on_progress=self._cb_progreso,
                 on_log=self._cb_log,
@@ -83,11 +83,11 @@ class LogicaEjecucionMixin:
 
     def _on_click_pause_resume(self):
         """Pausa o reanuda la ejecución en curso (congela/reanuda cronómetro)."""
-        esta_pausado = self.puente.pausar_o_reanudar()
-        self.panel_derecho.set_estado_pausa(esta_pausado)
+        is_paused = self.puente.toggle_pause()
+        self.panel_derecho.set_estado_pausa(is_paused)
         if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
-            self.panel_config.set_estado_pausa(esta_pausado)
-        if esta_pausado:
+            self.panel_config.set_estado_pausa(is_paused)
+        if is_paused:
             self.tiempo_ultima_pausa = time.time()
             self.terminal.log(tr("log_pause"))
         else:
@@ -98,12 +98,12 @@ class LogicaEjecucionMixin:
 
     def _on_click_stop(self):
         """Parada de emergencia inmediata: solicita confirmación y aborta la ejecución."""
-        if not self.puente.en_ejecucion:
+        if not self.puente.is_running:
             return
 
-        estaba_pausado = self.puente.esta_pausado
+        estaba_pausado = self.puente.is_paused
         if not estaba_pausado:
-            self.puente.pausar_o_reanudar()
+            self.puente.toggle_pause()
             self.panel_derecho.set_estado_pausa(True)
             if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
                 self.panel_config.set_estado_pausa(True)
@@ -115,7 +115,7 @@ class LogicaEjecucionMixin:
         confirma = messagebox.askyesno(titulo, pregunta)
         if not confirma:
             if not estaba_pausado:
-                self.puente.pausar_o_reanudar()
+                self.puente.toggle_pause()
                 self.panel_derecho.set_estado_pausa(False)
                 if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
                     self.panel_config.set_estado_pausa(False)
@@ -124,7 +124,7 @@ class LogicaEjecucionMixin:
         self._progreso_pendiente = None
         self._es_framing = False
         self.terminal.log(tr("log_stop"))
-        self.puente.detener_ejecucion()
+        self.puente.stop_execution()
 
         # Limpiar inmediatamente los trazos del canvas para no dejar el marcado congelado
         self.panel_general.ocultar_frame_dxf()
@@ -148,11 +148,11 @@ class LogicaEjecucionMixin:
         self._set_bloqueo_edicion_ejecucion(False)
 
         # Asegurar espejos en reposo Home
-        self.puente.centrar_galvos()
+        self.puente.center_galvos()
 
     def _on_click_frame(self):
         """Ejecuta la rutina de enmarcado (Framing) con el laser estrictamente apagado."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             return
 
         if not self.puente.trazos_calibrados:
@@ -176,7 +176,7 @@ class LogicaEjecucionMixin:
 
         params = self.panel_config.obtener_datos_formulario()
         self.terminal.log(tr("log_framing_start"))
-        self.puente.ejecutar_enmarcado(
+        self.puente.run_framing(
             params=params,
             on_progress=self._cb_progreso,
             on_log=self._cb_log,
@@ -240,7 +240,7 @@ class LogicaEjecucionMixin:
         self._progreso_programado = False
         if getattr(self, '_cerrando', False) or self._progreso_pendiente is None:
             return
-        if not self.puente.en_ejecucion:
+        if not self.puente.is_running:
             self._progreso_pendiente = None
             return
         datos = self._progreso_pendiente
@@ -283,7 +283,7 @@ class LogicaEjecucionMixin:
             return
 
         def _sonda():
-            disponible, clave = self.puente.feedback_soportado()
+            disponible, clave = self.puente.is_feedback_supported()
             try:
                 self.after(0, self._aplicar_disponibilidad_feedback, disponible, clave)
             except Exception:
@@ -300,7 +300,7 @@ class LogicaEjecucionMixin:
 
     def _on_feedback_toggle(self, activo: bool):
         """Activa/desactiva el Hardware Feedback Tracking desde el selector superior."""
-        if self.puente.en_ejecucion:
+        if self.puente.is_running:
             self.barra_superior.forzar_feedback(self.puente.feedback_habilitado)
             return
         estado = self.puente.set_feedback(activo)
@@ -329,7 +329,7 @@ class LogicaEjecucionMixin:
         if getattr(self, '_cerrando', False):
             self._fb_cola.clear()
             return
-        if not self.puente.en_ejecucion or not self.puente.feedback_habilitado:
+        if not self.puente.is_running or not self.puente.feedback_habilitado:
             self._fb_cola.clear()
             return
         pts_cm = []
@@ -356,7 +356,7 @@ class LogicaEjecucionMixin:
         volt_y: float = None
     ):
         """Actualiza en el hilo principal de la GUI las coordenadas y gauges en tiempo real."""
-        if getattr(self, '_cerrando', False) or not self.puente.en_ejecucion:
+        if getattr(self, '_cerrando', False) or not self.puente.is_running:
             return
         try:
             cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
@@ -621,7 +621,7 @@ class LogicaEjecucionMixin:
         if getattr(self, '_cerrando', False):
             return
 
-        if self.puente.en_ejecucion and not self.puente.esta_pausado:
+        if self.puente.is_running and not self.puente.is_paused:
             t_transcurrido = time.time() - self.tiempo_inicio_ejecucion - self.tiempo_pausa_acumulado
             if t_transcurrido < 0:
                 t_transcurrido = 0.0

@@ -407,15 +407,15 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     x_test, y_test = 15.0, 25.0
 
     # Identity
-    assert puente.transformar_coordenada_hardware(x_test, y_test) == (15.0, 25.0)
+    assert puente.transform_hardware_coordinate(x_test, y_test) == (15.0, 25.0)
     # Swap XY
-    assert puente.transformar_coordenada_hardware(x_test, y_test, swap_xy=True) == (25.0, 15.0)
+    assert puente.transform_hardware_coordinate(x_test, y_test, swap_xy=True) == (25.0, 15.0)
     # Invert X (reflect across center 0.0)
-    assert puente.transformar_coordenada_hardware(x_test, y_test, invert_x=True) == (-15.0, 25.0)
+    assert puente.transform_hardware_coordinate(x_test, y_test, invert_x=True) == (-15.0, 25.0)
     # Invert Y (reflect across center 0.0)
-    assert puente.transformar_coordenada_hardware(x_test, y_test, invert_y=True) == (15.0, -25.0)
+    assert puente.transform_hardware_coordinate(x_test, y_test, invert_y=True) == (15.0, -25.0)
     # Combined: Swap then Invert both
-    assert puente.transformar_coordenada_hardware(
+    assert puente.transform_hardware_coordinate(
         x_test, y_test, invert_x=True, invert_y=True, swap_xy=True
     ) == (-25.0, -15.0)
 
@@ -606,7 +606,7 @@ def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
     }
 
     # Load and optimize DXF
-    puente.cargar_dxf(temp_dxf_path, recipe_params)
+    puente.load_dxf(temp_dxf_path, recipe_params)
     assert len(puente.trazos_calibrados) > 0, "No calibrated trajectories loaded."
 
     # Telemetry capture
@@ -641,21 +641,21 @@ def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
 
     # Launch execution in background daemon thread
     t_start = time.perf_counter()
-    puente.iniciar_ejecucion(recipe_params, _on_progress, _on_log, _on_finished)
+    puente.start_execution(recipe_params, _on_progress, _on_log, _on_finished)
     dispatch_latency = time.perf_counter() - t_start
 
     # Main thread must NOT be blocked
     assert dispatch_latency < 0.25, (
-        f"iniciar_ejecucion blocked main thread! Latency: {dispatch_latency:.4f}s"
+        f"start_execution blocked main thread! Latency: {dispatch_latency:.4f}s"
     )
-    assert puente.en_ejecucion is True, "Execution flag was not set to True."
+    assert puente.is_running is True, "Execution flag was not set to True."
 
     # Await async completion
     is_done = finished_event.wait(timeout=10.0)
     assert is_done, "Asynchronous execution timed out."
 
     # State validation upon completion
-    assert puente.en_ejecucion is False, "Execution flag did not return to False."
+    assert puente.is_running is False, "Execution flag did not return to False."
     assert finished_data.get("estado") == "COMPLETED", (
         f"Execution failed: {finished_data.get('err')}"
     )
