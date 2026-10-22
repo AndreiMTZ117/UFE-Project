@@ -25,7 +25,8 @@ class RenderizadoDualMixin:
             self.panel_general.ocultar_frame_dxf()
 
         trazos = getattr(self.puente, "trazos_fisicos_cm", self.puente.trazos_calibrados)
-        self.panel_general.redibujar(trazos, self.trazos_completados)
+        trazos_prev = getattr(self, "trazos_pasadas_previas", [])
+        self.panel_general.redibujar(trazos, self.trazos_completados, trazos_prev)
         if hasattr(self.panel_general, '_escala_pixel') and self.panel_general._escala_pixel:
             self.panel_derecho.escala_referencia_px_cm = self.panel_general._escala_pixel
-        self.panel_derecho.redibujar_trace(trazos, self.trazos_completados, self.pos_laser_actual)
+        self.panel_derecho.redibujar_trace(trazos, self.trazos_completados, self.pos_laser_actual, trazos_prev)

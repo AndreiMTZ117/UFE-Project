@@ -55,6 +55,7 @@ class LogicaEjecucionMixin:
             self.panel_general.limpiar_completados()
             self.panel_derecho.limpiar_progreso()
             self.trazos_completados.clear()
+            self.trazos_pasadas_previas.clear()
             self._ancla_trazo = None
             self._ultimo_seg_activo = None
             self._progreso_pendiente = None
@@ -69,11 +70,13 @@ class LogicaEjecucionMixin:
                 params["_receta_id"] = self.receta_activa.get("id")
                 params["_receta_nombre"] = self.receta_activa.get("nombre", "Manual")
 
+            self._pass_actual = 1
             self.puente.iniciar_ejecucion(
                 params_receta=params,
                 on_progress=self._cb_progreso,
                 on_log=self._cb_log,
-                on_finished=self._cb_finalizado
+                on_finished=self._cb_finalizado,
+                on_pass_change=self._cb_cambio_pasada
             )
         finally:
             self._ejecutando_inicio = False
@@ -128,6 +131,7 @@ class LogicaEjecucionMixin:
         self.panel_general.limpiar_completados()
         self.panel_derecho.limpiar_progreso()
         self.trazos_completados.clear()
+        self.trazos_pasadas_previas.clear()
         self._ancla_trazo = None
         self._ultimo_seg_activo = None
 
@@ -179,6 +183,41 @@ class LogicaEjecucionMixin:
             on_finished=self._cb_finalizado,
             asincrono=True
         )
+
+    def _cb_cambio_pasada(self, pass_idx: int, total_passes: int):
+        """Notificación desde el hilo de trabajo de inicio de nueva pasada."""
+        if getattr(self, '_cerrando', False):
+            return
+        try:
+            self.after(0, self._on_nueva_pasada, pass_idx)
+        except Exception:
+            pass
+
+    def _on_nueva_pasada(self, pass_idx: int):
+        """Coordina la transición visual a la nueva pasada (pasadas previas a azul translúcido)."""
+        if pass_idx <= getattr(self, '_pass_actual', 1) and pass_idx != 1:
+            return
+
+        # 1. Despachar cualquier telemetría acumulada para asegurar el trazo final de la pasada
+        if getattr(self, '_progreso_pendiente', None) is not None:
+            self._despachar_progreso_gui()
+
+        self._pass_actual = pass_idx
+
+        # 2. Archivar los trazos completados en el registro de pasadas previas de la app
+        if self.trazos_completados:
+            self.trazos_pasadas_previas.extend(self.trazos_completados)
+
+        # 3. Archivar y atenuar visualmente en Canvas 1:1 y Canvas Trace (Zoom 4x)
+        if hasattr(self.panel_general, "archivar_pasada_completada"):
+            self.panel_general.archivar_pasada_completada()
+        if hasattr(self.panel_derecho, "archivar_pasada_completada"):
+            self.panel_derecho.archivar_pasada_completada()
+
+        # 4. Limpiar trazos activos para dibujar la nueva pasada
+        self.trazos_completados.clear()
+        self._ancla_trazo = None
+        self._ultimo_seg_activo = None
 
     def _cb_progreso(
         self, trazo_idx, total_trazos, wp_idx, total_wp, x, y, trace_pct, total_pct, laser_on=True,
@@ -328,6 +367,11 @@ class LogicaEjecucionMixin:
             kx = cal_ancho / rango_x if rango_x > 0 else 1.0
             ky = cal_alto / rango_y if rango_y > 0 else 1.0
 
+            # Verificación de cambio de pasada
+            pass_en_curso = getattr(self.puente, "pass_actual", 1)
+            if pass_en_curso > getattr(self, "_pass_actual", 1):
+                self._on_nueva_pasada(pass_en_curso)
+
             cm_x_real = self.puente.ancho_base_cm / 2.0 + (x - self.puente.centro_x) * kx
             cm_y_real = self.puente.alto_base_cm / 2.0 + (y - self.puente.centro_y) * ky
             cm_x = round(cm_x_real, 2)
@@ -451,7 +495,8 @@ class LogicaEjecucionMixin:
             self.panel_derecho.redibujar_trace(
                 getattr(self.puente, 'trazos_fisicos_cm', self.puente.trazos_calibrados),
                 self.trazos_completados,
-                self.pos_laser_actual
+                self.pos_laser_actual,
+                self.trazos_pasadas_previas
             )
         except Exception:
             pass
@@ -525,7 +570,8 @@ class LogicaEjecucionMixin:
                     self.panel_derecho.redibujar_trace(
                         trazos_cm,
                         self.trazos_completados,
-                        self.pos_laser_actual
+                        self.pos_laser_actual,
+                        self.trazos_pasadas_previas
                     )
             elif estado in ("DETENIDO", "ABORTADO", "ABORTED"):
                 self.panel_derecho.set_estado_sistema("STOPPED")
@@ -533,6 +579,8 @@ class LogicaEjecucionMixin:
                 self.panel_general.limpiar_completados()
                 self.panel_derecho.limpiar_progreso()
                 self.trazos_completados.clear()
+                self.trazos_pasadas_previas.clear()
+                self._pass_actual = 1
                 self._ancla_trazo = None
                 self._ultimo_seg_activo = None
                 self._progreso_pendiente = None
@@ -542,6 +590,8 @@ class LogicaEjecucionMixin:
                 self.panel_general.limpiar_completados()
                 self.panel_derecho.limpiar_progreso()
                 self.trazos_completados.clear()
+                self.trazos_pasadas_previas.clear()
+                self._pass_actual = 1
                 self._ancla_trazo = None
                 self._ultimo_seg_activo = None
                 self._progreso_pendiente = None

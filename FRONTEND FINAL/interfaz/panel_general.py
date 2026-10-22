@@ -10,7 +10,7 @@ from typing import Callable, List, Optional, Tuple
 
 from .constantes import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
-    COLOR_BLUE, COLOR_VECTOR_GRAY, COLOR_GRID, COLOR_ORANGE,
+    COLOR_BLUE, COLOR_BLUE_FADED, COLOR_VECTOR_GRAY, COLOR_GRID, COLOR_ORANGE,
     COLOR_YELLOW, COLOR_MUTED,
     FONT_TEACHERS, FONT_SEGOE, BRUTAL_CORNER, BRUTAL_BORDER,
     agregar_tooltip
@@ -38,6 +38,7 @@ class PanelGeneral(ctk.CTkFrame):
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.ancho_base_cm = 28.0
         self.alto_base_cm = 25.0
         self.centro_home = (14.0, 12.5)
@@ -334,7 +335,8 @@ class PanelGeneral(ctk.CTkFrame):
     def redibujar(
         self,
         trazos: Optional[List[List[Tuple[float, float]]]] = None,
-        trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
+        trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None,
+        trazos_pasadas_previas: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
     ):
         """Renderizado isometrico 1:1 basado en las dimensiones de la base fisica.
         
@@ -345,8 +347,11 @@ class PanelGeneral(ctk.CTkFrame):
             self.trazos_actuales = trazos
             # Limpiar completados si cambio la figura base
             self.trazos_completados = []
+            self.trazos_pasadas_previas = []
         if trazos_completados is not None:
-            self.trazos_completados = trazos_completados
+            self.trazos_completados = list(trazos_completados)
+        if trazos_pasadas_previas is not None:
+            self.trazos_pasadas_previas = list(trazos_pasadas_previas)
 
         c = self.canvas
         try:
@@ -483,7 +488,22 @@ class PanelGeneral(ctk.CTkFrame):
                 except Exception:
                     pass
 
-        # 3. Redibujar segmentos completados (solo al reiniciar/cambiar figura) en azul eléctrico
+        # 3. Redibujar segmentos de pasadas previas (capa translúcida al 50%)
+        for segmento in getattr(self, "trazos_pasadas_previas", []):
+            if not segmento or len(segmento) < 2:
+                continue
+            p1, p2 = segmento[0], segmento[1]
+            if not p1 or not p2 or len(p1) < 2 or len(p2) < 2:
+                continue
+            try:
+                px1, py1 = to_px(p1[0], p1[1])
+                px2, py2 = to_px(p2[0], p2[1])
+                c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE_FADED, width=2.5,
+                              capstyle="round", tags="pasada_previa")
+            except Exception:
+                pass
+
+        # 4. Redibujar segmentos completados de la pasada activa en azul eléctrico
         for segmento in self.trazos_completados:
             if not segmento or len(segmento) < 2:
                 continue
@@ -651,12 +671,29 @@ class PanelGeneral(ctk.CTkFrame):
         except Exception:
             pass
 
+    def archivar_pasada_completada(self):
+        """Convierte los segmentos completados de la pasada anterior a la capa translúcida."""
+        c = getattr(self, "canvas", None)
+        if c:
+            try:
+                c.itemconfig("completado", fill=COLOR_BLUE_FADED, width=2.5, tags="pasada_previa")
+                c.tag_lower("pasada_previa", "completado")
+                if getattr(self, "pos_puntero", None) is not None:
+                    c.tag_raise("puntero_laser")
+            except Exception:
+                pass
+        if self.trazos_completados:
+            self.trazos_pasadas_previas.extend(self.trazos_completados)
+            self.trazos_completados = []
+
     def limpiar_completados(self):
         """Elimina todos los segmentos marcados/completados del canvas y limpia la lista interna."""
         self.trazos_completados = []
+        self.trazos_pasadas_previas = []
         self.limpiar_feedback()
         try:
             self.canvas.delete("completado")
+            self.canvas.delete("pasada_previa")
         except Exception:
             pass
 
@@ -783,6 +820,9 @@ class PanelGeneral(ctk.CTkFrame):
         try:
             c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=3.5,
                           capstyle="round", tags="completado")
+            self.trazos_completados.append((p1, p2))
+            if getattr(self, "pos_puntero", None) is not None:
+                c.tag_raise("puntero_laser")
             return True
         except Exception:
             return False

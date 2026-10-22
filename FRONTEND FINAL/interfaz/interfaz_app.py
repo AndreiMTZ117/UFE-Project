@@ -91,6 +91,7 @@ class AppLaserCTk(
         self.tiempo_ultima_pausa = 0.0
         self.pos_laser_actual = (self.puente.ancho_base_cm / 2.0, self.puente.alto_base_cm / 2.0)
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
 
         # Construir layout modular
         self._construir_layout()

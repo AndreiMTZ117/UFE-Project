@@ -732,7 +732,8 @@ class PuenteLaser:
                           params_receta: Dict,
                           on_progress: Callable,
                           on_log: Callable,
-                          on_finished: Callable):
+                          on_finished: Callable,
+                          on_pass_change: Optional[Callable[[int, int], None]] = None):
         """Lanza el proceso de trazado en un hilo independiente."""
         if self._en_ejecucion:
             return
@@ -744,7 +745,7 @@ class PuenteLaser:
 
         self._hilo_ejecucion = threading.Thread(
             target=self._hilo_trabajo,
-            args=(params_receta, on_progress, on_log, on_finished),
+            args=(params_receta, on_progress, on_log, on_finished, on_pass_change),
             daemon=True
         )
         self._hilo_ejecucion.start()
@@ -991,7 +992,8 @@ class PuenteLaser:
                       params: Dict,
                       on_progress: Callable,
                       on_log: Callable,
-                      on_finished: Callable):
+                      on_finished: Callable,
+                      on_pass_change: Optional[Callable[[int, int], None]] = None):
         """
         Motor de ejecucion cinematica con telemetria de alta fidelidad.
 
@@ -1205,6 +1207,13 @@ class PuenteLaser:
                 if self._evento_detener.is_set():
                     estado = "STOPPED"
                     break
+
+                self.pass_actual = pass_idx
+                if on_pass_change:
+                    try:
+                        on_pass_change(pass_idx, num_pasadas)
+                    except Exception:
+                        pass
 
                 on_log(tr("log_exec_pass", mode=modo_proceso, pass_idx=pass_idx, passes=num_pasadas))
 

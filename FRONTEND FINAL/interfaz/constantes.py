@@ -20,6 +20,7 @@ COLOR_TEXT = "#1E1E24"           # Primary carbon black text
 COLOR_YELLOW = "#F5A623"         # Industrial amber (Primary accent / Highlight)
 COLOR_RED = "#DC2626"            # Alarm red (Emergency Stop / Fault)
 COLOR_BLUE = "#2563EB"           # Electric blue (G1 active cutting / marking)
+COLOR_BLUE_FADED = "#92B1F5"     # Translucent sky-blue (Simulated 50% opacity for previous passes)
 COLOR_GREEN = "#16A34A"          # Industrial green (System ready / OK)
 COLOR_ORANGE = "#F97316"         # Dashed orange (G0 rapid travel)
 COLOR_PAUSE = "#E2E8F0"          # Neutral pause state

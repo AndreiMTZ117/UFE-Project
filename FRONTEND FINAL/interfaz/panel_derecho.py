@@ -10,7 +10,7 @@ from typing import Callable, List, Optional, Tuple
 
 from .constantes import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
-    COLOR_YELLOW, COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_ORANGE,
+    COLOR_YELLOW, COLOR_RED, COLOR_BLUE, COLOR_BLUE_FADED, COLOR_GREEN, COLOR_ORANGE,
     COLOR_PAUSE, COLOR_TIMER_BG, COLOR_BOX_BG, COLOR_MUTED,
     COLOR_VECTOR_GRAY,
     FONT_BRUNO, FONT_TEACHERS, FONT_CONSOLAS, FONT_SEGOE,
@@ -52,6 +52,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self._trazos_bboxes: Optional[List[Tuple[float, float, float, float]]] = None
         self.centro_home = (14.00, 12.50)
         self.pos_laser_actual = (14.00, 12.50)
@@ -790,9 +791,16 @@ class PanelDerecho(ctk.CTkFrame):
 
         c.create_text(cx, cy, text=f"{int(round(pct_clean))} %", font=(FONT_TEACHERS, 11, "bold"), fill=COLOR_TEXT)
 
+    def archivar_pasada_completada(self):
+        """Transfiere los trazos de la pasada terminada a la capa translúcida de pasadas previas."""
+        if self.trazos_completados:
+            self.trazos_pasadas_previas.extend(self.trazos_completados)
+            self.trazos_completados = []
+
     def limpiar_progreso(self):
         """Reinicia los segmentos completados, anclas y medidores circulares a 0%."""
         self.trazos_completados = []
+        self.trazos_pasadas_previas = []
         self.ancla_vivo = None
         self.limpiar_feedback()
         self.pct_trace = 0.0
@@ -823,7 +831,8 @@ class PanelDerecho(ctk.CTkFrame):
         self,
         trazos: Optional[List[List[Tuple[float, float]]]] = None,
         trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None,
-        pos_laser: Optional[Tuple[float, float]] = None
+        pos_laser: Optional[Tuple[float, float]] = None,
+        trazos_pasadas_previas: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
     ):
         try:
             if trazos is not None:
@@ -832,7 +841,9 @@ class PanelDerecho(ctk.CTkFrame):
                     self._trazos_bboxes = None
 
             if trazos_completados is not None:
-                self.trazos_completados = trazos_completados
+                self.trazos_completados = list(trazos_completados)
+            if trazos_pasadas_previas is not None:
+                self.trazos_pasadas_previas = list(trazos_pasadas_previas)
             if pos_laser is not None:
                 self.pos_laser_actual = pos_laser
 
@@ -939,7 +950,23 @@ class PanelDerecho(ctk.CTkFrame):
                     if len(coords) >= 4:
                         c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=3.0, capstyle="round")
 
-                # Culling espacial para segmentos completados
+                # Culling espacial para segmentos de pasadas previas (azul translúcido)
+                for segmento in getattr(self, "trazos_pasadas_previas", []):
+                    if not segmento or len(segmento) < 2:
+                        continue
+                    p1, p2 = segmento[0], segmento[1]
+                    if not p1 or not p2 or len(p1) < 2 or len(p2) < 2:
+                        continue
+                    if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x) or \
+                       (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
+                        continue
+                    px1 = cx + (p1[0] - cam_x) * zoom_factor
+                    py1 = cy - (p1[1] - cam_y) * zoom_factor
+                    px2 = cx + (p2[0] - cam_x) * zoom_factor
+                    py2 = cy - (p2[1] - cam_y) * zoom_factor
+                    c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE_FADED, width=3.5, capstyle="round")
+
+                # Culling espacial para segmentos completados de la pasada activa
                 for segmento in self.trazos_completados:
                     if not segmento or len(segmento) < 2:
                         continue

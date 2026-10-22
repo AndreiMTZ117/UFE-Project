@@ -81,6 +81,7 @@ class GestionDatosMixin:
                 points = res.get('num_waypoints', 0)
                 self.terminal.log(tr("log_dxf_loaded", file=archivo, paths=paths, points=points))
             self.trazos_completados.clear()
+            self.trazos_pasadas_previas.clear()
             self.panel_general.limpiar_completados()
             self.panel_derecho.limpiar_progreso()
             self._aplicar_limites_hardware()
