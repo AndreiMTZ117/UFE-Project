@@ -13,6 +13,7 @@ Registra automáticamente cada ciclo de grabado láser con:
 """
 
 from .gestor_db import GestorDB, gestor_global
+from .recetas import MODOS_PROCESO_VALIDOS
 
 
 class GestorTrazabilidad:
@@ -37,14 +38,8 @@ class GestorTrazabilidad:
         })
     """
 
-    # Modos de proceso canónicos restringidos
-    MODOS_PROCESO_VALIDOS = {"Cutting", "Welding", "Marking"}
-
-    # Estados válidos para el campo 'estado' (canónicos y bilingües)
-    ESTADOS_VALIDOS = {
-        "COMPLETADO", "ABORTADO", "FALLO_HARDWARE",
-        "COMPLETED", "ABORTED", "STOPPED", "ERROR", "FAILED"
-    }
+    # Modos de proceso canónicos (fuente única en recetas.py)
+    MODOS_PROCESO_VALIDOS = MODOS_PROCESO_VALIDOS
 
     # Normalización universal a valores canónicos de la base de datos
     MAPA_ESTADOS = {

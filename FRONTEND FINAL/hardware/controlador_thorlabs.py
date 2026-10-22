@@ -40,7 +40,7 @@ class ControladorThorlabsGVS:
             from nidaqmx.constants import LineGrouping
             from core.config_loader import load_hardware_config
             cfg = load_hardware_config()
-            do_channel = cfg.get("daq", {}).get("laser_gate_channel", "Dev1/port0/line0")
+            do_channel = cfg["daq"]["laser_gate_channel"]
             with nidaqmx.Task() as task:
                 task.do_channels.add_do_chan(do_channel, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                 task.write(nivel, auto_start=True)

@@ -16,7 +16,7 @@ from .constantes import (
     COLOR_GREEN, COLOR_YELLOW, COLOR_TERMINAL_BG,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
 )
-from .i18n import tr, registrar_observador, obtener_idioma
+from .i18n import tr, registrar_observador
 
 
 class TerminalFlotante(ctk.CTkFrame):

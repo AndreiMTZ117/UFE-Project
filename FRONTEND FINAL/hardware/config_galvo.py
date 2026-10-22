@@ -33,7 +33,7 @@ ROTAR_90_GRADOS = False
 VELOCIDAD_MARCADO_MM_S = 500.0   # mm/s marcando con laser encendido
 VELOCIDAD_SALTO_MM_S   = 2000.0  # mm/s saltos en vacio
 
-# Delays caracteristicos de galvanometros (en microsegundos, calibrados en hardware_config.json)
+# Delays caracteristicos de galvanometros (en microsegundos; consumidos por el simulador)
 LASER_ON_DELAY_US  = 20    # Retardo para encender laser tras alcanzar posicion
 LASER_OFF_DELAY_US = 20    # Retardo para apagar laser antes de saltar
 JUMP_DELAY_US      = 150   # Retardo de estabilizacion mecanica en saltos

@@ -17,7 +17,9 @@ from .config_galvo import (
     CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
     CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
     VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
+    LASER_ON_DELAY_US, LASER_OFF_DELAY_US, JUMP_DELAY_US, MARK_DELAY_US,
 )
+from core.config_loader import load_hardware_config, get_volts_per_mm
 
 
 class SimuladorThorlabsGVS:
@@ -36,6 +38,12 @@ class SimuladorThorlabsGVS:
     def __init__(self):
         self.laser_encendido = False
         self._stop_event = threading.Event()
+        cfg = load_hardware_config()
+        self.volts_per_mm = get_volts_per_mm(cfg)
+        lim = cfg.get("voltage_limits", {})
+        self.v_min = float(lim.get("min", -10.0))
+        self.v_max = float(lim.get("max", 10.0))
+        self._clamp_warned = False
         print("[SimThorlabs] Simulador GVS112/M iniciado - hardware fisico NO conectado.")
         print(f"[SimThorlabs]   Campo: X[{CAMPO_X_MIN_MM}, {CAMPO_X_MAX_MM}] mm  "
               f"Y[{CAMPO_Y_MIN_MM}, {CAMPO_Y_MAX_MM}] mm")
@@ -72,15 +80,16 @@ class SimuladorThorlabsGVS:
                 continue
 
             # Viaje al primer punto (laser apagado)
-            p0 = trazo[0]
+            p0 = self._limitar_punto(trazo[0])
             dist_viaje = math.hypot(p0[0] - pos_x, p0[1] - pos_y)
             t_viaje = dist_viaje / max(0.1, velocidad_salto)
-            self._esperar(t_viaje, check_cancel)
+            self._esperar(t_viaje + JUMP_DELAY_US * 1e-6, check_cancel)
 
             if self._debe_cancelar(check_cancel):
                 break
 
             # Trazar segmentos con laser encendido
+            self._esperar(LASER_ON_DELAY_US * 1e-6, check_cancel)
             self.encender_laser()
             pos_x, pos_y = p0
 
@@ -90,12 +99,13 @@ class SimuladorThorlabsGVS:
                     print("[SimThorlabs] Trazado abortado en segmento.")
                     return
 
-                pt = trazo[i]
+                pt = self._limitar_punto(trazo[i])
                 dist_seg = math.hypot(pt[0] - pos_x, pt[1] - pos_y)
                 t_seg = dist_seg / max(0.1, velocidad_marcado)
-                self._esperar(t_seg, check_cancel)
+                self._esperar(t_seg + MARK_DELAY_US * 1e-6, check_cancel)
                 pos_x, pos_y = pt
 
+            self._esperar(LASER_OFF_DELAY_US * 1e-6, check_cancel)
             self.apagar_laser()
             pct = round((idx + 1) / total_trazos * 100, 1)
             print(f"[SimThorlabs]   Trazo {idx + 1}/{total_trazos} completado ({pct}%)")
@@ -123,6 +133,18 @@ class SimuladorThorlabsGVS:
         self._stop_event.set()
         self.apagar_laser()
         print("[SimThorlabs] Simulador cerrado correctamente.")
+
+    def _limitar_punto(self, p):
+        """Satura (x, y) en mm para que el voltaje equivalente quede en [v_min, v_max]."""
+        vx, vy = p[0] * self.volts_per_mm, p[1] * self.volts_per_mm
+        cx = min(self.v_max, max(self.v_min, vx))
+        cy = min(self.v_max, max(self.v_min, vy))
+        if (cx != vx or cy != vy) and not self._clamp_warned:
+            self._clamp_warned = True
+            print(f"[SimThorlabs] AVISO: comando fuera de +/-{self.v_max} V; saturado.")
+        if self.volts_per_mm == 0:
+            return p
+        return (cx / self.volts_per_mm, cy / self.volts_per_mm)
 
     def _esperar(self, segundos: float, check_cancel=None, granularidad: float = 0.05):
         """Espera en pasos pequenos revisando cancelacion."""

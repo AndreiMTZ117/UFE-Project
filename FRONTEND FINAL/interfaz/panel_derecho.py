@@ -17,7 +17,7 @@ from .constantes import (
     BRUTAL_CORNER, BRUTAL_BORDER, BRUTAL_BORDER_THICK,
     agregar_tooltip
 )
-from .i18n import tr, registrar_observador, obtener_idioma
+from .i18n import tr, registrar_observador
 
 
 class PanelDerecho(ctk.CTkFrame):

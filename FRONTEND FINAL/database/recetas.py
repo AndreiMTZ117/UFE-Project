@@ -185,13 +185,8 @@ class GestorRecetas:
 
         # Construir SET dinámico solo con los campos enviados (sin tocar el resto)
         campos_editables = {
-            "nombre", "polimero", "notas",
-            "velocidad_trazado", "velocidad_viaje", "num_pasadas",
-            "laser_on_delay_ms", "laser_off_delay_ms", "mark_delay_ms", "jump_delay_ms",
-            "tolerancia_rdp", "tolerancia_union", "longitud_min_trazo",
-            "escala_dibujo", "rotar_90_grados",
-            "duracion_min_segmento_ms", "duracion_min_viaje_ms", "optimizar_tsp", "modo_proceso",
-            "cooling_delay_s", "invert_x", "invert_y", "swap_xy"
+            "nombre", "polimero", "notas", "rotar_90_grados", "modo_proceso",
+            *self._VALIDACIONES,
         }
         columnas = {k: v for k, v in datos.items() if k in campos_editables}
         if not columnas:
@@ -232,14 +227,11 @@ class GestorRecetas:
         Returns:
             True si se eliminó. False si no existía.
         """
-        # Guardar nombre antes de eliminar (para el log de confirmación)
-        receta = self.obtener_receta(receta_id)
-        nombre_prev = receta.get("nombre", f"ID={receta_id}")
-
-        sql = "DELETE FROM recetas WHERE id = ?"
+        # Nombre previo (proyección mínima) y borrado en una sola conexión/transacción
         with self._db.conexion() as conn:
-            cursor = conn.execute(sql, (receta_id,))
-            filas = cursor.rowcount
+            row = conn.execute("SELECT nombre FROM recetas WHERE id = ?", (receta_id,)).fetchone()
+            nombre_prev = row["nombre"] if row else f"ID={receta_id}"
+            filas = conn.execute("DELETE FROM recetas WHERE id = ?", (receta_id,)).rowcount
 
         if filas > 0:
             print(f"[Recetas] [DEL] Receta eliminada: '{nombre_prev}' (ID={receta_id})")

@@ -160,16 +160,10 @@ class GalvoSignalGenerator:
 
         # --- Block parameters as preallocated arrays -----------------------
         n_blocks = len(blocks)
-        starts = np.empty((n_blocks, 2), dtype=np.float64)
-        ends = np.empty((n_blocks, 2), dtype=np.float64)
-        speeds = np.empty(n_blocks, dtype=np.float64)
-        is_mark = np.empty(n_blocks, dtype=bool)
-
-        for i, b in enumerate(blocks):
-            starts[i] = b.start
-            ends[i] = b.end
-            speeds[i] = b.velocity
-            is_mark[i] = (b.motion_type == "G1")
+        starts = np.array([b.start for b in blocks], dtype=np.float64).reshape(n_blocks, 2)
+        ends = np.array([b.end for b in blocks], dtype=np.float64).reshape(n_blocks, 2)
+        speeds = np.array([b.velocity for b in blocks], dtype=np.float64)
+        is_mark = np.array([b.motion_type == "G1" for b in blocks], dtype=bool)
 
         # --- Step 1: number of motion samples N = round(T * f_s) ------------
         distances = np.hypot(*(ends - starts).T)

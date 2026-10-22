@@ -154,11 +154,8 @@ class PathOptimizer:
         if count == 0:
             return [], []
 
-        firsts = np.empty((count, 2), dtype=float)
-        lasts = np.empty((count, 2), dtype=float)
-        for idx, a in enumerate(arrays):
-            firsts[idx] = a[0]
-            lasts[idx] = a[-1]
+        firsts = np.array([a[0] for a in arrays], dtype=float)
+        lasts = np.array([a[-1] for a in arrays], dtype=float)
         origin = firsts[0] if start_point is None else np.asarray(start_point, dtype=float)
 
         # Nearest-neighbour construction (orientation-aware).

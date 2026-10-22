@@ -413,7 +413,6 @@ class LogicaEjecucionMixin:
                 if trazos_cm and 0 <= trazo_idx < len(trazos_cm) and 1 <= pt_idx < len(trazos_cm[trazo_idx]):
                     ruta_actual = trazos_cm[trazo_idx]
                     v_ini = ruta_actual[pt_idx - 1]
-                    v_fin = ruta_actual[pt_idx]
 
                     if ultimo_seg is None:
                         # Comienza un nuevo tramo de corte: asegurar segmentos previos desde el inicio

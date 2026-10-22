@@ -64,8 +64,6 @@ def transformar_y_escalar_dxf(trayectorias,
     sin_a = math.sin(angulo_rad)
 
     min_x, max_x, min_y, max_y = obtener_limites_dxf(trayectorias)
-    ancho_dxf = max_x - min_x if max_x != min_x else 1.0
-    alto_dxf  = max_y - min_y if max_y != min_y else 1.0
 
     # Centro geométrico del DXF
     dxf_cx = (min_x + max_x) / 2.0
