@@ -120,13 +120,31 @@ def phase_1_environment_health() -> Dict[str, Any]:
         pass
     assert gui_framework_detected is not None, "CustomTkinter is not importable."
 
-    # National Instruments DAQmx import or mock verification
-    nidaqmx_available = False
+    # National Instruments DAQmx probing (Driver runtime and physical device enumeration)
+    daq_probe: Dict[str, Any] = {
+        "installed": False,
+        "runtime_loaded": False,
+        "devices": [],
+        "is_physical": False,
+        "label": "Not installed (Simulation Mode)"
+    }
     try:
         import nidaqmx
-        nidaqmx_available = True
+        daq_probe["installed"] = True
+        try:
+            system = nidaqmx.system.System.local()
+            devs = [d.name for d in system.devices]
+            daq_probe["runtime_loaded"] = True
+            daq_probe["devices"] = devs
+            if devs:
+                daq_probe["is_physical"] = True
+                daq_probe["label"] = f"Connected ({', '.join(devs)})"
+            else:
+                daq_probe["label"] = "Driver present, 0 physical devices detected (Simulation Mode)"
+        except Exception:
+            daq_probe["label"] = "Python pkg present, NI-DAQmx C-Runtime missing (Simulation Mode)"
     except ImportError:
-        nidaqmx_available = False
+        pass
 
     # FreeCADcmd detection in PATH or standard installation directories
     freecad_cmd_path = shutil.which("FreeCADcmd")
@@ -146,7 +164,8 @@ def phase_1_environment_health() -> Dict[str, Any]:
     return {
         "python_version": f"{v_major}.{v_minor}.{sys.version_info.micro}",
         "gui_framework": gui_framework_detected,
-        "nidaqmx_available": nidaqmx_available,
+        "nidaqmx_available": daq_probe["is_physical"],
+        "daq_probe": daq_probe,
         "freecad_cmd_path": freecad_cmd_path,
     }
 
@@ -706,7 +725,8 @@ def run_full_system_test() -> int:
         # Phase 1: Environment Health
         print("\n[Phase 1/8] Environment Health & Dependency Verification...")
         env_info = phase_1_environment_health()
-        print(f" -> Python v{env_info['python_version']}, GUI={env_info['gui_framework']}, NI-DAQmx={'Connected' if env_info['nidaqmx_available'] else 'Mocked'} [OK]")
+        print(f" -> Python v{env_info['python_version']}, GUI={env_info['gui_framework']}")
+        print(f" -> NI-DAQmx Status: {env_info['daq_probe']['label']} [OK]")
 
         # Phase 2: CAD to G-Code Ingestion
         print("\n[Phase 2/8] CAD to G-Code Ingestion (CADConverter & GCodeParser)...")
@@ -720,16 +740,16 @@ def run_full_system_test() -> int:
         print(" -> RDP 100% preservation verified. TSP pruned in <0.3s for N=120 [OK]")
 
         # Phase 4: Waveform Generation & Delays
-        print("\n[Phase 4/8] Waveform Generation, 100 kHz Timing & Electrical Clamping...")
+        print("\n[Phase 4/8] Mathematical Waveform Synthesis, 100 kHz Timing & Electrical Clamping (In-Memory)...")
         with _silence_stdout():
             metrics = phase_4_signal_generation()
-        print(f" -> {metrics['total_samples']:,} samples evaluated, electrical safety [-10V, +10V] [OK]")
+        print(f" -> {metrics['total_samples']:,} samples evaluated in RAM, electrical safety [-10V, +10V] [OK]")
 
         # Phase 5: Hardware DAQ Controller & E-STOP
-        print("\n[Phase 5/8] Hardware DAQ Controller (Simulation & Instantaneous E-STOP)...")
+        print("\n[Phase 5/8] DAQ Controller Driver & Safe E-STOP (Simulation Mode)...")
         with _silence_stdout():
             phase_5_daq_controller_estop()
-        print(" -> Hardware FIFO configured, buffer loaded, safe E-STOP verified [OK]")
+        print(" -> Simulated software buffers loaded, safe E-STOP verified [OK]")
 
         # Phase 6: SQLite3 Database & Business Rules
         print("\n[Phase 6/8] SQLite3 Database, Schema Migrations & Audit Trail...")
@@ -738,7 +758,7 @@ def run_full_system_test() -> int:
         print(" -> WAL journal mode verified, 12 parameters and process modes validated [OK]")
 
         # Phase 7: Threading Isolation & Async Telemetry
-        print("\n[Phase 7/8] Threading Isolation & Async Telemetry Callbacks...")
+        print("\n[Phase 7/8] Threading Isolation & Async Telemetry Callbacks (Simulation Mode)...")
         with _silence_stdout():
             phase_7_async_threading_telemetry(dxf_path, db_instance)
         print(" -> Background worker isolated, real-time telemetry captured [OK]")
@@ -758,21 +778,33 @@ def run_full_system_test() -> int:
 
     t_suite_elapsed = time.perf_counter() - t_suite_start
 
-    # Exact console report output required by specification
+    daq_device_summary = (
+        f"CONNECTED ({', '.join(env_info['daq_probe']['devices'])})"
+        if env_info["daq_probe"]["is_physical"]
+        else f"NOT DETECTED ({env_info['daq_probe']['label']})"
+    )
+
+    # Console report output with honest hardware/environment audit
     report = f"""======================================================================
                FULL SYSTEM END-TO-END VALIDATION REPORT               
 ======================================================================
 [PASS] Phase 1: Environment & Dependency Validation
 [PASS] Phase 2: CAD to G-Code Ingestion (CADConverter & Parser)
 [PASS] Phase 3: Path Optimization & TSP Heuristic Pruning
-[PASS] Phase 4: Waveform Generation, Delays & Electrical Clamping
-[PASS] Phase 5: Hardware DAQ Controller (Simulation & E-STOP)
+[PASS] Phase 4: Mathematical Waveform Synthesis & Electrical Clamping
+[PASS] Phase 5: DAQ Controller State Machine & Safe E-STOP (Simulation)
 [PASS] Phase 6: SQLite3 Database, Schema Migrations & Audit Trail
-[PASS] Phase 7: Threading Isolation & Async Telemetry Callbacks
+[PASS] Phase 7: Threading Isolation & Async Telemetry (Simulation)
 [PASS] Phase 8: Artifact Cleanup & System Integrity
 
+EXECUTION ENVIRONMENT & HARDWARE AUDIT:
+- Execution Nature               : White-Box Software & Mathematical Integration
+- NI-DAQmx Physical Card         : {daq_device_summary}
+- Thorlabs GVS112/M Galvo        : Virtual Simulation Mode (RAM Discretization)
+- Python Runtime                 : v{env_info['python_version']} ({env_info['gui_framework']})
+
 EXECUTION SUMMARY:
-- Total Signal Samples Evaluated : {metrics['total_samples']}
+- Total Signal Samples Evaluated : {metrics['total_samples']:,} (Software Discretization)
 - Peak Analog Voltages           : Vx=[{metrics['vx_min']:.4f}, {metrics['vx_max']:.4f}], Vy=[{metrics['vy_min']:.4f}, {metrics['vy_max']:.4f}]
 - Laser Duty Cycle               : {metrics['duty_cycle']:.2f}%
 - Total Elapsed Time             : {t_suite_elapsed:.2f} s
