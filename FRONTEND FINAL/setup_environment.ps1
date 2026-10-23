@@ -102,13 +102,55 @@ if ($freecadCmd) {
 # ------------------------------------------------------------------------------
 Write-Host "`n[2/4] Verifying Python runtime..." -ForegroundColor Yellow
 
+# Refresh process PATH from User and Machine in case Python was recently installed
+$machinePath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Machine)
+$userPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
+$combinedPath = "$machinePath;$userPath"
+foreach ($pDir in ($combinedPath -split ';')) {
+    if ($pDir -and (Test-Path $pDir) -and ($env:PATH -split ';' -notcontains $pDir)) {
+        $env:PATH = "$pDir;$env:PATH"
+    }
+}
+
+$pythonExecutable = $null
 $pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
-if (-not $pythonCmd) {
-    Write-Error "Python executable ('python.exe') was not found in PATH. Please install Python 3.10+ from python.org or via: winget install Python.Python.3.11"
+if ($pythonCmd -and ($pythonCmd.Source -notlike "*WindowsApps*")) {
+    $pythonExecutable = $pythonCmd.Source
+} else {
+    Write-Host "  [INFO] Scanning standard installation directories for Python..." -ForegroundColor Yellow
+    $pyCandidates = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python3*",
+        "$env:ProgramFiles\Python3*",
+        "${env:ProgramFiles(x86)}\Python3*"
+    )
+    foreach ($pat in $pyCandidates) {
+        $matchedDirs = Get-ChildItem -Path $pat -Directory -ErrorAction SilentlyContinue
+        foreach ($dir in $matchedDirs) {
+            $candidateExe = Join-Path $dir.FullName "python.exe"
+            if (Test-Path $candidateExe) {
+                $pythonExecutable = $candidateExe
+                $pyDir = $dir.FullName
+                $pyScripts = Join-Path $dir.FullName "Scripts"
+                # Add to current process session PATH (at the front to take precedence over WindowsApps)
+                $env:PATH = "$pyDir;$pyScripts;$env:PATH"
+                break
+            }
+        }
+        if ($pythonExecutable) { break }
+    }
+}
+
+if (-not $pythonExecutable) {
+    Write-Error "Python executable ('python.exe') was not found in PATH or standard directories. Please install Python 3.10+ from python.org or via: winget install Python.Python.3.11"
     exit 1
 }
 
-$pyVersionStr = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+$pyVersionStr = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null
+if (-not $pyVersionStr) {
+    Write-Error "Failed to execute Python at '$pythonExecutable'. App execution aliases may be conflicting."
+    exit 1
+}
+
 [version]$pyVersion = $pyVersionStr.Trim()
 [version]$minVersion = [version]"3.10.0"
 
