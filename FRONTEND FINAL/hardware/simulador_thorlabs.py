@@ -43,10 +43,20 @@ class SimuladorThorlabsGVS:
         lim = cfg.get("voltage_limits", {})
         self.v_min = float(lim.get("min", -10.0))
         self.v_max = float(lim.get("max", 10.0))
-        self._clamp_warned = False
+        self.pos_x = 0.0
+        self.pos_y = 0.0
         print("[SimThorlabs] Simulador GVS112/M iniciado - hardware fisico NO conectado.")
         print(f"[SimThorlabs]   Campo: X[{CAMPO_X_MIN_MM}, {CAMPO_X_MAX_MM}] mm  "
               f"Y[{CAMPO_Y_MIN_MM}, {CAMPO_Y_MAX_MM}] mm")
+
+    def ir_a_posicion(self, x_mm: float = 0.0, y_mm: float = 0.0):
+        """Simula posicionamiento estático de espejos en (x_mm, y_mm)."""
+        self.pos_x = float(x_mm)
+        self.pos_y = float(y_mm)
+
+    def center(self):
+        """Simula centrado en posición de reposo Home (0.0, 0.0)."""
+        self.ir_a_posicion(0.0, 0.0)
 
     def trazar_trayectorias(self,
                             trayectorias,

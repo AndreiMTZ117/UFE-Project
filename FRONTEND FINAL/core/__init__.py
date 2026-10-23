@@ -22,7 +22,7 @@ from .PathOptimizer import (
     fusionar_trazos_contiguos,
 )
 from .GalvoSignalGenerator import GalvoSignalGenerator
-from .NIDaqController import NIDaqController, NIDaqError
+from .NIDaqController import NIDaqController, NIDaqError, probe_daq_hardware, probe_feedback_hardware
 from .lector_dxf import LectorDXF, obtener_limites_dxf
 from .generador_trayectorias import transform_and_scale_dxf
 
@@ -37,6 +37,8 @@ __all__ = [
     "GalvoSignalGenerator",
     "NIDaqController",
     "NIDaqError",
+    "probe_daq_hardware",
+    "probe_feedback_hardware",
     "LectorDXF",
     "obtener_limites_dxf",
     "optimizar_y_unir_trazos",

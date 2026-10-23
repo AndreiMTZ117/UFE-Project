@@ -19,17 +19,28 @@ class ControladorThorlabsGVS:
         if tipo_interfaz == 'SIMULACION':
             print('[Thorlabs GVS112/M] Modo Simulacion listo. Conectar tarjeta DAQ/DAC cuando este en laboratorio.')
 
-    def trazar_trayectorias(self, trayectorias,
-                            velocidad_marcado=VELOCIDAD_MARCADO_MM_S,
-                            velocidad_salto=VELOCIDAD_SALTO_MM_S,
-                            check_cancel=None,
-                            *args, **kwargs):
-        """Trazado galvo compatible con interfaz de simulación y hardware físico."""
-        print(f'\n[Thorlabs GVS112/M] Trazando {len(trayectorias)} trayectorias...')
-        total_puntos = sum(len(t) for t in trayectorias)
-        print(f'[Thorlabs GVS112/M] Total puntos vectoriales: {total_puntos}')
-        print(f'[Thorlabs GVS112/M] Velocidad de marcado: {velocidad_marcado} mm/s')
-        print('[Thorlabs GVS112/M] Trazado galvo completado con exito!')
+    def ir_a_posicion(self, x_mm: float = 0.0, y_mm: float = 0.0):
+        """Posiciona los espejos galvo de forma estática (on-demand) a (x_mm, y_mm) si hay hardware físico."""
+        if self.tipo_interfaz == 'SIMULACION':
+            return
+        try:
+            import nidaqmx
+            from core.config_loader import load_hardware_config, get_volts_per_mm
+            cfg = load_hardware_config()
+            v_per_mm = get_volts_per_mm(cfg)
+            vx = max(-10.0, min(10.0, float(x_mm) * v_per_mm))
+            vy = max(-10.0, min(10.0, float(y_mm) * v_per_mm))
+            ao_channels = cfg.get("daq", {}).get("analog_channels", ["Dev1/ao0", "Dev1/ao1"])
+            with nidaqmx.Task("GalvoStaticMove") as task:
+                for ch in ao_channels:
+                    task.ao_channels.add_ao_voltage_chan(ch, min_val=-10.0, max_val=10.0)
+                task.write([vx, vy], auto_start=True)
+        except Exception:
+            pass
+
+    def center(self):
+        """Envía los espejos a la posición central de reposo (0.0 V, 0.0 V)."""
+        self.ir_a_posicion(0.0, 0.0)
 
     def _escribir_linea_digital(self, nivel: int):
         """Escribe nivel lógico (0 o 1) a la compuerta digital TTL del láser si hay hardware físico activo."""

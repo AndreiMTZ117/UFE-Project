@@ -39,7 +39,7 @@ from core.CADConverter import CADConverter
 from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
-from core.NIDaqController import NIDaqController
+from core.NIDaqController import NIDaqController, probe_daq_hardware
 from core.config_loader import get_volts_per_mm
 from database.gestor_db import GestorDB
 from database.recetas import GestorRecetas
@@ -121,30 +121,7 @@ def phase_1_environment_health() -> Dict[str, Any]:
     assert gui_framework_detected is not None, "CustomTkinter is not importable."
 
     # National Instruments DAQmx probing (Driver runtime and physical device enumeration)
-    daq_probe: Dict[str, Any] = {
-        "installed": False,
-        "runtime_loaded": False,
-        "devices": [],
-        "is_physical": False,
-        "label": "Not installed (Simulation Mode)"
-    }
-    try:
-        import nidaqmx
-        daq_probe["installed"] = True
-        try:
-            system = nidaqmx.system.System.local()
-            devs = [d.name for d in system.devices]
-            daq_probe["runtime_loaded"] = True
-            daq_probe["devices"] = devs
-            if devs:
-                daq_probe["is_physical"] = True
-                daq_probe["label"] = f"Connected ({', '.join(devs)})"
-            else:
-                daq_probe["label"] = "Driver present, 0 physical devices detected (Simulation Mode)"
-        except Exception:
-            daq_probe["label"] = "Python pkg present, NI-DAQmx C-Runtime missing (Simulation Mode)"
-    except ImportError:
-        pass
+    daq_probe = probe_daq_hardware()
 
     # FreeCADcmd detection in PATH or standard installation directories
     freecad_cmd_path = shutil.which("FreeCADcmd")

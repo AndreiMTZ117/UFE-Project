@@ -77,12 +77,21 @@ class NIDaqController:
             NIDaqError: If real hardware is requested but ``nidaqmx`` is missing.
         """
         if simulate is None:
-            simulate = not NIDAQMX_AVAILABLE
-        if not simulate and not NIDAQMX_AVAILABLE:
-            logger.warning(
-                "The 'nidaqmx' package is not installed; transparently falling back to SIMULATION mode."
-            )
-            simulate = True
+            daq_probe = probe_daq_hardware()
+            simulate = not daq_probe["available"]
+            if simulate:
+                logger.info(
+                    "Physical NI-DAQmx hardware not detected (%s); operating in SIMULATION mode.",
+                    daq_probe["description"],
+                )
+        elif not simulate:
+            daq_probe = probe_daq_hardware()
+            if not daq_probe["available"]:
+                logger.warning(
+                    "Physical hardware requested but unavailable (%s); falling back to SIMULATION mode.",
+                    daq_probe["description"],
+                )
+                simulate = True
         self.simulate: bool = simulate
 
         # Resolve configuration dictionary (explicit dict or from file/fallback)
@@ -550,6 +559,47 @@ class NIDaqController:
                 ao_task.write([PARK_VOLTAGE, PARK_VOLTAGE], auto_start=True)
         except BaseException as error:  # noqa: BLE001
             logger.error("Could not park analog outputs at 0 V: %s", error)
+
+
+def probe_daq_hardware() -> Dict[str, Any]:
+    """Inspect system to determine if physical NI-DAQmx hardware is present and operational.
+
+    Returns:
+        Dict[str, Any] with:
+            - 'available': True if physical device(s) are connected and driver is operational.
+            - 'driver_loaded': True if NI-DAQmx C runtime (nicaiu.dll) loaded successfully.
+            - 'devices': list of device names (e.g. ['Dev1']).
+            - 'description': human-readable diagnostic status string.
+    """
+    info: Dict[str, Any] = {
+        "available": False,
+        "driver_loaded": False,
+        "devices": [],
+        "description": "nidaqmx Python package not installed"
+    }
+    if not NIDAQMX_AVAILABLE or nidaqmx is None:
+        return info
+
+    try:
+        system = nidaqmx.system.System.local()
+        info["driver_loaded"] = True
+        devs = [d.name for d in system.devices]
+        info["devices"] = devs
+        if devs:
+            info["available"] = True
+            info["description"] = f"Physical DAQ hardware detected ({', '.join(devs)})"
+        else:
+            info["description"] = "Driver present, 0 physical devices detected (Simulation Mode)"
+    except Exception as exc:
+        err_msg = str(exc).strip().splitlines()[0] if str(exc) else "driver not found"
+        if "Could not find an installation of NI-DAQmx" in err_msg:
+            err_msg = "nicaiu.dll missing"
+        info["description"] = f"Python pkg present, NI-DAQmx C-Runtime missing ({err_msg})"
+
+    info["is_physical"] = info["available"]
+    info["label"] = info["description"]
+    info["installed"] = bool(NIDAQMX_AVAILABLE and nidaqmx is not None)
+    return info
 
 
 def probe_feedback_hardware(config: Optional[Dict[str, Any]] = None) -> tuple:

@@ -304,31 +304,30 @@ class PuenteLaser:
         self._init_hardware()
 
     def _init_hardware(self):
-        """Intenta inicializar el hardware Thorlabs. Si esta en modo simulacion o falla, activa simulador."""
+        """Sondea y enlaza hardware físico real o conmuta honestamente a simulación virtual."""
         try:
-            from hardware.config_galvo import TIPO_INTERFAZ_DAC
-            if TIPO_INTERFAZ_DAC == "SIMULACION":
-                self._enable_simulator()
-                return
-
-            from hardware.controlador_thorlabs import ControladorThorlabsGVS
-            hw = ControladorThorlabsGVS(tipo_interfaz=TIPO_INTERFAZ_DAC)
-            self.controlador_hardware = hw
-            self.es_simulacion = False
-            print("[PuenteLaser] Thorlabs GVS112/M physical hardware detected and ready.")
+            from core.NIDaqController import probe_daq_hardware
+            daq_probe = probe_daq_hardware()
+            if daq_probe["available"]:
+                from hardware.controlador_thorlabs import ControladorThorlabsGVS
+                self.controlador_hardware = ControladorThorlabsGVS(tipo_interfaz="NI_DAQ")
+                self.es_simulacion = False
+                print(f"[PuenteLaser] Thorlabs GVS112/M físico activo ({daq_probe['description']}).")
+            else:
+                self._enable_simulator(razon=daq_probe["description"])
         except Exception as e:
-            print(f"[PuenteLaser] Hardware fisico no disponible ({e}). Activando simulador.")
-            self._enable_simulator()
+            self._enable_simulator(razon=str(e))
 
-    def _enable_simulator(self):
-        """Instancia el simulador Thorlabs como fallback."""
+    def _enable_simulator(self, razon: str = ""):
+        """Instancia el entorno de simulación virtual sin hardware físico."""
         try:
             from hardware.simulador_thorlabs import SimuladorThorlabsGVS
             self.controlador_hardware = SimuladorThorlabsGVS()
             self.es_simulacion = True
-            print("[PuenteLaser] SIMULATION mode active - physical hardware not connected.")
+            msg = f" ({razon})" if razon else ""
+            print(f"[PuenteLaser] Modo SIMULACIÓN activo - Hardware físico no conectado{msg}.")
         except Exception as e:
-            print(f"[PuenteLaser] Error activating simulator: {e}")
+            print(f"[PuenteLaser] Error activando simulador: {e}")
             self.controlador_hardware = None
             self.es_simulacion = True
 
@@ -457,13 +456,18 @@ class PuenteLaser:
                 print(f"[PuenteLaser] Error apagando laser: {e}")
 
     def center_galvos(self):
-        """Posiciona los espejos galvanometricos en reposo Home (0.0 V, 0.0 V) de forma segura."""
+        """Posiciona los espejos galvanométricos en reposo Home (0.0 V, 0.0 V) de forma segura."""
+        if hasattr(self, "daq_controller") and self.daq_controller:
+            try:
+                self.daq_controller._park_outputs()
+            except Exception:
+                pass
         if self.controlador_hardware:
             try:
-                if hasattr(self.controlador_hardware, "ir_a_posicion"):
+                if hasattr(self.controlador_hardware, "center"):
+                    self.controlador_hardware.center()
+                elif hasattr(self.controlador_hardware, "ir_a_posicion"):
                     self.controlador_hardware.ir_a_posicion(0.0, 0.0)
-                elif hasattr(self.controlador_hardware, "enviar_voltajes"):
-                    self.controlador_hardware.enviar_voltajes(0.0, 0.0, laser_on=False)
             except Exception as e:
                 print(f"[PuenteLaser] Error centrando galvos: {e}")
 
@@ -1227,23 +1231,6 @@ class PuenteLaser:
                     fb["on"] = False
                     on_log(f"[NIDaqController Notice] {daq_e}")
 
-                #hardware driver trace
-                tx_thread = None
-                if not self.es_simulacion and hasattr(self.controlador_hardware, "trazar_trayectorias"):
-                    def _galvo_tx_thread():
-                        try:
-                            self.controlador_hardware.trazar_trayectorias(
-                                paths,
-                                velocidad_marcado=v_mark,
-                                velocidad_salto=v_jump,
-                                check_cancel=lambda: self._evento_detener.is_set()
-                            )
-                        except Exception as e:
-                            on_log(f"[GVS] Galvo tracing driver notice: {e}")
-
-                    tx_thread = threading.Thread(target=_galvo_tx_thread, daemon=True)
-                    tx_thread.start()
-
                 #telemetry replay ~35fps
                 t0 = time.time()
                 while True:
@@ -1294,11 +1281,6 @@ class PuenteLaser:
                     if k >= k_last:
                         break
                     time.sleep(0.028)
-
-                #wait for tx thread
-                if tx_thread and tx_thread.is_alive():
-                    timeout_join = 0.5 if self._evento_detener.is_set() else 0.05
-                    tx_thread.join(timeout=timeout_join)
 
                 #read remaining feedback
                 if fb["on"] and not self._evento_detener.is_set():
