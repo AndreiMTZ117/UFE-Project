@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/constantes.py — Constantes de Diseño y Widgets (Cyber-Brutalism)
-"""
+"""cyber brutalism design constants and custom widgets"""
 
 import os
 import time
@@ -9,30 +7,28 @@ import ctypes
 import tkinter as tk
 import customtkinter as ctk
 
-# =============================================================================
-# CONSTANTES DE DISEÑO (CYBER-BRUTALISM & SCIENTIFIC INSTRUMENTATION)
-# =============================================================================
-COLOR_BG = "#D9D9E3"             # Light bluish-gray window canvas
-COLOR_CARD = "#FFFFFF"           # Panels, containers and cards
-COLOR_BORDER = "#2C2C3A"         # Solid carbon border (2px)
-COLOR_TEXT = "#1E1E24"           # Primary carbon black text
+#design constants
+COLOR_BG = "#D9D9E3"             #light bluish gray window canvas
+COLOR_CARD = "#FFFFFF"           #panels containers and cards
+COLOR_BORDER = "#2C2C3A"         #solid carbon border 2px
+COLOR_TEXT = "#1E1E24"           #primary carbon black text
 
-COLOR_YELLOW = "#F5A623"         # Industrial amber (Primary accent / Highlight)
-COLOR_RED = "#DC2626"            # Alarm red (Emergency Stop / Fault)
-COLOR_BLUE = "#2563EB"           # Electric blue (G1 active cutting / marking)
-COLOR_BLUE_FADED = "#92B1F5"     # Translucent sky-blue (Simulated 50% opacity for previous passes)
-COLOR_GREEN = "#16A34A"          # Industrial green (System ready / OK)
-COLOR_ORANGE = "#F97316"         # Dashed orange (G0 rapid travel)
-COLOR_PAUSE = "#E2E8F0"          # Neutral pause state
-COLOR_TIMER_BG = "#F4F4F8"       # Multimeter readout box background
-COLOR_BOX_BG = "#F4F4F8"         # DMM instrumentation background
-COLOR_VECTOR_GRAY = "#CBD5E1"    # Neutral CAD background vector
-COLOR_GRID = "#E2E8F0"           # Metric millimeter grid line
-COLOR_MUTED = "#64748B"          # Secondary technical labels
-COLOR_CYAN_HALO = "#93C5FD"      # Beam cursor halo
-COLOR_TERMINAL_BG = "#1E1E24"    # High-contrast terminal background
+COLOR_YELLOW = "#F5A623"         #industrial amber accent
+COLOR_RED = "#DC2626"            #alarm red
+COLOR_BLUE = "#2563EB"           #electric blue active trace
+COLOR_BLUE_FADED = "#92B1F5"     #faded blue previous passes
+COLOR_GREEN = "#16A34A"          #industrial green ready state
+COLOR_ORANGE = "#F97316"         #dashed orange rapid jump
+COLOR_PAUSE = "#E2E8F0"          #neutral pause state
+COLOR_TIMER_BG = "#F4F4F8"       #timer readout background
+COLOR_BOX_BG = "#F4F4F8"         #box instrumentation background
+COLOR_VECTOR_GRAY = "#CBD5E1"    #neutral cad background vector
+COLOR_GRID = "#E2E8F0"           #metric millimeter grid line
+COLOR_MUTED = "#64748B"          #secondary technical labels
+COLOR_CYAN_HALO = "#93C5FD"      #beam cursor halo
+COLOR_TERMINAL_BG = "#1E1E24"    #high contrast terminal background
 
-# Nombres de recetas de fábrica protegidas (no eliminables)
+#protected factory recipe names
 RECETAS_PREDETERMINADAS = {
     "Acrílico — Estándar",
     "Policarbonato — Alta Precisión",
@@ -49,7 +45,7 @@ FONT_TEACHERS = "Teachers"
 FONT_CONSOLAS = "Consolas"
 FONT_SEGOE = "Segoe UI"
 
-# Geometría Cyber-Brutalist: Simples cuadrados sin bordes redondeados y mayor grosor
+#square geometry without rounded corners
 BRUTAL_CORNER = 0
 BRUTAL_BORDER = 2
 BRUTAL_BORDER_THICK = 3
@@ -58,11 +54,7 @@ _DIR_ACTUAL = os.path.dirname(os.path.abspath(__file__))
 
 
 class BrutalOptionMenu(ctk.CTkOptionMenu):
-    """
-    CTkOptionMenu con comportamiento Cyber-Brutalism mejorado:
-    - Se cierra automáticamente al presionar de nuevo sobre la flechita/botón.
-    - Respeta esquinas cuadradas y estética brutalista.
-    """
+    """custom option menu with auto close and square borders"""
     def __init__(self, *args, **kwargs):
         if "corner_radius" not in kwargs:
             kwargs["corner_radius"] = BRUTAL_CORNER
@@ -76,23 +68,14 @@ class BrutalOptionMenu(ctk.CTkOptionMenu):
         self._last_close_time = time.time()
 
     def _open_dropdown_menu(self):
-        # Si se cerró hace menos de 350 ms, el usuario hizo clic para cerrar el menú
+        #ignore if closed within last 350ms
         if time.time() - self._last_close_time < 0.35:
             return
         super()._open_dropdown_menu()
 
 
 class ToolTip:
-    """
-    Cyber-Brutalist tooltip / text helper for any tkinter/CustomTkinter widget.
-
-    Behavior:
-    - When the mouse moves (<Motion>), any visible tooltip is immediately hidden,
-      and any pending timer is reset.
-    - If the mouse remains still for `retardo_ms` (default 550 ms), the tooltip appears.
-    - As soon as the mouse moves again, the tooltip is dismissed.
-    - Bound recursively to all CustomTkinter sub-widgets to prevent flickering.
-    """
+    """tooltip text helper for tkinter and customtkinter widgets"""
 
     def __init__(self, widget, texto: str, retardo_ms: int = 650, ancho_px: int = 300):
         self.widget = widget
@@ -123,7 +106,7 @@ class ToolTip:
             self._enlazar_recursivo(hijo)
 
     def _on_motion(self, event=None):
-        # If tooltip is currently shown, dismiss it immediately on any movement
+        #dismiss tooltip immediately on movement
         if self._ventana is not None:
             self._ocultar()
         elif self._after_id is not None:
@@ -137,7 +120,7 @@ class ToolTip:
             self._last_x = event.x_root
             self._last_y = event.y_root
 
-        # Reset the timer so it only fires when the mouse stays stationary
+        #reset timer while mouse moves
         try:
             self._after_id = self.widget.after(self.retardo_ms, self._mostrar)
         except Exception:
@@ -165,7 +148,7 @@ class ToolTip:
         if self._ventana is not None:
             return
 
-        # Verify mouse pointer is still inside the widget boundary
+        #verify pointer is still inside widget boundary
         try:
             px, py = self.widget.winfo_pointerxy()
             x0, y0 = self.widget.winfo_rootx(), self.widget.winfo_rooty()
@@ -192,7 +175,7 @@ class ToolTip:
             etiqueta.pack()
             ventana.update_idletasks()
 
-            # Dismiss if pointer touches tooltip window
+            #dismiss if pointer touches tooltip window
             ventana.bind("<Enter>", lambda e: self._ocultar())
             ventana.bind("<Motion>", lambda e: self._ocultar())
 
@@ -230,12 +213,12 @@ class ToolTip:
 
 
 def agregar_tooltip(widget, texto: str, **kwargs) -> ToolTip:
-    """Shortcut to attach a hover tooltip to a widget."""
+    """attach hover tooltip to widget"""
     return ToolTip(widget, texto, **kwargs)
 
 
 def cargar_fuentes_windows():
-    """Registra en memoria las tipografías TrueType para Tkinter en Windows."""
+    """load truetype fonts into memory on windows"""
     rutas_fuentes = [
         os.path.join(_DIR_ACTUAL, "fonts", "BrunoAce-Regular.ttf"),
         os.path.join(_DIR_ACTUAL, "fonts", "Teachers-Regular.ttf"),
@@ -249,7 +232,7 @@ def cargar_fuentes_windows():
 
 
 def configurar_dpi_awareness():
-    """Habilita DPI Awareness en Windows para evitar distorsiones en pantallas de alta densidad."""
+    """enable dpi awareness on windows"""
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:

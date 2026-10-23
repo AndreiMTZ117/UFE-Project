@@ -1,18 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/conexion_interfaz.py — Puente de Conexion Backend <-> Interfaz Grafica
-
-Gestiona:
-  1. Base de datos SQLite3 (GestorRecetas y GestorTrazabilidad)
-  2. Procesamiento de archivos DXF (LectorDXF y transform_and_scale_dxf)
-  3. Conexion al sistema Thorlabs GVS112/M (fisico o simulacion automatica)
-  4. Hilo asincrono de ejecucion con telemetria en tiempo real,
-     control estricto del laser y parada instantanea no bloqueante.
-
-Hardware soportado:
-  - Thorlabs GVS112/M con tarjeta DAQ/DAC fisica
-  - Modo Simulacion automatico cuando el hardware no esta disponible
-"""
+"""backend interface bridge between gui and core engine"""
 
 import os
 import sys
@@ -53,18 +40,7 @@ def calc_inertial_lag_ms(
     max_lag_ms: float = 50.0,
     min_lag_ms: float = -5.0,
 ) -> float:
-    """Calcula el retardo inercial fisico de los espejos en milisegundos mediante correlacion cruzada.
-
-    Args:
-        meas: Matriz de voltajes medidos con forma (2, N).
-        cmd: Matriz de voltajes comandados con forma (2, N).
-        sample_rate_hz: Frecuencia de muestreo fs en Hz.
-        max_lag_ms: Limite superior de busqueda en ms (por defecto 50.0 ms).
-        min_lag_ms: Limite inferior de busqueda en ms (por defecto -5.0 ms).
-
-    Returns:
-        float: Retardo temporal en ms cuantificado entre la senal de comando y la respuesta real.
-    """
+    """calc physical inertial lag in ms using cross correlation"""
     if meas.ndim == 1:
         meas = meas.reshape(1, -1)
     if cmd.ndim == 1:
@@ -130,7 +106,7 @@ def calc_inertial_lag_ms(
 
 
 def load_hardware_profile() -> Dict[str, Any]:
-    """Carga el perfil cinematico y geometrico del Thorlabs GVS112/M."""
+    """load kinematic and geometric profile for thorlabs galvo"""
     try:
         from hardware.config_galvo import (
             CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
@@ -229,14 +205,7 @@ PRESETS_MODO_PROCESO: Dict[str, Dict[str, Any]] = {
 
 
 def get_mode_preset(modo: str) -> Dict[str, Any]:
-    """Return recommended process parameters dictionary for Cutting, Welding, or Marking.
-
-    Args:
-        modo: 'Cutting', 'Welding', or 'Marking' (case-insensitive).
-
-    Returns:
-        Dict with recommended kinematic, timing, and multi-pass settings.
-    """
+    """get recommended process parameters for cutting welding or marking"""
     if not modo:
         return dict(PRESETS_MODO_PROCESO["Marking"])
     m_clean = str(modo).strip().lower()
@@ -247,7 +216,7 @@ def get_mode_preset(modo: str) -> Dict[str, Any]:
 
 
 class PuenteLaser:
-    """Puente integral entre la interfaz de usuario y el motor backend."""
+    """bridge between user interface and backend engine"""
 
     HAL_ACTUAL = "thorlabs_galvo"
 
@@ -304,7 +273,7 @@ class PuenteLaser:
         self._init_hardware()
 
     def _init_hardware(self):
-        """Sondea y enlaza hardware físico real o conmuta honestamente a simulación virtual."""
+        """probe physical hardware or switch to simulation"""
         try:
             from core.NIDaqController import probe_daq_hardware
             daq_probe = probe_daq_hardware()
@@ -319,7 +288,7 @@ class PuenteLaser:
             self._enable_simulator(razon=str(e))
 
     def _enable_simulator(self, razon: str = ""):
-        """Instancia el entorno de simulación virtual sin hardware físico."""
+        """start virtual simulation environment"""
         try:
             from hardware.simulador_thorlabs import SimuladorThorlabsGVS
             self.controlador_hardware = SimuladorThorlabsGVS()
@@ -332,12 +301,12 @@ class PuenteLaser:
             self.es_simulacion = True
 
     def detect_hardware(self) -> bool:
-        """Intenta inicializar o detectar el hardware Thorlabs GVS112/M fisico."""
+        """try initializing physical thorlabs hardware"""
         self._init_hardware()
         return self.is_physically_connected()
 
     def set_base_dimensions(self, ancho_cm: float, alto_cm: float):
-        """Define las dimensiones fisicas de la base y recalcula el centro."""
+        """set physical base dimensions and recalculate center"""
         self.ancho_base_cm = float(ancho_cm)
         self.alto_base_cm = float(alto_cm)
         self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
@@ -347,7 +316,7 @@ class PuenteLaser:
         print(f"[PuenteLaser] Dimensiones base: {self.ancho_base_cm:.1f} x {self.alto_base_cm:.1f} cm")
 
     def set_center_cm(self, x_cm: float, y_cm: float):
-        """Define el centro en centimetros (ajuste manual del usuario)."""
+        """set center in cm for manual user adjustment"""
         self.centro_cm_x = float(x_cm)
         self.centro_cm_y = float(y_cm)
 
@@ -409,23 +378,16 @@ class PuenteLaser:
             return False
 
     def get_mode_preset(self, modo: str) -> Dict[str, Any]:
-        """
-        Returns recommended process parameters for Cutting, Welding, or Marking.
-        """
+        """get recommended process parameters for cutting welding or marking"""
         return get_mode_preset(modo)
 
     #hardware state
     def is_physically_connected(self) -> bool:
-        """Informa si hay hardware real listo (no simulacion)."""
+        """check if physical hardware is ready"""
         return not self.es_simulacion and self.controlador_hardware is not None
 
     def is_feedback_supported(self) -> Tuple[bool, str]:
-        """Informa si el Hardware Feedback Tracking puede activarse.
-
-        Returns:
-            (disponible, clave) con clave in {"ok", "simulation", "no_driver", "no_device"}.
-            Nunca lanza excepciones.
-        """
+        """check if hardware feedback tracking is available"""
         try:
             if self.es_simulacion or self.controlador_hardware is None:
                 return False, "simulation"
@@ -434,7 +396,7 @@ class PuenteLaser:
             return False, "no_device"
 
     def set_feedback(self, habilitar: bool) -> bool:
-        """Activa/desactiva el feedback. Solo se activa si no es simulacion. Devuelve el estado final."""
+        """enable or disable feedback tracking"""
         if habilitar and self.es_simulacion:
             self.feedback_habilitado = False
         else:
@@ -447,7 +409,7 @@ class PuenteLaser:
         return HARDWARE_CONFIG["thorlabs_galvo"].get("nombre", "Thorlabs GVS112/M")
 
     def laser_off(self):
-        """Apaga el laser de forma segura."""
+        """safely turn laser off"""
         if self.controlador_hardware:
             try:
                 if hasattr(self.controlador_hardware, "apagar_laser"):
@@ -456,7 +418,7 @@ class PuenteLaser:
                 print(f"[PuenteLaser] Error apagando laser: {e}")
 
     def center_galvos(self):
-        """Posiciona los espejos galvanométricos en reposo Home (0.0 V, 0.0 V) de forma segura."""
+        """park mirrors at home position"""
         if hasattr(self, "daq_controller") and self.daq_controller:
             try:
                 self.daq_controller._park_outputs()
@@ -480,16 +442,7 @@ class PuenteLaser:
         invert_y: bool = False,
         swap_xy: bool = False
     ) -> Tuple[float, float]:
-        """
-        Transforms a physical coordinate (x, y) with axis swapping,
-        workspace center reflections, and hardware saturation clamping.
-
-        Order of operations:
-          1. Swap axes: (x, y) -> (y, x)
-          2. Reflect X across center of workspace (self.centro_x)
-          3. Reflect Y across center of workspace (self.centro_y)
-          4. Hardware saturation limits: clamp to [x_min, x_max] and [y_min, y_max]
-        """
+        """transform coordinate with axis swapping reflections and clamping"""
         if swap_xy:
             x, y = y, x
 
@@ -511,9 +464,7 @@ class PuenteLaser:
         invert_y: bool = False,
         swap_xy: bool = False
     ) -> List[List[Tuple[float, float]]]:
-        """
-        Applies coordinate inversion, permutation, and physical clamping to a set of paths.
-        """
+        """apply coordinate inversion and physical clamping to paths"""
         if not (invert_x or invert_y or swap_xy):
             return trazos
 
@@ -550,7 +501,7 @@ class PuenteLaser:
         return result
 
     def _generate_gcode_from_dxf(self, fuente_dxf_o_trazos: Any, ruta_gcode: str):
-        """Generates standard ISO 6983 G-code from DXF vector contours or pre-extracted paths."""
+        """generate standard gcode from dxf vector contours"""
         if isinstance(fuente_dxf_o_trazos, list):
             paths = fuente_dxf_o_trazos
         else:
@@ -579,10 +530,7 @@ class PuenteLaser:
             fh.write("\n".join(lines) + "\n")
 
     def load_dxf(self, ruta_archivo: str, params_receta: Dict) -> Dict:
-        """
-        Loads DXF with 100% entity preservation via high-performance LectorDXF (ezdxf),
-        generates standard ISO 6983 G-code, parses blocks, and optimizes trajectories.
-        """
+        """load dxf and generate gcode and optimize trajectories"""
         if not os.path.exists(ruta_archivo):
             raise FileNotFoundError(f"File not found: {ruta_archivo}")
 
@@ -622,7 +570,7 @@ class PuenteLaser:
         return self.recalculate_paths(params_receta)
 
     def recalculate_paths(self, params_receta: Dict) -> Dict:
-        """Aplica escala, rotación y optimización espacial preservando todas las figuras geométricas."""
+        """apply scale rotation and spatial optimization to paths"""
         if not self.trazos_originales:
             return {}
 
@@ -725,7 +673,7 @@ class PuenteLaser:
                           on_log: Callable,
                           on_finished: Callable,
                           on_pass_change: Optional[Callable[[int, int], None]] = None):
-        """Lanza el proceso de trazado en un hilo independiente."""
+        """start tracing process in background thread"""
         if self._en_ejecucion:
             return
 
@@ -742,7 +690,7 @@ class PuenteLaser:
         self._hilo_ejecucion.start()
 
     def toggle_pause(self) -> bool:
-        """Alterna entre pausa y reanudacion de forma no bloqueante."""
+        """toggle pause and resume non-blocking"""
         if not self._en_ejecucion:
             return False
 
@@ -762,14 +710,14 @@ class PuenteLaser:
             return True
 
     def pause_for_safety(self):
-        """Pausa inmediata preventiva."""
+        """preventive immediate pause"""
         if not self._en_ejecucion:
             return
         self._esta_pausado = True
         self._evento_pausa.clear()
 
     def stop_execution(self):
-        """Detiene la ejecucion activa inmediatamente con parada atomica E-STOP."""
+        """stop active execution immediately with atomic e-stop"""
         self._evento_detener.set()
         self._evento_pausa.set()
         if hasattr(self, "daq_controller") and self.daq_controller:
@@ -796,22 +744,7 @@ class PuenteLaser:
         on_finished: Optional[Callable] = None,
         asincrono: bool = True
     ) -> bool:
-        """
-        Executes a closed rectangular perimeter tracing (Framing routine) around
-        the calibrated bounding box at rapid speed with LASER STRICTLY OFF.
-
-        Args:
-            params: Dictionary containing optional configuration:
-                    - 'velocidad_viaje': rapid travel feed (default: 2000 mm/s)
-                    - 'num_vueltas' / 'vueltas_framing': laps to execute (1 or 2, default: 1)
-            on_progress: Optional GUI progress callback.
-            on_log: Optional terminal logger callback.
-            on_finished: Optional completion callback.
-            asincrono: Whether to spawn a background daemon thread (default: True).
-
-        Returns:
-            bool: True if framing started successfully, False otherwise.
-        """
+        """run closed rectangular framing routine around bounding box with laser off"""
         if self._en_ejecucion:
             if on_log:
                 on_log(tr("log_framing_busy"))
@@ -985,14 +918,7 @@ class PuenteLaser:
                       on_log: Callable,
                       on_finished: Callable,
                       on_pass_change: Optional[Callable[[int, int], None]] = None):
-        """
-        Motor de ejecucion cinematica con telemetria de alta fidelidad.
-
-        Construye una secuencia determinista de waypoints y:
-          - Lanza un hilo de transmision al hardware (o simulador)
-          - Ejecuta el bucle de telemetria visual a ~35 fps
-          - Garantiza parada instantanea no bloqueante
-        """
+        """kinematic execution engine with high fidelity telemetry"""
         t_start = time.time()
         state = "COMPLETED"
         error_msg = ""
@@ -1117,7 +1043,7 @@ class PuenteLaser:
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
 
             def _drain_feedback(final: bool = False) -> None:
-                """Lee muestras AI nuevas, acumula el error de seguimiento y emite puntos medidos."""
+                """read new ai samples accumulate tracking error and emit measured points"""
                 if not fb["on"] or not self.daq_controller:
                     return
                 attempts = 15 if final else 1

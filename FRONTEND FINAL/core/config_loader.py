@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-core/config_loader.py - Centralized configuration loader for hardware,
-kinematics, and calibration parameters.
-
-Reads settings from 'hardware_config.json' and provides safe fallback defaults
-with explicit warnings if the file is absent or malformed.
-"""
+"""load hardware config from json with safe defaults"""
 
 from __future__ import annotations
 
@@ -29,7 +23,7 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "analog_channels": ["Dev1/ao0", "Dev1/ao1"],
         "laser_gate_channel": "Dev1/port0/line0",
         "ai_channels": ["Dev1/ai0", "Dev1/ai1"],
-        "ai_terminal_config": "DIFF",   # "DIFF" or "RSE"
+        "ai_terminal_config": "DIFF",   #terminal configuration mode
         "f_s": 100000.0,
         "sample_rate_hz": 100000.0,
         "sync_clock": "/Dev1/ao/SampleClock",
@@ -52,18 +46,13 @@ HARDWARE_CONFIG_PATH: str = os.path.abspath(
 
 
 def find_hardware_config_path(explicit_path: Optional[str] = None) -> Optional[str]:
-    """Resolve the path to hardware_config.json statically."""
+    """resolve path to hardware config"""
     target = explicit_path if explicit_path else HARDWARE_CONFIG_PATH
     return target if os.path.isfile(target) else None
 
 
 def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
-    """Load configuration from hardware_config.json or return fallback defaults.
-        config_path: Optional explicit path to the JSON configuration file.
-    Returns:
-        Dict[str, Any]: Complete configuration dictionary with 'daq',
-        'galvo_dynamics', and 'cad_cam' sections.
-    """
+    """load hardware config from json or fallback defaults"""
     resolved_path = find_hardware_config_path(config_path)
 
     if not resolved_path:
@@ -78,7 +67,7 @@ def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
             user_config = json.load(f)
         if not isinstance(user_config, dict):
             raise ValueError(f"Root of configuration file '{resolved_path}' must be a JSON object.")
-        # Deep merge with defaults to ensure all keys exist
+        #deep merge with defaults
         merged_config = copy.deepcopy(DEFAULT_HARDWARE_CONFIG)
         for section, values in user_config.items():
             if isinstance(values, dict) and section in merged_config:
@@ -95,14 +84,7 @@ def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def get_volts_per_mm(config: Optional[Dict[str, Any]] = None) -> float:
-    """Retrieve the canonical spatial-to-voltage scale factor in V/mm.
-
-    Args:
-        config: Optional pre-loaded hardware configuration dictionary.
-
-    Returns:
-        float: Spatial scale factor (V/mm), nominally 0.200 V/mm for +/-10V over +/-50mm.
-    """
+    """get spatial to voltage scale factor in v per mm"""
     cfg = config if config is not None else load_hardware_config()
     if "volts_per_mm" in cfg:
         return float(cfg["volts_per_mm"])

@@ -1,22 +1,12 @@
 # -*- coding: utf-8 -*-
-"""
-core/lector_dxf.py — Motor Universal de Lectura y Extracción de DXF
-
-Soporta extracción geométrica de:
-  - Líneas (LINE)
-  - Polilíneas ligeras y 2D/3D (LWPOLYLINE, POLYLINE) con soporte de arcos en vértices (bulge)
-  - Círculos y Arcos (CIRCLE, ARC)
-  - Curvas Spline (SPLINE)
-  - Elipses (ELLIPSE)
-  - Bloques anidados (INSERT) mediante resolución recursiva
-"""
+"""dxf file reading and vector extraction"""
 
 import os
 import ezdxf
 from ezdxf import path
 
 def entidades_recursivas(entidades, profundidad=0, max_profundidad=12):
-    """Explota recursivamente bloques INSERT y cotas en entidades elementales."""
+    """recursively explode insert blocks and dimensions"""
     if profundidad > max_profundidad:
         return
 
@@ -37,7 +27,7 @@ def entidades_recursivas(entidades, profundidad=0, max_profundidad=12):
 
 
 class LectorDXF:
-    """Lector universal de archivos CAD DXF."""
+    """dxf cad file reader"""
 
     def __init__(self, ruta_archivo):
         self.ruta_archivo = ruta_archivo
@@ -55,8 +45,7 @@ class LectorDXF:
             raise RuntimeError(f"Error al abrir el archivo DXF '{ruta_archivo}': {e}")
 
     def extraer_coordenadas(self, paso_discretizacion=0.01):
-        #Extrae las trayectorias vectoriales de todas las entidades del espacio modelo.
-        #Convierte curvas (arcos, splines, círculos) en secuencias de puntos mediante flattening.
+        #extract vector paths by flattening curves
         if not self.espacio_modelo:
             return []
 
@@ -92,7 +81,7 @@ class LectorDXF:
 
 
 def obtener_limites_dxf(trayectorias):
-    #Calcula el Bounding Box (mínimos y máximos) de las trayectorias.
+    #calculate bounding box of trajectories
     puntos = [p for ruta in trayectorias for p in ruta]
     if not puntos:
         return 0.0, 1.0, 0.0, 1.0

@@ -1,17 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
-test_system_full.py — End-to-End White-Box & Integration Test Suite.
+"""end to end integration test battery for laser scanning system"""
 
-Automated validation battery for the industrial laser scanning system:
-Thorlabs GVS112/M galvanometer with National Instruments PXI-6229 / PXIe-1073
-chassis at the Institute of Photonics and Electronics (ÚFE), Czech Academy of Sciences, Prague.
-
-Directives:
-  - 100% complete, executable, and self-contained (zero '# TODO', zero truncation).
-  - Headless execution (no physical hardware required, no GUI spawned).
-  - Clean mock/stub fallbacks when running in CI/dev environments.
-  - Strict resource cleanup on test completion (try/finally).
-"""
 
 from __future__ import annotations
 
@@ -29,12 +18,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-# Ensure project root is present in sys.path
+#ensure project root is present in sys path
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-# Core imports
+#core imports
 from core.CADConverter import CADConverter
 from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
@@ -46,13 +35,13 @@ from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
 from interfaz.conexion_interfaz import PuenteLaser
 
-# Global registry of temporary files for safe automated cleanup
+#global registry of temporary files for safe cleanup
 _TEMP_FILES_TO_CLEANUP: List[str] = []
 
 
 @contextlib.contextmanager
 def _silence_stdout():
-    """Context manager to suppress low-level stdout and stderr logging during automated tests."""
+    """suppress stdout and stderr during test execution"""
     with open(os.devnull, "w", encoding="utf-8") as devnull:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -66,14 +55,14 @@ def _silence_stdout():
 
 
 def _register_temp_file(path: str) -> str:
-    """Register a temporary file path for cleanup."""
+    """register temporary file path for cleanup"""
     if path and path not in _TEMP_FILES_TO_CLEANUP:
         _TEMP_FILES_TO_CLEANUP.append(path)
     return path
 
 
 def _cleanup_all_artifacts() -> None:
-    """Safely delete all generated temporary artifacts with Windows handle release retry."""
+    """safely delete all generated temporary test artifacts"""
     import gc
     gc.collect()
     for path in list(_TEMP_FILES_TO_CLEANUP):
@@ -96,22 +85,20 @@ def _cleanup_all_artifacts() -> None:
 atexit.register(_cleanup_all_artifacts)
 
 
-# ==============================================================================
-# FASE 1: VERIFICACIÓN DE ENTORNO Y DEPENDENCIAS (Environment Health)
-# ==============================================================================
+#phase 1 environment health and dependency validation
 def phase_1_environment_health() -> Dict[str, Any]:
-    """Validate Python runtime, critical numerical libraries, DAQ, and CAD drivers."""
-    # 1. Python version >= 3.10
+    """validate python runtime numerical libraries daq and cad drivers"""
+    #python version check
     v_major, v_minor = sys.version_info.major, sys.version_info.minor
     assert sys.version_info >= (3, 10), (
         f"Python >= 3.10 required. Detected version: {v_major}.{v_minor}"
     )
 
-    # 2. Package import verification
+    #package import verification
     import scipy
     import ezdxf
 
-    # GUI Framework validation (CustomTkinter or PyQt6)
+    #gui framework validation
     gui_framework_detected = None
     try:
         import customtkinter
@@ -120,10 +107,10 @@ def phase_1_environment_health() -> Dict[str, Any]:
         pass
     assert gui_framework_detected is not None, "CustomTkinter is not importable."
 
-    # National Instruments DAQmx probing (Driver runtime and physical device enumeration)
+    #daq probing
     daq_probe = probe_daq_hardware()
 
-    # FreeCADcmd detection in PATH or standard installation directories
+    #freecadcmd detection in path or install dirs
     freecad_cmd_path = shutil.which("FreeCADcmd")
     if not freecad_cmd_path:
         for candidate in [
@@ -147,14 +134,12 @@ def phase_1_environment_health() -> Dict[str, Any]:
     }
 
 
-# ==============================================================================
-# FASE 2: CONVERSIÓN CAD Y PARSEO G-CODE (CADConverter -> GCodeParser)
-# ==============================================================================
+#phase 2 cad conversion and gcode parsing
 def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock], str, str]:
-    """Generate a synthetic DXF with mixed shapes, convert to G-code, and parse."""
+    """generate synthetic dxf convert to gcode and parse"""
     import ezdxf
 
-    # Create temporary file paths
+    #create temporary file paths
     temp_fd_dxf, temp_dxf_path = tempfile.mkstemp(prefix="synthetic_", suffix=".dxf")
     os.close(temp_fd_dxf)
     _register_temp_file(temp_dxf_path)
@@ -162,23 +147,23 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
     temp_gcode_path = os.path.splitext(temp_dxf_path)[0] + ".gcode"
     _register_temp_file(temp_gcode_path)
 
-    # 1. Create synthetic DXF: closed square (20x20 mm) + circle (R=10 mm)
+    #create synthetic dxf with square and circle
     doc = ezdxf.new("R2010")
-    doc.header["$INSUNITS"] = 4      # 4 = Millimeters
-    doc.header["$MEASUREMENT"] = 1   # 1 = Metric
+    doc.header["$INSUNITS"] = 4      #4 mm unit
+    doc.header["$MEASUREMENT"] = 1   #1 metric unit
     msp = doc.modelspace()
 
-    # Square (20x20 mm)
+    #square 20x20 mm
     square_pts = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 0.0)]
     msp.add_lwpolyline(square_pts, close=True)
 
-    # Circle (R=10 mm) at center (50.0, 10.0)
+    #circle r10 mm at center
     msp.add_circle(center=(50.0, 10.0), radius=10.0)
 
     doc.saveas(temp_dxf_path)
     assert os.path.isfile(temp_dxf_path) and os.path.getsize(temp_dxf_path) > 0
 
-    # 2. Convert to G-code via CADConverter (or deterministic ISO 6983 stub if FreeCAD is missing)
+    #convert to gcode via cadconverter or fallback
     freecad_bin = env_info.get("freecad_cmd_path")
     conversion_successful = False
 
@@ -192,13 +177,13 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
             conversion_successful = False
 
     if not conversion_successful:
-        # Fallback ISO 6983 G-code generator for environments without headless FreeCAD
+        #fallback gcode generator without freecad
         lines = [
             "%",
             "(Synthetic ISO 6983 G-code for Laser Galvo Validation)",
-            "G21",  # Millimeters
-            "G90",  # Absolute coordinates
-            "G17",  # XY plane
+            "G21",  #millimeters
+            "G90",  #absolute coordinates
+            "G17",  #xy plane
             "M5",
             "G0 X0.0000 Y0.0000 F300.0",
             "M3",
@@ -207,10 +192,10 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
             "G1 X0.0000 Y20.0000",
             "G1 X0.0000 Y0.0000",
             "M5",
-            # Rapid jump between square and circle
+            #rapid jump between square and circle
             "G0 X60.0000 Y10.0000 F300.0",
             "M3",
-            # Circle approximated with arc segments
+            #circle approximated with arc segments
             "G2 X40.0000 Y10.0000 I-10.0000 J0.0000 F120.0",
             "G2 X60.0000 Y10.0000 I10.0000 J0.0000",
             "M5",
@@ -223,7 +208,7 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
     assert os.path.isfile(temp_gcode_path), "G-code file was not generated."
     assert os.path.getsize(temp_gcode_path) > 0, "G-code file is empty."
 
-    # 3. Parse with GCodeParser
+    #parse with gcodeparser
     parser = GCodeParser(
         temp_gcode_path,
         default_feed_mm_s=2.0,
@@ -240,7 +225,7 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
     assert len(g0_blocks) >= 1, "Expected at least one rapid G0 jump."
     assert len(g1_blocks) >= 4, "Expected at least four G1 cutting/marking segments."
 
-    # Coordinate and kinematic velocity checks
+    #coordinate and kinematic velocity checks
     for b in blocks:
         assert b.velocity > 0.0, f"Block velocity must be positive: {b}"
         assert -100.0 <= b.start[0] <= 100.0, f"X start out of bounds: {b.start}"
@@ -251,24 +236,21 @@ def phase_2_cad_to_gcode(env_info: Dict[str, Any]) -> Tuple[List[TrajectoryBlock
     return blocks, temp_dxf_path, temp_gcode_path
 
 
-# ==============================================================================
-# FASE 3: OPTIMIZACIÓN VECTORIAL Y PODA HEURÍSTICA (PathOptimizer)
-# ==============================================================================
+#phase 3 path optimization and heuristic pruning
 def phase_3_path_optimization() -> None:
-    """Validate RDP polyline simplification and TSP path optimization with heuristic pruning."""
-    # 1. Ramer-Douglas-Peucker (RDP) mathematical evaluation
-    # Strictly convex parabolic curve: every intermediate vertex deviates from chords
+    """validate rdp polyline simplification and tsp optimization"""
+    #rdp evaluation on convex parabolic curve
     x_curve = np.linspace(0.0, 10.0, 25)
     y_curve = 0.1 * (x_curve ** 2)
     curve_nodes = np.column_stack((x_curve, y_curve))
 
-    # With epsilon = 0.0 -> 100% mathematical preservation of all input vertices
+    #epsilon 0 preserves all vertices
     rdp_zero = PathOptimizer.rdp(curve_nodes, epsilon=0.0)
     assert len(rdp_zero) == len(curve_nodes), (
         f"epsilon=0.0 must preserve 100% of nodes. Expected {len(curve_nodes)}, got {len(rdp_zero)}"
     )
 
-    # With epsilon > 0.0 -> Redundant intermediate vertices pruned, endpoints strictly preserved
+    #epsilon above zero simplifies curve
     rdp_simplified = PathOptimizer.rdp(curve_nodes, epsilon=0.5)
     assert 2 <= len(rdp_simplified) < len(curve_nodes), (
         f"Convex curve with epsilon=0.5 must reduce vertices. Got {len(rdp_simplified)}"
@@ -276,12 +258,10 @@ def phase_3_path_optimization() -> None:
     assert np.allclose(rdp_simplified[0], curve_nodes[0]), "First point altered."
     assert np.allclose(rdp_simplified[-1], curve_nodes[-1]), "Last point altered."
 
-    # 2. Traveling Salesperson Problem (TSP) optimization
+    #tsp optimization
     optimizer = PathOptimizer(epsilon=0.0, rapid_speed_mm_s=200.0)
 
-    # Caso A: N <= 20 contours -> 2-Opt execution minimizing G0 jump distance
-    # Synthetic scrambled contours:
-    # C0 at (0, 0), C1 at (80, 0), C2 at (5, 0), C3 at (75, 0), C4 at (10, 0), C5 at (70, 0)
+    #small contour set uses 2opt to minimize rapid travel
     scrambled_contours = [
         np.array([[0.0, 0.0], [0.0, 2.0]]),
         np.array([[80.0, 0.0], [80.0, 2.0]]),
@@ -300,7 +280,7 @@ def phase_3_path_optimization() -> None:
         f"2-Opt failed to reduce travel distance: {unoptimized_travel:.2f} -> {optimized_travel:.2f}"
     )
 
-    # Caso B: N > 100 synthetic contours -> Automatic heuristic pruning to Greedy NN in < 0.3s
+    #large contour set prunes automatically to greedy nearest neighbor
     n_dense = 120
     dense_contours = [
         np.array([[float(i * 2), float((i % 10) * 2)], [float(i * 2 + 1), float((i % 10) * 2)]])
@@ -317,29 +297,27 @@ def phase_3_path_optimization() -> None:
     )
 
 
-# ==============================================================================
-# FASE 4: SÍNTESIS DE SEÑALES TEMPORIZADAS (GalvoSignalGenerator)
-# ==============================================================================
+#phase 4 timed signal generation
 def phase_4_signal_generation() -> Dict[str, Any]:
-    """Validate 100 kHz discretization, electrical voltage clamping, and hardware transforms."""
-    # Synthesize test trajectory blocks
+    """validate discretization electrical clamping and hardware transforms"""
+    #synthesize test trajectory blocks
     blocks = [
         TrajectoryBlock("G0", (0.0, 0.0), (10.0, 10.0), 200.0),
         TrajectoryBlock("G1", (10.0, 10.0), (30.0, 10.0), 20.0),
         TrajectoryBlock("G1", (30.0, 10.0), (30.0, 30.0), 20.0),
-        # Severe excursion beyond limits to rigorously test electrical clamping
+        #out of bound excursion to test voltage clamping
         TrajectoryBlock("G0", (30.0, 30.0), (-65.0, -65.0), 200.0),
         TrajectoryBlock("G1", (-65.0, -65.0), (-65.0, -55.0), 10.0),
     ]
 
-    fs = 100_000.0  # 100 kHz (delta_t = 10 us)
-    v_per_mm = get_volts_per_mm()  # Canonical Thorlabs +/-50 mm -> +/-10 V (0.200 V/mm)
+    fs = 100_000.0  #100 khz sampling
+    v_per_mm = get_volts_per_mm()  #scale factor 0.200 v per mm
     v_limits = (-10.0, 10.0)
 
-    jump_delay_us = 150.0   # 15 samples
-    mark_delay_us = 50.0    # 5 samples
-    laser_on_delay_us = 20.0  # 2 samples
-    laser_off_delay_us = 20.0  # 2 samples
+    jump_delay_us = 150.0   #15 samples
+    mark_delay_us = 50.0    #5 samples
+    laser_on_delay_us = 20.0  #2 samples
+    laser_off_delay_us = 20.0  #2 samples
 
     generator = GalvoSignalGenerator(
         blocks,
@@ -353,7 +331,7 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     )
     voltages, gate = generator.generate_signals()
 
-    # 1. Structural assertions
+    #structural assertions
     n_samples = voltages.shape[1]
     assert voltages.ndim == 2 and voltages.shape[0] == 2, (
         f"Analog output matrix must have shape (2, N). Got {voltages.shape}"
@@ -362,7 +340,7 @@ def phase_4_signal_generation() -> Dict[str, Any]:
         f"Digital laser gate must have shape (1, N) with N={n_samples}. Got {gate.shape}"
     )
 
-    # 2. Strict Electrical Clamping: protect Thorlabs GVS112/M servo amplifiers
+    #strict electrical clamping check
     vx_min, vx_max = float(np.min(voltages[0])), float(np.max(voltages[0]))
     vy_min, vy_max = float(np.min(voltages[1])), float(np.max(voltages[1]))
 
@@ -370,16 +348,15 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     assert vx_max <= 10.0, f"Vx electrical maximum violated: {vx_max} V"
     assert vy_min >= -10.0, f"Vy electrical minimum violated: {vy_min} V"
     assert vy_max <= 10.0, f"Vy electrical maximum violated: {vy_max} V"
-    # Verify that -65 mm * 0.2 V/mm = -13.0 V was securely clamped to -10.0 V
+    #verify voltage clamped to safe limits
     assert math.isclose(vx_min, -10.0, abs_tol=1e-5), f"Expected clamping at -10.0V, got {vx_min}"
 
-    # 3. Deterministic Delay Injection
-    # During initial G0 jump, laser gate MUST be zero
+    #deterministic delay injection
     assert gate[0, 0] == 0, "Initial prepended position sample must have laser OFF."
     assert np.sum(gate == 1) > 0, "Laser gate never turned ON during G1 blocks."
     assert np.sum(gate == 0) > 0, "Laser gate never turned OFF during G0 blocks/delays."
 
-    # 4. Multi-pass & Thermal Cooling Delay validation
+    #multipass and thermal cooling delay validation
     num_pasadas = 2
     cooling_delay_s = 0.20  # 200 ms cooling dwell
     n_cooling_samples = int(round(cooling_delay_s * fs))
@@ -388,34 +365,34 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     v_cooling = np.repeat(dwell_last, n_cooling_samples, axis=1)
     gate_cooling = np.zeros((1, n_cooling_samples), dtype=np.uint8)
 
-    # Synthesize multi-pass timeline
+    #synthesize multipass timeline
     voltages_multi = np.hstack([voltages, v_cooling, voltages])
     gate_multi = np.hstack([gate, gate_cooling, gate])
 
     assert voltages_multi.shape[1] == (2 * n_samples + n_cooling_samples)
     assert gate_multi.shape[1] == voltages_multi.shape[1]
-    # Verify laser is strictly OFF throughout the cooling dwell
+    #verify laser is off during cooling dwell
     cooling_slice = gate_multi[0, n_samples:n_samples + n_cooling_samples]
     assert np.all(cooling_slice == 0), "Laser was not disabled during cooling interval."
 
-    # 5. Hardware Coordinate Transformations (invert_x, invert_y, swap_xy)
+    #hardware coordinate transformations
     puente = PuenteLaser()
     x_test, y_test = 15.0, 25.0
 
-    # Identity
+    #identity
     assert puente.transform_hardware_coordinate(x_test, y_test) == (15.0, 25.0)
-    # Swap XY
+    #swap xy
     assert puente.transform_hardware_coordinate(x_test, y_test, swap_xy=True) == (25.0, 15.0)
-    # Invert X (reflect across center 0.0)
+    #invert x
     assert puente.transform_hardware_coordinate(x_test, y_test, invert_x=True) == (-15.0, 25.0)
-    # Invert Y (reflect across center 0.0)
+    #invert y
     assert puente.transform_hardware_coordinate(x_test, y_test, invert_y=True) == (15.0, -25.0)
-    # Combined: Swap then Invert both
+    #swap and invert both
     assert puente.transform_hardware_coordinate(
         x_test, y_test, invert_x=True, invert_y=True, swap_xy=True
     ) == (-25.0, -15.0)
 
-    # Voltage channel reflection/permutation validation
+    #voltage channel permutation validation
     v_swap = np.vstack([voltages[1, :], voltages[0, :]])
     assert np.allclose(v_swap[0], voltages[1]), "Voltage channel swap X/Y mismatch."
     assert np.allclose(v_swap[1], voltages[0]), "Voltage channel swap Y/X mismatch."
@@ -423,7 +400,7 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     v_invx = np.vstack([-voltages[0, :], voltages[1, :]])
     assert np.allclose(v_invx[0], -voltages[0]), "Invert X voltage reflection mismatch."
 
-    # Metrics for reporting
+    #metrics for reporting
     total_evaluated_samples = int(voltages_multi.shape[1])
     laser_on_count = int(np.sum(gate_multi == 1))
     laser_duty_cycle = (laser_on_count / max(1, total_evaluated_samples)) * 100.0
@@ -438,16 +415,14 @@ def phase_4_signal_generation() -> Dict[str, Any]:
     }
 
 
-# ==============================================================================
-# FASE 5: DRIVER DAQ Y PARADA DE EMERGENCIA (NIDaqController)
-# ==============================================================================
+#phase 5 daq controller driver and emergency stop
 def phase_5_daq_controller_estop() -> None:
-    """Validate hardware-timed buffer writes and immediate Emergency Stop (E-STOP)."""
+    """validate hardware timed buffer writes and emergency stop"""
     controller = NIDaqController(simulate=True)
     assert controller.simulate is True, "Controller must run in simulation mode for tests."
     assert controller.state == "idle", f"Expected state 'idle', got '{controller.state}'"
 
-    # Setup hardware
+    #setup hardware
     controller.setup_hardware(
         ao_channels=("Dev1/ao0", "Dev1/ao1"),
         do_channel="Dev1/port0/line0",
@@ -455,7 +430,7 @@ def phase_5_daq_controller_estop() -> None:
     )
     assert controller.state == "configured", f"Expected state 'configured', got '{controller.state}'"
 
-    # Dispatch analog & digital samples to FIFO buffer
+    #dispatch analog and digital samples to fifo buffer
     test_v = np.array([
         [-5.0, 0.0, 5.0, 0.0],
         [0.0, 4.0, 0.0, -4.0],
@@ -469,38 +444,36 @@ def phase_5_daq_controller_estop() -> None:
     assert controller.simulated_gate is not None
     assert controller.simulated_gate.shape == (4,)
 
-    # Arm and start emission
+    #arm and start emission
     controller.start_emission()
     assert controller.state == "running", f"Expected state 'running', got '{controller.state}'"
 
-    # Simulate Emergency Stop (E-STOP): park outputs at 0.0 V, laser OFF, release tasks
+    #simulate emergency stop parking outputs at zero volts
     controller.stop_and_clear()
     assert controller.state == "idle", f"E-STOP did not return state to 'idle': got '{controller.state}'"
     assert controller._n_samples == 0, "Sample count not cleared on E-STOP."
     assert controller._ao_task is None, "AO task not closed."
     assert controller._do_task is None, "DO task not closed."
 
-    # Verify idempotency of stop_and_clear
+    #verify idempotency of stop and clear
     controller.stop_and_clear()
     assert controller.state == "idle"
 
 
-# ==============================================================================
-# FASE 6: BASE DE DATOS, MIGRACIONES Y REGLAS DE NEGOCIO (database/)
-# ==============================================================================
+#phase 6 database migrations and business rules
 def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
-    """Validate SQLite WAL mode, schema migrations, and process mode persistence/rules."""
-    # 1. Initialize DB in isolated temporary path
+    """validate sqlite wal mode schema migrations and process mode persistence"""
+    #initialize db in temporary path
     db = GestorDB(ruta_db=temp_db_path)
 
-    # 2. Validate WAL journal mode
+    #validate wal journal mode
     with db.conexion() as conn:
         row = conn.execute("PRAGMA journal_mode;").fetchone()
         assert row is not None and str(row[0]).lower() == "wal", (
             f"SQLite journal_mode must be WAL, got '{row[0] if row else 'None'}'"
         )
 
-        # 3. Validate schema columns for recetas and historial_produccion
+        #validate schema columns for recipes and production history
         rec_cols = {r[1] for r in conn.execute("PRAGMA table_info(recetas);").fetchall()}
         assert "modo_proceso" in rec_cols, "Column 'modo_proceso' missing in recetas."
         assert "cooling_delay_s" in rec_cols, "Column 'cooling_delay_s' missing in recetas."
@@ -511,7 +484,7 @@ def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
         hist_cols = {r[1] for r in conn.execute("PRAGMA table_info(historial_produccion);").fetchall()}
         assert "modo_proceso" in hist_cols, "Column 'modo_proceso' missing in historial_produccion."
 
-    # 4. GestorRecetas: CRUD & Process Mode Persistence
+    #crud and process mode persistence
     gr = GestorRecetas(db)
     recipe_id = gr.crear_receta({
         "nombre": "E2E_PMMA_Validation",
@@ -532,7 +505,7 @@ def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
     assert rec["cooling_delay_s"] == 1.5
     assert rec["invert_y"] == 1
 
-    # Update recipe toggling through Welding and Marking
+    #update recipe toggling process modes
     ok_w = gr.actualizar_receta(recipe_id, {"modo_proceso": "Welding"})
     assert ok_w is True, "Failed to update recipe to Welding."
     assert gr.obtener_receta(recipe_id)["modo_proceso"] == "Welding"
@@ -541,7 +514,7 @@ def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
     assert ok_m is True, "Failed to update recipe to Marking."
     assert gr.obtener_receta(recipe_id)["modo_proceso"] == "Marking"
 
-    # Business Rule: Invalid process mode MUST raise ValueError
+    #invalid process mode must raise value error
     invalid_mode_raised = False
     try:
         gr.actualizar_receta(recipe_id, {"modo_proceso": "ModoInvalido"})
@@ -551,7 +524,7 @@ def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
 
     assert invalid_mode_raised, "Updating with invalid mode did not raise ValueError."
 
-    # 5. GestorTrazabilidad: Audit Trail & Production Logging
+    #audit trail and production logging
     gt = GestorTrazabilidad(db)
     log_id = gt.registrar_ciclo({
         "operador": "QA_E2E_Runner",
@@ -577,17 +550,15 @@ def phase_6_database_and_audit(temp_db_path: str) -> GestorDB:
     return db
 
 
-# ==============================================================================
-# FASE 7: MULTIHILO ASÍNCRONO Y TELEMETRÍA (conexion_interfaz.py / PuenteLaser)
-# ==============================================================================
+#phase 7 asynchronous threading and telemetry
 def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
-    """Validate background orchestrator, sequential callbacks, and non-blocking operation."""
+    """validate background orchestrator and non blocking execution"""
     puente = PuenteLaser()
     puente.gestor_recetas = GestorRecetas(db)
     puente.gestor_trazabilidad = GestorTrazabilidad(db)
     puente.es_simulacion = True
 
-    # High-speed test recipe parameters
+    #high speed test recipe parameters
     recipe_params = {
         "velocidad_trazado": 5000.0,
         "velocidad_viaje": 10000.0,
@@ -601,11 +572,11 @@ def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
         "tolerancia_union": 0.08,
     }
 
-    # Load and optimize DXF
+    #load and optimize dxf
     puente.load_dxf(temp_dxf_path, recipe_params)
     assert len(puente.trazos_calibrados) > 0, "No calibrated trajectories loaded."
 
-    # Telemetry capture
+    #telemetry capture
     progress_calls: List[Tuple[float, bool]] = []
     log_messages: List[str] = []
     finished_data: Dict[str, Any] = {}
@@ -635,22 +606,22 @@ def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
         finished_data["dur_s"] = dur_s
         finished_event.set()
 
-    # Launch execution in background daemon thread
+    #launch execution in background daemon thread
     t_start = time.perf_counter()
     puente.start_execution(recipe_params, _on_progress, _on_log, _on_finished)
     dispatch_latency = time.perf_counter() - t_start
 
-    # Main thread must NOT be blocked
+    #main thread must not be blocked
     assert dispatch_latency < 0.25, (
         f"start_execution blocked main thread! Latency: {dispatch_latency:.4f}s"
     )
     assert puente.is_running is True, "Execution flag was not set to True."
 
-    # Await async completion
+    #await async completion
     is_done = finished_event.wait(timeout=10.0)
     assert is_done, "Asynchronous execution timed out."
 
-    # State validation upon completion
+    #state validation upon completion
     assert puente.is_running is False, "Execution flag did not return to False."
     assert finished_data.get("estado") == "COMPLETED", (
         f"Execution failed: {finished_data.get('err')}"
@@ -659,11 +630,9 @@ def phase_7_async_threading_telemetry(temp_dxf_path: str, db: GestorDB) -> None:
     assert len(progress_calls) > 0, "No progress telemetry captured."
 
 
-# ==============================================================================
-# FASE 8: LIMPIEZA DE ARTIFACTS
-# ==============================================================================
+#phase 8 artifact cleanup
 def phase_8_artifact_cleanup(artifacts: List[str]) -> None:
-    """Verify that all generated temporary files (.dxf, .gcode, .db) are cleanly removed."""
+    """verify that all generated temporary files are cleanly removed"""
     _cleanup_all_artifacts()
     for art in artifacts:
         assert not os.path.exists(art), f"Artifact was not cleaned up: {art}"
@@ -671,15 +640,13 @@ def phase_8_artifact_cleanup(artifacts: List[str]) -> None:
             assert not os.path.exists(art + sfx), f"Sidecar was not cleaned up: {art + sfx}"
 
 
-# ==============================================================================
-# MAIN TEST HARNESS & CONSOLE REPORT
-# ==============================================================================
+#main test harness and console report
 def run_full_system_test() -> int:
-    """Execute all 8 test phases sequentially and output the standardized report."""
+    """execute all test phases sequentially and output report"""
     t_suite_start = time.perf_counter()
     artifacts_to_validate: List[str] = []
 
-    # Temporary database path
+    #temporary database path
     temp_fd_db, temp_db_path = tempfile.mkstemp(prefix="test_laser_", suffix=".db")
     os.close(temp_fd_db)
     _register_temp_file(temp_db_path)
@@ -699,48 +666,48 @@ def run_full_system_test() -> int:
     print("=" * 70)
 
     try:
-        # Phase 1: Environment Health
+        #phase 1 environment health
         print("\n[Phase 1/8] Environment Health & Dependency Verification...")
         env_info = phase_1_environment_health()
         print(f" -> Python v{env_info['python_version']}, GUI={env_info['gui_framework']}")
         print(f" -> NI-DAQmx Status: {env_info['daq_probe']['label']} [OK]")
 
-        # Phase 2: CAD to G-Code Ingestion
+        #phase 2 cad to gcode ingestion
         print("\n[Phase 2/8] CAD to G-Code Ingestion (CADConverter & GCodeParser)...")
         blocks, dxf_path, gcode_path = phase_2_cad_to_gcode(env_info)
         artifacts_to_validate.extend([dxf_path, gcode_path])
         print(f" -> Synthetic geometry converted & parsed: {len(blocks)} trajectory blocks [OK]")
 
-        # Phase 3: Path Optimization & TSP Pruning
+        #phase 3 path optimization and tsp pruning
         print("\n[Phase 3/8] Path Optimization (RDP eps=0.0 & TSP Heuristic Pruning)...")
         phase_3_path_optimization()
         print(" -> RDP 100% preservation verified. TSP pruned in <0.3s for N=120 [OK]")
 
-        # Phase 4: Waveform Generation & Delays
+        #phase 4 waveform generation and delays
         print("\n[Phase 4/8] Mathematical Waveform Synthesis, 100 kHz Timing & Electrical Clamping (In-Memory)...")
         with _silence_stdout():
             metrics = phase_4_signal_generation()
         print(f" -> {metrics['total_samples']:,} samples evaluated in RAM, electrical safety [-10V, +10V] [OK]")
 
-        # Phase 5: Hardware DAQ Controller & E-STOP
+        #phase 5 hardware daq controller and estop
         print("\n[Phase 5/8] DAQ Controller Driver & Safe E-STOP (Simulation Mode)...")
         with _silence_stdout():
             phase_5_daq_controller_estop()
         print(" -> Simulated software buffers loaded, safe E-STOP verified [OK]")
 
-        # Phase 6: SQLite3 Database & Business Rules
+        #phase 6 database and business rules
         print("\n[Phase 6/8] SQLite3 Database, Schema Migrations & Audit Trail...")
         with _silence_stdout():
             db_instance = phase_6_database_and_audit(temp_db_path)
         print(" -> WAL journal mode verified, 12 parameters and process modes validated [OK]")
 
-        # Phase 7: Threading Isolation & Async Telemetry
+        #phase 7 threading isolation and async telemetry
         print("\n[Phase 7/8] Threading Isolation & Async Telemetry Callbacks (Simulation Mode)...")
         with _silence_stdout():
             phase_7_async_threading_telemetry(dxf_path, db_instance)
         print(" -> Background worker isolated, real-time telemetry captured [OK]")
 
-        # Phase 8: Artifact Cleanup
+        #phase 8 artifact cleanup
         print("\n[Phase 8/8] Artifact Cleanup & System Resource Verification...")
         phase_8_artifact_cleanup(artifacts_to_validate)
         print(" -> All temporary files (.dxf, .gcode, .db) and handles safely deleted [OK]")
@@ -761,7 +728,7 @@ def run_full_system_test() -> int:
         else f"NOT DETECTED ({env_info['daq_probe']['label']})"
     )
 
-    # Console report output with honest hardware/environment audit
+    #console report output
     report = f"""======================================================================
                FULL SYSTEM END-TO-END VALIDATION REPORT               
 ======================================================================

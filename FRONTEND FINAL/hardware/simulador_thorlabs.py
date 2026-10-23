@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-hardware/simulador_thorlabs.py - Simulador de Thorlabs GVS112/M
-
-Simula la ejecucion completa del sistema galvo cuando el hardware fisico
-Thorlabs no esta conectado. Produce logs, retardos y callbacks identicos
-al controlador real para que la interfaz funcione sin cambios.
-
-Activado automaticamente cuando no se detecta tarjeta DAQ/DAC.
-"""
+"""thorlabs gvs112 virtual simulator"""
 
 import time
 import math
@@ -23,15 +15,7 @@ from core.config_loader import load_hardware_config, get_volts_per_mm
 
 
 class SimuladorThorlabsGVS:
-    """
-    Simulador fiel del Thorlabs GVS112/M para entorno sin hardware fisico.
-
-    Proporciona la misma interfaz publica que ControladorThorlabsGVS:
-      - trazar_trayectorias()
-      - apagar_laser() / encender_laser()
-      - abortar_inmediato()
-      - cerrar()
-    """
+    """galvo simulator when hardware is disconnected"""
 
     tipo_interfaz = "SIMULACION"
 
@@ -50,12 +34,12 @@ class SimuladorThorlabsGVS:
               f"Y[{CAMPO_Y_MIN_MM}, {CAMPO_Y_MAX_MM}] mm")
 
     def ir_a_posicion(self, x_mm: float = 0.0, y_mm: float = 0.0):
-        """Simula posicionamiento estático de espejos en (x_mm, y_mm)."""
+        """simulated mirror move to position in mm"""
         self.pos_x = float(x_mm)
         self.pos_y = float(y_mm)
 
     def center(self):
-        """Simula centrado en posición de reposo Home (0.0, 0.0)."""
+        """simulated mirror park at home"""
         self.ir_a_posicion(0.0, 0.0)
 
     def trazar_trayectorias(self,
@@ -64,14 +48,7 @@ class SimuladorThorlabsGVS:
                             velocidad_salto: float = VELOCIDAD_SALTO_MM_S,
                             check_cancel=None,
                             *args, **kwargs):
-        """
-        Simula el trazado galvo respetando velocidades y cancelecion.
-
-        :param trayectorias:      Lista de trazos [[( x, y ), ...], ...]
-        :param velocidad_marcado: mm/s con laser ON
-        :param velocidad_salto:   mm/s con laser OFF (viaje)
-        :param check_cancel:      Callable -> bool; True = abortar
-        """
+        """simulate galvo tracing with delays and cancellation"""
         self._stop_event.clear()
         total_trazos = len(trayectorias)
         total_pts = sum(len(t) for t in trayectorias)
@@ -89,7 +66,7 @@ class SimuladorThorlabsGVS:
             if not trazo:
                 continue
 
-            # Viaje al primer punto (laser apagado)
+            #travel to first point with laser off
             p0 = self._limitar_punto(trazo[0])
             dist_viaje = math.hypot(p0[0] - pos_x, p0[1] - pos_y)
             t_viaje = dist_viaje / max(0.1, velocidad_salto)
@@ -98,7 +75,7 @@ class SimuladorThorlabsGVS:
             if self._debe_cancelar(check_cancel):
                 break
 
-            # Trazar segmentos con laser encendido
+            #trace segments with laser on
             self._esperar(LASER_ON_DELAY_US * 1e-6, check_cancel)
             self.encender_laser()
             pos_x, pos_y = p0
@@ -123,29 +100,29 @@ class SimuladorThorlabsGVS:
         print("[SimThorlabs] Simulacion de trazado finalizada.")
 
     def apagar_laser(self):
-        """Apaga el laser simulado."""
+        """switch simulated laser off"""
         if self.laser_encendido:
             self.laser_encendido = False
 
     def encender_laser(self):
-        """Enciende el laser simulado."""
+        """switch simulated laser on"""
         if not self.laser_encendido:
             self.laser_encendido = True
 
     def abortar_inmediato(self):
-        """Parada de emergencia: senializa el stop y apaga el laser."""
+        """emergency stop switch laser off"""
         self._stop_event.set()
         self.apagar_laser()
         print("[SimThorlabs] Parada de emergencia ejecutada.")
 
     def cerrar(self):
-        """Libera recursos del simulador."""
+        """release simulator resources"""
         self._stop_event.set()
         self.apagar_laser()
         print("[SimThorlabs] Simulador cerrado correctamente.")
 
     def _limitar_punto(self, p):
-        """Satura (x, y) en mm para que el voltaje equivalente quede en [v_min, v_max]."""
+        """clamp coordinates to voltage limits"""
         vx, vy = p[0] * self.volts_per_mm, p[1] * self.volts_per_mm
         cx = min(self.v_max, max(self.v_min, vx))
         cy = min(self.v_max, max(self.v_min, vy))
@@ -157,7 +134,7 @@ class SimuladorThorlabsGVS:
         return (cx / self.volts_per_mm, cy / self.volts_per_mm)
 
     def _esperar(self, segundos: float, check_cancel=None, granularidad: float = 0.05):
-        """Espera en pasos pequenos revisando cancelacion."""
+        """wait with cancellation check"""
         t_fin = time.monotonic() + segundos
         while time.monotonic() < t_fin:
             if self._debe_cancelar(check_cancel):
@@ -166,7 +143,7 @@ class SimuladorThorlabsGVS:
             time.sleep(min(granularidad, max(0.001, restante)))
 
     def _debe_cancelar(self, check_cancel=None) -> bool:
-        """Retorna True si se debe cancelar la operacion."""
+        """check if operation is cancelled"""
         if self._stop_event.is_set():
             return True
         if check_cancel and callable(check_cancel):

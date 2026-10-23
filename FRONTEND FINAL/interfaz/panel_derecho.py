@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/panel_derecho.py — Panel Derecho: Gauges + Trace Point + Execution Controls
-"""
+"""right panel gauges trace point and execution controls"""
 
 import math
 import tkinter as tk
@@ -21,7 +19,7 @@ from .i18n import tr, registrar_observador
 
 
 class PanelDerecho(ctk.CTkFrame):
-    """Panel lateral derecho: Telemetría DMM, Gauges circulares, Laser Tracking y Controles HMI."""
+    """right lateral panel telemetry dmm gauges laser tracking and execution controls"""
 
     def __init__(
         self,
@@ -58,7 +56,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.pos_laser_actual = (14.00, 12.50)
         self._ultimo_estado = "READY"
 
-        # Navegación libre / Modo cámara de seguimiento
+        #free navigation and tracking camera mode
         self.modo_auto_centrado = True
         self.centro_camara_cm = (14.00, 12.50)
         self._pan_iniciado = False
@@ -70,13 +68,13 @@ class PanelDerecho(ctk.CTkFrame):
         self.pct_trace = 0.0
         self.pct_total = 0.0
 
-        # Zoom del seguimiento laser: factor RELATIVO a la escala del canvas general
+        #laser tracking relative zoom factor
         self.zoom_niveles = [4, 6, 8, 10, 12, 16, 20, 30]
         self.zoom_relativo = 8
         self.escala_referencia_px_cm = 20.0
         self.ancla_vivo: Optional[Tuple[float, float]] = None
 
-        # Hardware Feedback Tracking: trayectoria medida (cm), capa magenta opcional
+        #hardware feedback tracking measured trajectory layer
         self._fb_pts_cm: List[Tuple[float, float]] = []
 
         self._crear_widgets()
@@ -84,14 +82,12 @@ class PanelDerecho(ctk.CTkFrame):
 
 
     def _crear_widgets(self):
-        # =====================================================================
-        # 1. Panel de Controles de Ejecución (ANCLADO AL FONDO PRIMERO)
-        # =====================================================================
+        #execution control panel
         self.frame_controles = ctk.CTkFrame(self, fg_color="transparent", height=46)
         self.frame_controles.pack(side="bottom", fill="x", pady=(4, 0))
         self.frame_controles.pack_propagate(False)
 
-        # Botón HOME estilo Cyber-Brutalism
+        #home button
         self.btn_home = ctk.CTkButton(
             self.frame_controles,
             text="✛",
@@ -109,11 +105,11 @@ class PanelDerecho(ctk.CTkFrame):
         self.btn_home.pack(side="left", padx=(0, 6))
         agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
 
-        # Contenedor dinámico (IDLE vs RUNNING)
+        #dynamic action container
         self.action_box = ctk.CTkFrame(self.frame_controles, fg_color="transparent")
         self.action_box.pack(side="left", fill="both", expand=True)
 
-        # Botón START (Modo IDLE) - Ámbar industrial #F5A623 con borde de 2px
+        #start button
         self.btn_start = ctk.CTkButton(
             self.action_box,
             text=tr("btn_start"),
@@ -130,7 +126,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.btn_start.pack(fill="both", expand=True)
         agregar_tooltip(self.btn_start, "Start vector laser scanning with current recipe parameters.")
 
-        # Widgets en Modo RUNNING (Ocultos inicialmente)
+        #running mode widgets
         self.running_box = ctk.CTkFrame(self.action_box, fg_color="transparent")
 
         self.btn_pause_resume = ctk.CTkButton(
@@ -150,7 +146,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.btn_pause_resume.pack(side="left", padx=(0, 6))
         agregar_tooltip(self.btn_pause_resume, "Pause execution (shuts off laser and freezes timer) or resume.")
 
-        # Emergency Stop con jerarquía visual dominante y borde reforzado de 3px
+        #emergency stop button
         self.btn_stop = ctk.CTkButton(
             self.running_box,
             text=tr("btn_stop"),
@@ -186,9 +182,7 @@ class PanelDerecho(ctk.CTkFrame):
         )
         self.lbl_timer.place(relx=0.5, rely=0.5, anchor="center")
 
-        # =====================================================================
-        # 2. TARJETA DE TELEMETRÍA EN TIEMPO REAL (DMM Voltages + Laser Pill)
-        # =====================================================================
+        #realtime telemetry card
         self.card_telemetria = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -209,7 +203,7 @@ class PanelDerecho(ctk.CTkFrame):
             anchor="w"
         ).pack(side="left")
 
-        # Badge de estado del sistema (Ready / Scanning / Paused / Stopped)
+        #system status badge
         self.badge_status = ctk.CTkLabel(
             header_telem,
             text=f"● {tr('status_ready')}",
@@ -223,11 +217,11 @@ class PanelDerecho(ctk.CTkFrame):
         self.badge_status.pack(side="right")
         agregar_tooltip(self.badge_status, "Current operational state of the scanning workstation.")
 
-        # Fila DMM: Voltajes Mirror X y Mirror Y en cajas digitales de alta precisión
+        #dmm voltage boxes
         row_dmm = ctk.CTkFrame(self.card_telemetria, fg_color="transparent")
         row_dmm.pack(fill="x", padx=8, pady=(2, 4))
 
-        # Caja DMM X
+        #dmm x box
         self.box_vx = ctk.CTkFrame(
             row_dmm,
             fg_color=COLOR_BOX_BG,
@@ -256,7 +250,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.lbl_vx.pack(anchor="e", padx=6, pady=(0, 2))
         agregar_tooltip(self.box_vx, "Galvanometer Channel X instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.")
 
-        # Caja DMM Y
+        #dmm y box
         self.box_vy = ctk.CTkFrame(
             row_dmm,
             fg_color=COLOR_BOX_BG,
@@ -285,7 +279,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.lbl_vy.pack(anchor="e", padx=6, pady=(0, 2))
         agregar_tooltip(self.box_vy, "Galvanometer Channel Y instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.")
 
-        # Píldora de estado de la compuerta óptica láser (Laser State Pill)
+        #laser emission state pill
         self.pill_laser = ctk.CTkFrame(
             self.card_telemetria,
             fg_color="#E2E8F0",
@@ -306,9 +300,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.lbl_laser_state.place(relx=0.5, rely=0.5, anchor="center")
         agregar_tooltip(self.pill_laser, "Real-time optical laser emission state:\n[LASER OFF] (rapid jumps) or ⚡ [LASER ACTIVE] (marking).")
 
-        # =====================================================================
-        # 3. Medidores circulares (Trace y Total) con tarjeta blanca y borde 2px
-        # =====================================================================
+        #circular progress gauges
         self.card_gauges = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -324,9 +316,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.canvas_gauges.pack(fill="both", expand=True)
         self.canvas_gauges.bind("<Configure>", lambda e: self.dibujar_gauges())
 
-        # =====================================================================
-        # 4. Panel "Trace point" con Zoom y Halo (al centro expandible)
-        # =====================================================================
+        #trace point panel with zoom
         self.box_trace = ctk.CTkFrame(self, fg_color="transparent")
         self.box_trace.pack(side="top", fill="both", expand=True, pady=(0, 2))
 
@@ -378,7 +368,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.canvas_trace.bind("<B1-Motion>", self._on_pan_drag)
         self.canvas_trace.bind("<ButtonRelease-1>", self._on_pan_end)
 
-        # Badge flotante de coordenadas dentro de la tarjeta
+        #floating coordinate badge
         self.coord_badge = ctk.CTkFrame(
             self.card_trace,
             fg_color=COLOR_CARD,
@@ -398,7 +388,7 @@ class PanelDerecho(ctk.CTkFrame):
         )
         self.lbl_coord_live.pack()
 
-        # Popup flotante HOME con X e Y EDITABLES para definir el centro
+        #home center configuration popup
         self.card_home_popup = ctk.CTkFrame(
             self.winfo_toplevel(),
             fg_color=COLOR_YELLOW,
@@ -415,7 +405,7 @@ class PanelDerecho(ctk.CTkFrame):
         frame_xy = ctk.CTkFrame(self.card_home_popup, fg_color="transparent")
         frame_xy.pack(padx=10, pady=2, fill="x")
 
-        # Fila X
+        #x row
         row_x = ctk.CTkFrame(frame_xy, fg_color="transparent")
         row_x.pack(fill="x", pady=2)
         ctk.CTkLabel(row_x, text="X:", font=self.f_bold, text_color=COLOR_TEXT, width=20).pack(side="left")
@@ -434,7 +424,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.entry_home_x.pack(side="left", padx=4)
         ctk.CTkLabel(row_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
-        # Fila Y
+        #y row
         row_y = ctk.CTkFrame(frame_xy, fg_color="transparent")
         row_y.pack(fill="x", pady=2)
         ctk.CTkLabel(row_y, text="Y:", font=self.f_bold, text_color=COLOR_TEXT, width=20).pack(side="left")
@@ -453,7 +443,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.entry_home_y.pack(side="left", padx=4)
         ctk.CTkLabel(row_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
-        # Botón para centrar y aplicar
+        #apply button
         self.btn_set_home = ctk.CTkButton(
             self.card_home_popup,
             text=tr("btn_apply"),
@@ -473,13 +463,13 @@ class PanelDerecho(ctk.CTkFrame):
         agregar_tooltip(self.entry_home_y, "Y coordinate of resting center (Home), in cm, within base area.")
         agregar_tooltip(self.btn_set_home, "Apply center (X, Y): moves resting point and recalculates drawing position.")
 
-    # Zoom del seguimiento laser
+    #laser tracking zoom
     def _actualizar_titulo_zoom(self):
         self.lbl_trace.configure(text=f"{tr('view_trace')} (ZOOM {self.zoom_relativo}X)")
 
 
     def _cambiar_zoom(self, direccion: int):
-        """Sube o baja un nivel del zoom relativo y redibuja el seguimiento."""
+        """change relative zoom level and redraw trace"""
         niveles = self.zoom_niveles
         idx = niveles.index(self.zoom_relativo) if self.zoom_relativo in niveles else 0
         idx = max(0, min(len(niveles) - 1, idx + direccion))
@@ -488,9 +478,9 @@ class PanelDerecho(ctk.CTkFrame):
         self.redibujar_trace()
         self._notificar_viewport()
 
-    # Navegación libre (Pan & Drag) y Auto-centrado
+    #free navigation pan and drag
     def centrar_en_laser(self):
-        """Vuelve a centrar la cámara de zoom en la posición actual del láser y reanuda el seguimiento dinámico."""
+        """recenter zoom camera on current laser position"""
         self.modo_auto_centrado = True
         self.centro_camara_cm = self.pos_laser_actual
         self._actualizar_estilo_boton_centrado()
@@ -532,8 +522,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         if self._pan_arrastrando:
             zoom_factor = max(1.0, self.escala_referencia_px_cm) * self.zoom_relativo
-            # Arrastre 1:1 en pantalla: mover cursor a la derecha tira del canvas a la derecha (cámara resta dx)
-            # Mover cursor abajo tira del canvas abajo (cámara suma dy en coordenadas cartesianas físicas)
+            #pan drag calculations
             dx_cm = dx_px / zoom_factor
             dy_cm = dy_px / zoom_factor
 
@@ -554,7 +543,7 @@ class PanelDerecho(ctk.CTkFrame):
             pass
 
     def _obtener_bbox_camara_cm(self) -> Optional[Tuple[float, float, float, float]]:
-        """Calcula el rectángulo envolvente visible (min_x, max_x, min_y, max_y) en coordenadas físicas cm."""
+        """calculate visible bounding box in physical cm"""
         try:
             w = self.canvas_trace.winfo_width()
             h = self.canvas_trace.winfo_height()
@@ -569,7 +558,7 @@ class PanelDerecho(ctk.CTkFrame):
             return None
 
     def _notificar_viewport(self):
-        """Notifica al observador externo (Canvas 1:1) sobre el estado del encuadre de cámara."""
+        """notify external observer of camera viewport"""
         if not self.on_viewport_cambiado:
             return
         if self.modo_auto_centrado:
@@ -577,7 +566,7 @@ class PanelDerecho(ctk.CTkFrame):
         else:
             self.on_viewport_cambiado(self._obtener_bbox_camara_cm())
 
-    # Callbacks internos
+    #internal callbacks
     def _cb_start(self):
         if getattr(self, "bloqueado_ejecucion", False):
             return
@@ -609,7 +598,7 @@ class PanelDerecho(ctk.CTkFrame):
             pass
 
     def set_centro(self, x: float, y: float):
-        """Actualiza los inputs del centro en el popup."""
+        """update center inputs in popup"""
         try:
             x_val = float(x)
             y_val = float(y)
@@ -641,7 +630,7 @@ class PanelDerecho(ctk.CTkFrame):
             self.btn_home.configure(fg_color=COLOR_YELLOW)
 
     def set_bloqueo_ejecucion(self, bloqueado: bool):
-        """Bloquea o habilita los controles del panel derecho durante la ejecución."""
+        """lock or unlock right panel controls during execution"""
         self.bloqueado_ejecucion = bloqueado
         estado = "disabled" if bloqueado else "normal"
         if hasattr(self, "btn_start"):
@@ -649,13 +638,13 @@ class PanelDerecho(ctk.CTkFrame):
         if hasattr(self, "btn_home"):
             self.btn_home.configure(state=estado)
 
-    # Modos de estado de control y telemetría
+    #control modes and telemetry states
     def set_modo_running(self):
         self.btn_start.pack_forget()
         self.running_box.pack(fill="both", expand=True)
         self.btn_pause_resume.configure(text=tr("btn_pause"), fg_color=COLOR_PAUSE)
         self.set_estado_sistema("SCANNING")
-        # Deshabilitar botón de centrar puntero (Home) durante la ejecución
+        #disable home button during execution
         self.btn_home.configure(state="disabled")
         if self.card_home_popup.winfo_ismapped():
             self.card_home_popup.place_forget()
@@ -669,7 +658,7 @@ class PanelDerecho(ctk.CTkFrame):
         self.set_estado_sistema("READY")
         self.actualizar_voltajes(0.0, 0.0, False)
         self._esta_pausado = False
-        # Reactivar botón de centrar puntero (Home) al volver a reposo
+        #reactivate home button on idle
         self.btn_home.configure(state="normal")
 
     def set_estado_pausa(self, pausado: bool):
@@ -737,7 +726,7 @@ class PanelDerecho(ctk.CTkFrame):
         except Exception:
             pass
 
-    # Renderizado de medidores
+    #gauge rendering
     def dibujar_gauges(self, pct_trace: Optional[float] = None, pct_total: Optional[float] = None):
         if pct_trace is not None:
             try:
@@ -792,13 +781,13 @@ class PanelDerecho(ctk.CTkFrame):
         c.create_text(cx, cy, text=f"{int(round(pct_clean))} %", font=(FONT_TEACHERS, 11, "bold"), fill=COLOR_TEXT)
 
     def archivar_pasada_completada(self):
-        """Transfiere los trazos de la pasada terminada a la capa translúcida de pasadas previas."""
+        """archive finished pass traces into translucent layer"""
         if self.trazos_completados:
             self.trazos_pasadas_previas.extend(self.trazos_completados)
             self.trazos_completados = []
 
     def limpiar_progreso(self):
-        """Reinicia los segmentos completados, anclas y medidores circulares a 0%."""
+        """reset completed segments anchors and progress gauges"""
         self.trazos_completados = []
         self.trazos_pasadas_previas = []
         self.ancla_vivo = None
@@ -809,13 +798,13 @@ class PanelDerecho(ctk.CTkFrame):
         self.dibujar_gauges(0.0, 0.0)
         self.centrar_en_laser()
 
-    # Hardware Feedback Tracking (capa medida)
+    #hardware feedback tracking layer
     def limpiar_feedback(self):
-        """Borra la trayectoria medida acumulada."""
+        """clear accumulated measured trajectory"""
         self._fb_pts_cm = []
 
     def agregar_puntos_feedback(self, puntos_cm: List[Tuple[float, float]]):
-        """Agrega puntos medidos (cm) con decimación espacial de 0.5 mm."""
+        """add measured points in cm with spatial decimation"""
         pts = self._fb_pts_cm
         for p in puntos_cm:
             if not pts:
@@ -826,7 +815,7 @@ class PanelDerecho(ctk.CTkFrame):
         if len(pts) > 60000:
             del pts[: len(pts) - 60000]
 
-    # Renderizado Trace Point (Zoom 4x)
+    #trace point canvas rendering
     def redibujar_trace(
         self,
         trazos: Optional[List[List[Tuple[float, float]]]] = None,
@@ -893,7 +882,7 @@ class PanelDerecho(ctk.CTkFrame):
                             bboxes.append((0.0, 0.0, 0.0, 0.0))
                     self._trazos_bboxes = bboxes
 
-                # Saltos en vacío (G0 rapid jumps): incluye salto inicial desde Home y saltos intermedios
+                #rapid jump g0 lines
                 hx, hy = getattr(self, "centro_home", (14.0, 12.5))
                 pos_salto = (hx, hy)
                 viajes = []
@@ -918,7 +907,7 @@ class PanelDerecho(ctk.CTkFrame):
                     py2 = cy - (p_ini[1] - cam_y) * zoom_factor
                     c.create_line(px1, py1, px2, py2, fill=COLOR_ORANGE, width=2.0, dash=(4, 3), capstyle="round")
 
-                # Rutas vectoriales CAD base
+                #cad vector paths
                 for ruta, (rx_min, rx_max, ry_min, ry_max) in zip(self.trazos_actuales, self._trazos_bboxes):
                     if not ruta:
                         continue
@@ -931,9 +920,7 @@ class PanelDerecho(ctk.CTkFrame):
                         c.create_oval(px - 2, py - 2, px + 2, py + 2, fill=COLOR_VECTOR_GRAY, outline="")
                         continue
 
-                    # Decimación dinámica visual: si supera 10,000 puntos vectoriales,
-                    # se aplica un paso de submuestreo visual (stride) para renderizar en pantalla
-                    # sin colapsar la memoria, manteniendo el 100% de las muestras en el búfer de hardware.
+                    #dynamic visual decimation for large vector paths
                     if len(ruta) > 10000:
                         stride = max(1, len(ruta) // 10000)
                         pts_sub = ruta[::stride]
@@ -950,7 +937,7 @@ class PanelDerecho(ctk.CTkFrame):
                     if len(coords) >= 4:
                         c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=3.0, capstyle="round")
 
-                # Culling espacial para segmentos de pasadas previas (azul translúcido)
+                #spatial culling for previous passes
                 for segmento in getattr(self, "trazos_pasadas_previas", []):
                     if not segmento or len(segmento) < 2:
                         continue
@@ -966,7 +953,7 @@ class PanelDerecho(ctk.CTkFrame):
                     py2 = cy - (p2[1] - cam_y) * zoom_factor
                     c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE_FADED, width=3.5, capstyle="round")
 
-                # Culling espacial para segmentos completados de la pasada activa
+                #spatial culling for completed segments of active pass
                 for segmento in self.trazos_completados:
                     if not segmento or len(segmento) < 2:
                         continue
@@ -982,7 +969,7 @@ class PanelDerecho(ctk.CTkFrame):
                     py2 = cy - (p2[1] - cam_y) * zoom_factor
                     c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=4.5, capstyle="round")
 
-                # Tramo vivo: del ultimo segmento dibujado hasta el puntero (sin retraso visual)
+                #live segment from last drawn anchor to laser pointer
                 if self.ancla_vivo is not None and len(self.ancla_vivo) >= 2:
                     ax, ay = self.ancla_vivo
                     lx, ly = self.pos_laser_actual
@@ -990,7 +977,7 @@ class PanelDerecho(ctk.CTkFrame):
                                   cx + (lx - cam_x) * zoom_factor, cy - (ly - cam_y) * zoom_factor,
                                   fill=COLOR_BLUE, width=4.5, capstyle="round")
 
-            # Trayectoria medida por feedback de hardware (magenta), visible solo si hay datos
+            #hardware feedback measured trajectory
             if len(self._fb_pts_cm) >= 2:
                 coords_fb = []
                 for fx, fy in self._fb_pts_cm:
@@ -1004,7 +991,7 @@ class PanelDerecho(ctk.CTkFrame):
                 if len(coords_fb) >= 4:
                     c.create_line(coords_fb, fill="#D946EF", width=2.5, capstyle="round", joinstyle="round")
 
-            # Punto blanco central (puntero del haz en coordenadas reales)
+            #laser spot pointer
             lx, ly = self.pos_laser_actual
             pt_px = cx + (lx - cam_x) * zoom_factor
             pt_py = cy - (ly - cam_y) * zoom_factor
@@ -1015,7 +1002,7 @@ class PanelDerecho(ctk.CTkFrame):
             pass
 
     def actualizar_idioma(self):
-        """Actualiza todas las etiquetas, botones, tooltips y medidores al cambiar el idioma."""
+        """update labels buttons tooltips and gauges on language change"""
         if hasattr(self, "btn_start"):
             self.btn_start.configure(text=tr("btn_start"))
         if hasattr(self, "btn_stop"):

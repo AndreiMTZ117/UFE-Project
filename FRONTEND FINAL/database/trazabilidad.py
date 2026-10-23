@@ -1,47 +1,17 @@
 # -*- coding: utf-8 -*-
-"""
-database/trazabilidad.py — Registro Histórico de Producción (Production Logging)
-
-Registra automáticamente cada ciclo de grabado láser con:
-  - Timestamp exacto
-  - Operador responsable
-  - Receta y parámetros aplicados (snapshot inmutable)
-  - Archivo DXF ejecutado
-  - Hardware utilizado
-  - Métricas del ciclo (trazos, waypoints, duración)
-  - Estado final (COMPLETADO / ABORTADO / FALLO_HARDWARE)
-"""
+"""production cycle traceability logging"""
 
 from .gestor_db import GestorDB, gestor_global
 from .recetas import MODOS_PROCESO_VALIDOS
 
 
 class GestorTrazabilidad:
-    """
-    Gestiona las operaciones de escritura y consulta sobre la tabla
-    `historial_produccion`.
+    """manage production cycle history"""
 
-    Uso típico:
-        gt = GestorTrazabilidad()
-        id_log = gt.registrar_ciclo({
-            "operador":           "Técnico A",
-            "archivo_dxf":        "batman.dxf",
-            "hardware_usado":     "thorlabs_galvo",
-            "receta_id":          2,
-            "receta_nombre":      "Policarbonato — Alta Precisión",
-            "velocidad_trazado":  1.0,
-            "velocidad_viaje":    2.5,
-            "trazos_totales":     47,
-            "waypoints_totales":  3821,
-            "duracion_segundos":  92.4,
-            "estado":             "COMPLETADO",
-        })
-    """
-
-    # Modos de proceso canónicos (fuente única en recetas.py)
+    #canonical process modes
     MODOS_PROCESO_VALIDOS = MODOS_PROCESO_VALIDOS
 
-    # Normalización universal a valores canónicos de la base de datos
+    #state normalization map
     MAPA_ESTADOS = {
         "COMPLETADO": "COMPLETADO",
         "COMPLETED": "COMPLETADO",
@@ -64,24 +34,10 @@ class GestorTrazabilidad:
     def __init__(self, gestor: GestorDB = None):
         self._db = gestor or gestor_global
 
-    # ----------------------------------------------------------
-    # WRITE: Registro de ciclo
-    # ----------------------------------------------------------
+    #write cycle record
     def registrar_ciclo(self, datos: dict) -> int:
-        """
-        Inserta un nuevo registro en el historial de producción.
-
-        Args:
-            datos: Diccionario con los campos del ciclo. Los mínimos
-                   obligatorios son 'archivo_dxf' y 'estado'.
-
-        Returns:
-            int: ID del registro insertado.
-
-        Raises:
-            ValueError: Si 'archivo_dxf' está vacío.
-        """
-        # Normalizar archivo DXF
+        """insert cycle record into history"""
+        #normalize dxf filename
         archivo_dxf = (
             datos.get("archivo_dxf")
             or datos.get("dxf")
@@ -91,7 +47,7 @@ class GestorTrazabilidad:
         if not archivo_dxf:
             archivo_dxf = "Desconocido.dxf"
 
-        # Normalizar estado de forma resiliente
+        #normalize status
         estado_in = str(datos.get("estado") or datos.get("status") or "COMPLETADO").strip().upper()
         if estado_in in self.MAPA_ESTADOS:
             estado = self.MAPA_ESTADOS[estado_in]
@@ -102,7 +58,7 @@ class GestorTrazabilidad:
         else:
             estado = "FALLO_HARDWARE"
 
-        # Normalizar sinónimos de métricas y metadatos
+        #normalize metric synonyms
         duracion = datos.get("duracion_segundos")
         if duracion is None:
             duracion = datos.get("tiempo_proceso_s", datos.get("duracion_s", datos.get("duracion", 0.0)))
@@ -154,7 +110,7 @@ class GestorTrazabilidad:
         registro["mensaje_error"] = str(msg_err or "")
 
         with self._db.conexion() as conn:
-            # Resolución de receta_id para respetar la integridad referencial (FOREIGN KEY)
+            #resolve recipe id for foreign key integrity
             receta_id_valido = None
             if receta_id_in is not None:
                 try:
@@ -188,20 +144,9 @@ class GestorTrazabilidad:
         )
         return nuevo_id
 
-    # ----------------------------------------------------------
-    # READ: Consultas del historial
-    # ----------------------------------------------------------
+    #read
     def listar_historial(self, limite: int = 100, offset: int = 0) -> list:
-        """
-        Retorna los últimos N registros del historial, más recientes primero.
-
-        Args:
-            limite:  Máximo de registros a retornar (default 100).
-            offset:  Número de registros a saltar (para paginación).
-
-        Returns:
-            list[dict]: Lista de registros ordenados por timestamp DESC.
-        """
+        """list recent history records"""
         sql = """
             SELECT h.*, r.polimero
             FROM historial_produccion h
@@ -213,28 +158,18 @@ class GestorTrazabilidad:
             rows = conn.execute(sql, (limite, offset)).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
 
-    # Alias para compatibilidad con llamadas tipo obtener_historial
+    #alias for backwards compatibility
     obtener_historial = listar_historial
 
     def obtener_registro(self, registro_id: int) -> dict:
-        """
-        Recupera un registro específico del historial por su ID.
-
-        Returns:
-            dict con todos los campos, o {} si no existe.
-        """
+        """get history record by id"""
         sql = "SELECT * FROM historial_produccion WHERE id = ?"
         with self._db.conexion() as conn:
             row = conn.execute(sql, (registro_id,)).fetchone()
         return self._db.fila_a_dict(row)
 
     def filtrar_por_operador(self, operador: str) -> list:
-        """
-        Retorna todos los ciclos ejecutados por un operador específico.
-
-        Args:
-            operador: Nombre del operador (búsqueda exacta, case-insensitive).
-        """
+        """filter records by operator"""
         sql = """
             SELECT * FROM historial_produccion
             WHERE LOWER(operador) LIKE LOWER(?)
@@ -245,12 +180,7 @@ class GestorTrazabilidad:
         return [self._db.fila_a_dict(r) for r in rows]
 
     def filtrar_por_estado(self, estado: str) -> list:
-        """
-        Retorna todos los ciclos filtrados por estado final.
-
-        Args:
-            estado: 'COMPLETADO', 'ABORTADO' o 'FALLO_HARDWARE'.
-        """
+        """filter records by status"""
         estado_norm = str(estado).strip().upper()
         estado_clean = self.MAPA_ESTADOS.get(estado_norm, estado_norm)
         sql = """
@@ -263,12 +193,7 @@ class GestorTrazabilidad:
         return [self._db.fila_a_dict(r) for r in rows]
 
     def filtrar_por_dxf(self, nombre_dxf: str) -> list:
-        """
-        Retorna todos los ciclos que procesaron un archivo DXF específico.
-
-        Args:
-            nombre_dxf: Nombre del archivo (búsqueda parcial).
-        """
+        """filter records by dxf filename"""
         sql = """
             SELECT * FROM historial_produccion
             WHERE LOWER(archivo_dxf) LIKE LOWER(?)
@@ -279,29 +204,14 @@ class GestorTrazabilidad:
         return [self._db.fila_a_dict(r) for r in rows]
 
     def contar_ciclos_por_estado(self) -> dict:
-        """
-        Retorna un resumen estadístico de ciclos agrupados por estado.
-
-        Returns:
-            dict: {estado: cantidad}, por ejemplo:
-                  {'COMPLETADO': 42, 'ABORTADO': 3, 'FALLO_HARDWARE': 1}
-        """
+        """count cycles grouped by status"""
         sql = "SELECT estado, COUNT(*) as total FROM historial_produccion GROUP BY estado"
         with self._db.conexion() as conn:
             rows = conn.execute(sql).fetchall()
         return {row["estado"]: row["total"] for row in rows}
 
     def estadisticas_generales(self) -> dict:
-        """
-        Retorna métricas agregadas del historial completo.
-
-        Returns:
-            dict con:
-                - total_ciclos
-                - duracion_promedio_s
-                - duracion_total_horas
-                - waypoints_totales_acumulados
-        """
+        """get aggregate production metrics"""
         sql = """
             SELECT
                 COUNT(*)                         AS total_ciclos,
@@ -315,11 +225,9 @@ class GestorTrazabilidad:
             row = conn.execute(sql).fetchone()
         return self._db.fila_a_dict(row)
 
-    # ----------------------------------------------------------
-    # PRIVADOS
-    # ----------------------------------------------------------
+    #helpers
     def _aplicar_defaults_historial(self, datos: dict) -> dict:
-        """Retorna el dict con valores por defecto para campos opcionales."""
+        """apply defaults for missing history fields"""
         defaults = {
             "operador":           "Operador",
             "receta_id":          None,

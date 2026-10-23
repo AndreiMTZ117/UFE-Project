@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/eventos_interaccion.py — EVENTOS DE INTERACCIÓN
-
-Módulo encargado de responder a las acciones del usuario en la interfaz:
-cambios de HAL, selección de puerto COM, selección y apertura de DXF,
-visibilidad del terminal flotante, cambios de recetas, sliders de rotación,
-definición interactiva del centro (Home) y edición del tamaño de base (Area size).
-"""
+"""gui interaction event handlers and callbacks"""
 
 import os
 from tkinter import filedialog, messagebox
@@ -17,10 +10,10 @@ from interfaz.i18n import tr
 
 
 class EventosInteraccionMixin:
-    """Mixin que procesa los eventos y callbacks de la interfaz de usuario."""
+    """mixin processing user interface events and callbacks"""
 
     def _on_com_seleccionado(self, val: str):
-        """Maneja la detección/re-escaneo del sistema Thorlabs GVS112/M."""
+        """handle hardware detection and rescan"""
         if hasattr(self.puente, "detect_hardware"):
             self.puente.detect_hardware()
         conectado = self.puente.is_physically_connected()
@@ -33,7 +26,7 @@ class EventosInteraccionMixin:
             self._iniciar_feedback_ui()
 
     def _on_click_load_file(self):
-        """Opens file browser to select a DXF drawing for CAD/CAM G-code conversion and tracing."""
+        """open file browser to select dxf drawing"""
         if self.puente.is_running or getattr(self, "_cargando_dxf", False):
             return
         ruta = filedialog.askopenfilename(
@@ -49,7 +42,7 @@ class EventosInteraccionMixin:
             self._cargar_archivo_dxf(ruta)
 
     def _on_dxf_seleccionado(self, val: str):
-        """Loads a selected DXF or triggers file browser."""
+        """load selected dxf file or trigger browser"""
         if self.puente.is_running or getattr(self, "_cargando_dxf", False):
             return
         if val in ("[ Load File... ]", "[ Načíst soubor... ]", tr("dxf_load_file")):
@@ -62,12 +55,12 @@ class EventosInteraccionMixin:
                     break
 
     def _on_toggle_terminal(self):
-        """Muestra u oculta la ventana flotante del terminal."""
+        """toggle floating terminal window visibility"""
         self.terminal.toggle()
         self.barra_superior.set_terminal_activo(self.terminal.visible)
 
     def _on_receta_seleccionada(self, nombre_receta: str):
-        """Carga los parámetros de una receta seleccionada en el formulario."""
+        """load selected recipe parameters into form"""
         if self.puente.is_running:
             return
         for r in self.lista_recetas:
@@ -75,7 +68,7 @@ class EventosInteraccionMixin:
                 self.receta_activa = r
                 self.panel_config.poblar_formulario(r)
 
-                # Protección de recetas predeterminadas: ocultar/mostrar botón eliminar
+                #protect factory recipes by toggling delete button
                 es_default = nombre_receta in RECETAS_PREDETERMINADAS
                 self.panel_config.set_delete_visible(not es_default)
 
@@ -86,7 +79,7 @@ class EventosInteraccionMixin:
                 break
 
     def _on_rotacion_cambiada(self, angulo: float):
-        """Recalcula las trayectorias cuando cambia el ángulo de rotación (0°-360°)."""
+        """recalculate paths when rotation angle changes"""
         if self.puente.is_running:
             return
         if self.puente.ruta_dxf_actual:
@@ -94,7 +87,7 @@ class EventosInteraccionMixin:
             self._actualizar_vistas_canvases()
 
     def _on_parametro_cambiado(self, clave: str, valor: float):
-        """Recalcula las trayectorias inmediatamente cuando cambia la escala, rotación o tolerancias en el formulario."""
+        """recalculate paths when scale rotation or tolerances change"""
         if self.puente.is_running:
             return
         if clave in (
@@ -106,7 +99,7 @@ class EventosInteraccionMixin:
                 self._actualizar_vistas_canvases()
 
     def _on_guardar_receta(self):
-        """Persiste los cambios del formulario en la receta actual (SQLite3)."""
+        """persist form changes to active recipe in sqlite3"""
         if self.puente.is_running or not self.receta_activa:
             return
 
@@ -128,7 +121,7 @@ class EventosInteraccionMixin:
             messagebox.showerror("Error", f"Failed to save recipe: {e}")
 
     def _on_crear_receta(self):
-        """Solicita nombre y crea una nueva receta en la base de datos."""
+        """prompt for name and create new recipe in database"""
         if self.puente.is_running:
             return
         dialog = ctk.CTkInputDialog(text=tr("dlg_new_recipe_prompt"), title=tr("dlg_new_recipe_title"))
@@ -146,20 +139,20 @@ class EventosInteraccionMixin:
             nombres = [r["nombre"] for r in self.lista_recetas]
             self.panel_config.set_recetas(nombres, seleccionada=nombre.strip())
             self.receta_activa = self.puente.get_recipe_by_id(nuevo_id)
-            # Mostrar botón de eliminar para recetas personalizadas
+            #show delete button for custom recipes
             self.panel_config.set_delete_visible(True)
             messagebox.showinfo(tr("dlg_new_recipe_title"), tr("dlg_new_recipe_ok", name=nombre))
         except Exception as e:
             messagebox.showerror("Error", f"Error creating recipe: {e}")
 
     def _on_eliminar_receta(self):
-        """Elimina la receta activa de la base de datos SQLite3 (solo personalizadas)."""
+        """delete active recipe from database"""
         if self.puente.is_running or not self.receta_activa:
             return
 
         nombre = self.receta_activa.get("nombre", "")
 
-        # Proteger recetas predeterminadas
+        #protect factory recipes
         if nombre in RECETAS_PREDETERMINADAS:
             messagebox.showwarning(
                 tr("dlg_protected_recipe_title"),
@@ -182,7 +175,7 @@ class EventosInteraccionMixin:
                 messagebox.showinfo(tr("dlg_del_recipe_title"), tr("dlg_del_recipe_ok", name=nombre))
 
     def _on_centro_cambiado(self, x: float, y: float):
-        """Actualiza el centro de reposo de la máquina y posiciona el puntero (alteración manual)."""
+        """update resting center and pointer position"""
         if self.puente.is_running:
             return
         self.puente.set_center_cm(x, y)
@@ -197,7 +190,7 @@ class EventosInteraccionMixin:
         self._actualizar_vistas_canvases()
 
     def _on_dimensiones_cambiadas(self, ancho_cm: float, alto_cm: float):
-        """Actualiza las dimensiones de la base física de trabajo, recalcula el centro automáticamente y trazos."""
+        """update physical base dimensions and recalculate center"""
         if self.puente.is_running:
             return
         self.puente.set_base_dimensions(ancho_cm, alto_cm)
@@ -217,7 +210,7 @@ class EventosInteraccionMixin:
             self.terminal.log(tr("log_base_set", w=ancho_cm, h=alto_cm, cx=cx, cy=cy))
 
     def _aplicar_limites_hardware(self):
-        """Aplica los límites dinámicos de la máquina al panel general para renderizado correcto."""
+        """apply dynamic hardware limits to canvas"""
         self.panel_general.set_limites_hardware(
             self.puente.x_min_limit,
             self.puente.x_max_limit,

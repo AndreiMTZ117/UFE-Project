@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/terminal_flotante.py — Terminal Flotante (Cyber-Brutalist)
-"""
+"""cyber brutalist floating terminal and production history"""
 
 import csv
 import os
@@ -20,7 +18,7 @@ from .i18n import tr, registrar_observador
 
 
 class TerminalFlotante(ctk.CTkFrame):
-    """Consola emergente Cyber-Brutalist para depuración y telemetría de hardware."""
+    """floating console for hardware debugging and telemetry"""
 
     def __init__(self, master, on_cerrar: Optional[Callable[[], None]] = None,
                  obtener_historial: Optional[Callable[[], List[Dict]]] = None,
@@ -37,7 +35,7 @@ class TerminalFlotante(ctk.CTkFrame):
             height=self._alto_fijo,
             **kwargs
         )
-        # Evitar que los widgets internos reduzcan el tamaño del modal flotante
+        #prevent internal widgets from shrinking modal
         self.pack_propagate(False)
 
         self.on_cerrar = on_cerrar
@@ -52,11 +50,11 @@ class TerminalFlotante(ctk.CTkFrame):
 
 
     def _crear_widgets(self):
-        # 1. Cabecera del terminal
+        #header frame
         t_header = ctk.CTkFrame(self, fg_color="transparent", height=34)
         t_header.pack(fill="x", padx=12, pady=(10, 4))
 
-        # Botón History funcional
+        #history button
         self.btn_history = ctk.CTkButton(
             t_header,
             text=tr("term_history"),
@@ -73,7 +71,7 @@ class TerminalFlotante(ctk.CTkFrame):
         )
         self.btn_history.pack(side="left")
 
-        # Botón Exportar CSV
+        #export csv button
         self.btn_export = ctk.CTkButton(
             t_header,
             text=tr("term_export"),
@@ -104,7 +102,7 @@ class TerminalFlotante(ctk.CTkFrame):
         )
         btn_close.pack(side="right")
 
-        # 2. Consola de texto (logs)
+        #text log console
         self.txt_terminal = tk.Text(
             self,
             bg=COLOR_TERMINAL_BG,
@@ -117,12 +115,12 @@ class TerminalFlotante(ctk.CTkFrame):
         self.txt_terminal.pack(fill="both", expand=True, padx=12, pady=(4, 12))
         self.txt_terminal.insert("end", tr("log_console_init") + "\n")
 
-        # 3. Frame de historial (oculto por defecto)
+        #history frame hidden by default
         self.frame_historial = ctk.CTkFrame(self, fg_color=COLOR_TERMINAL_BG)
         self.frame_historial.pack_propagate(False)
 
     def _toggle_historial(self):
-        """Alterna entre vista de logs y vista de historial de producción."""
+        """toggle between logs and production history"""
         if self._modo_historial:
             self.frame_historial.pack_forget()
             self.txt_terminal.pack(fill="both", expand=True, padx=12, pady=(4, 12))
@@ -132,16 +130,16 @@ class TerminalFlotante(ctk.CTkFrame):
             self._mostrar_historial()
 
     def _mostrar_historial(self):
-        """Carga y muestra el historial de producción con ancho completo garantizado."""
+        """load and render production history table"""
         if not self.obtener_historial:
             return
 
         registros = self.obtener_historial()
 
-        # Ocultar terminal de logs, mostrar historial
+        #hide log terminal show history
         self.txt_terminal.pack_forget()
 
-        # Limpiar historial previo
+        #clear previous history
         for widget in self.frame_historial.winfo_children():
             widget.destroy()
 
@@ -159,7 +157,7 @@ class TerminalFlotante(ctk.CTkFrame):
             lbl_empty.pack(pady=40)
             return
 
-        # Tabla scrollable con ancho suficiente para todas las columnas
+        #scrollable table
         scroll_frame = ctk.CTkScrollableFrame(
             self.frame_historial,
             fg_color=COLOR_TERMINAL_BG,
@@ -167,7 +165,7 @@ class TerminalFlotante(ctk.CTkFrame):
         )
         scroll_frame.pack(fill="both", expand=True)
 
-        # Cabecera de la tabla
+        #table header
         header_frame = ctk.CTkFrame(scroll_frame, fg_color="#374151", height=30, corner_radius=BRUTAL_CORNER)
         header_frame.pack(fill="x", padx=2, pady=(0, 4))
         header_frame.pack_propagate(False)
@@ -184,7 +182,7 @@ class TerminalFlotante(ctk.CTkFrame):
                 anchor="w"
             ).pack(side="left", padx=4)
 
-        # Filas de datos
+        #data rows
         self._datos_historial = registros
         for i, reg in enumerate(registros[:100]):
             color_bg = "#1E293B" if i % 2 == 0 else COLOR_TERMINAL_BG
@@ -251,7 +249,7 @@ class TerminalFlotante(ctk.CTkFrame):
                 ).pack(side="left", padx=4)
 
     def _exportar_csv(self):
-        """Exporta el historial de producción a un archivo CSV."""
+        """export production history to csv file"""
         if not self.obtener_historial:
             return
 
@@ -332,7 +330,7 @@ class TerminalFlotante(ctk.CTkFrame):
             self.log(tr("hist_export_err", err=e))
 
     def actualizar_idioma(self):
-        """Actualiza textos de botones y tabla del modal de terminal al cambiar de idioma."""
+        """update button and table texts on language change"""
         if hasattr(self, "btn_history"):
             self.btn_history.configure(text=tr("term_logs") if self._modo_historial else tr("term_history"))
         if hasattr(self, "btn_export"):
@@ -355,13 +353,13 @@ class TerminalFlotante(ctk.CTkFrame):
     def ocultar(self):
         self.place_forget()
         self.visible = False
-        # Restaurar a vista de logs si está en historial
+        #restore log view if in history mode
         if self._modo_historial:
             self._toggle_historial()
         if self.on_cerrar:
             self.on_cerrar()
 
     def log(self, texto: str):
-        """Escribe una nueva línea en la consola y auto-scrollea al final."""
+        """append log line to console and scroll to end"""
         self.txt_terminal.insert("end", texto + "\n")
         self.txt_terminal.see("end")

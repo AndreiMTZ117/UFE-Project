@@ -1,26 +1,13 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/renderizado_dual.py - RENDERIZADO DUAL EN CANVAS (CYBER-BRUTALISM)
-
-Coordina el redibujado entre:
-1. Panel General (Canvas 1:1 con reglas, base DXF - INCREMENTAL durante ejecucion).
-2. Panel Derecho (Canvas Trace Point con zoom 4x centrado en la cabeza laser).
-"""
+"""dual canvas rendering coordinator between main canvas and trace point canvas"""
 
 
 class RenderizadoDualMixin:
-    """Mixin que coordina el redibujado dual de los canvases."""
+    """mixin coordinating dual canvas rendering"""
 
     def _actualizar_vistas_canvases(self):
-        """
-        Redibuja en sincronía el Canvas General y el Canvas Trace Point.
-
-        El Canvas General hace un redibujado COMPLETO de la figura base.
-        Se usa al cargar un DXF, cambiar receta o cambiar parametros.
-        Durante la ejecucion activa, el progreso se dibuja incrementalmente
-        via panel_general.agregar_segmento_completado (sin redibujar todo).
-        """
-        # Desaparecer el marco delimitador temporal al modificar parametros, receta o cargar nuevo DXF
+        """redraw main and trace point canvases synchronously"""
+        #hide temporary framing rect when updating parameters
         if hasattr(self, "panel_general") and hasattr(self.panel_general, "ocultar_frame_dxf"):
             self.panel_general.ocultar_frame_dxf()
 

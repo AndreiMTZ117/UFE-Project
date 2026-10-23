@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/logica_ejecucion.py — LÓGICA DE EJECUCIÓN: START, PAUSE/RESUME, STOP
-
-Módulo encargado de controlar el ciclo de vida de ejecución del corte/grabado:
-- Validación previa de hardware (físico o simulación virtual).
-- Validación de archivos DXF y parámetros cinemáticos.
-- Control de estados: Inicio, Pausa, Reanudación y Parada de emergencia.
-- Hilos de telemetría, callbacks asíncronos y actualización del cronómetro LCD.
-"""
+"""execution logic lifecycle start pause resume and stop"""
 
 import time
 import threading
@@ -19,15 +11,15 @@ from interfaz.i18n import tr
 
 
 class LogicaEjecucionMixin:
-    """Mixin que gestiona el flujo de ejecución cinemática y telemetría."""
+    """mixin managing kinematic execution workflow and telemetry"""
 
     def _on_click_start(self):
-        """Inicia el trabajo de corte/grabado tras validar requisitos."""
+        """start cutting or marking job after validating requirements"""
         if getattr(self, "_ejecutando_inicio", False) or self.puente.is_running:
             return
         self._ejecutando_inicio = True
         try:
-            # 1. Validacion de hardware / Simulacion
+            #1. validate hardware or simulation
             if not self.puente.is_physically_connected():
                 proceder = messagebox.askyesno(
                     tr("dlg_hw_notice_title"),
@@ -37,20 +29,20 @@ class LogicaEjecucionMixin:
                     self._ejecutando_inicio = False
                     return
 
-            # 2. Validación de archivo DXF
+            #2. validate dxf file
             if not self.puente.trazos_calibrados:
                 messagebox.showwarning(tr("dlg_missing_dxf_title"), tr("dlg_missing_dxf_msg"))
                 self._ejecutando_inicio = False
                 return
 
-            # 3. Validación de parámetros cinemáticos
+            #3. validate kinematic parameters
             params = self.panel_config.obtener_datos_formulario()
             if params.get("velocidad_trazado", 0) <= 0 or params.get("velocidad_viaje", 0) <= 0:
                 messagebox.showwarning(tr("dlg_invalid_params_title"), tr("dlg_invalid_params_msg"))
                 self._ejecutando_inicio = False
                 return
 
-            # Preparar UI para ejecución activa: limpieza total de cualquier marcado previo
+            #prepare ui for active execution and clear previous markings
             self.panel_general.ocultar_frame_dxf()
             self.panel_general.limpiar_completados()
             self.panel_derecho.limpiar_progreso()
@@ -82,7 +74,7 @@ class LogicaEjecucionMixin:
             self._ejecutando_inicio = False
 
     def _on_click_pause_resume(self):
-        """Pausa o reanuda la ejecución en curso (congela/reanuda cronómetro)."""
+        """toggle pause or resume during execution"""
         is_paused = self.puente.toggle_pause()
         self.panel_derecho.set_estado_pausa(is_paused)
         if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
@@ -97,7 +89,7 @@ class LogicaEjecucionMixin:
             self.terminal.log(tr("log_resume"))
 
     def _on_click_stop(self):
-        """Parada de emergencia inmediata: solicita confirmación y aborta la ejecución."""
+        """emergency stop with confirmation dialog"""
         if not self.puente.is_running:
             return
 
@@ -126,7 +118,7 @@ class LogicaEjecucionMixin:
         self.terminal.log(tr("log_stop"))
         self.puente.stop_execution()
 
-        # Limpiar inmediatamente los trazos del canvas para no dejar el marcado congelado
+        #clear canvas markings immediately
         self.panel_general.ocultar_frame_dxf()
         self.panel_general.limpiar_completados()
         self.panel_derecho.limpiar_progreso()
@@ -135,7 +127,7 @@ class LogicaEjecucionMixin:
         self._ancla_trazo = None
         self._ultimo_seg_activo = None
 
-        # Re-alinear al centro (Home) inmediatamente
+        #recenter mirrors to home immediately
         cx = self.puente.centro_cm_x
         cy = self.puente.centro_cm_y
         self.pos_laser_actual = (cx, cy)
@@ -147,11 +139,11 @@ class LogicaEjecucionMixin:
             self.panel_config.set_modo_framing(False)
         self._set_bloqueo_edicion_ejecucion(False)
 
-        # Asegurar espejos en reposo Home
+        #ensure mirrors parked at home
         self.puente.center_galvos()
 
     def _on_click_frame(self):
-        """Ejecuta la rutina de enmarcado (Framing) con el laser estrictamente apagado."""
+        """run framing routine with laser off"""
         if self.puente.is_running:
             return
 
@@ -159,10 +151,10 @@ class LogicaEjecucionMixin:
             messagebox.showwarning(tr("dlg_missing_geom_title"), tr("dlg_missing_geom_msg"))
             return
 
-        # 1. Mostrar marco naranja punteado en el canvas vectorial (1:1 isometric)
+        #1. show dashed framing box on canvas
         self.panel_general.mostrar_frame_dxf()
 
-        # 2. Configurar UI en modo ejecución / framing (activar botones PAUSE y STOP)
+        #2. configure ui in running mode
         self._es_framing = True
         self.panel_derecho.set_modo_running()
         self.panel_derecho.set_estado_sistema("FRAMING")
@@ -185,7 +177,7 @@ class LogicaEjecucionMixin:
         )
 
     def _cb_cambio_pasada(self, pass_idx: int, total_passes: int):
-        """Notificación desde el hilo de trabajo de inicio de nueva pasada."""
+        """worker thread pass change callback"""
         if getattr(self, '_cerrando', False):
             return
         try:
@@ -194,27 +186,27 @@ class LogicaEjecucionMixin:
             pass
 
     def _on_nueva_pasada(self, pass_idx: int):
-        """Coordina la transición visual a la nueva pasada (pasadas previas a azul translúcido)."""
+        """transition visual rendering to new pass"""
         if pass_idx <= getattr(self, '_pass_actual', 1) and pass_idx != 1:
             return
 
-        # 1. Despachar cualquier telemetría acumulada para asegurar el trazo final de la pasada
+        #1. dispatch pending telemetry
         if getattr(self, '_progreso_pendiente', None) is not None:
             self._despachar_progreso_gui()
 
         self._pass_actual = pass_idx
 
-        # 2. Archivar los trazos completados en el registro de pasadas previas de la app
+        #2. archive completed segments into previous passes
         if self.trazos_completados:
             self.trazos_pasadas_previas.extend(self.trazos_completados)
 
-        # 3. Archivar y atenuar visualmente en Canvas 1:1 y Canvas Trace (Zoom 4x)
+        #3. fade previous passes on canvas
         if hasattr(self.panel_general, "archivar_pasada_completada"):
             self.panel_general.archivar_pasada_completada()
         if hasattr(self.panel_derecho, "archivar_pasada_completada"):
             self.panel_derecho.archivar_pasada_completada()
 
-        # 4. Limpiar trazos activos para dibujar la nueva pasada
+        #4. clear active traces for new pass
         self.trazos_completados.clear()
         self._ancla_trazo = None
         self._ultimo_seg_activo = None
@@ -223,10 +215,10 @@ class LogicaEjecucionMixin:
         self, trazo_idx, total_trazos, wp_idx, total_wp, x, y, trace_pct, total_pct, laser_on=True,
         volt_x=None, volt_y=None
     ):
-        """Callback invocado desde el hilo de trabajo con datos de telemetría."""
+        """worker thread telemetry callback"""
         if getattr(self, '_cerrando', False):
             return
-        # Guardar la telemetria mas reciente de forma segura
+        #save latest telemetry safely
         self._progreso_pendiente = (trazo_idx, total_trazos, wp_idx, total_wp, x, y, trace_pct, total_pct, laser_on, volt_x, volt_y)
         if not getattr(self, '_progreso_programado', False):
             self._progreso_programado = True
@@ -236,7 +228,7 @@ class LogicaEjecucionMixin:
                 pass
 
     def _despachar_progreso_gui(self):
-        """Despacha la telemetria acumulada al hilo GUI a ~60fps sin saturar la cola."""
+        """dispatch accumulated telemetry to gui thread at 60fps"""
         self._progreso_programado = False
         if getattr(self, '_cerrando', False) or self._progreso_pendiente is None:
             return
@@ -245,18 +237,16 @@ class LogicaEjecucionMixin:
             return
         datos = self._progreso_pendiente
         self._progreso_pendiente = None
-        # Pasar identificadores de trayectoria y segmento junto a coordenadas, porcentajes y voltajes instantaneos
+        #pass trajectory identifiers coordinates percentages and voltages
         self._actualizar_progreso_gui(
             datos[0], datos[2], datos[4], datos[5], datos[6], datos[7], datos[8],
             datos[9] if len(datos) > 9 else None,
             datos[10] if len(datos) > 10 else None
         )
 
-    # =========================================================================
-    # HARDWARE FEEDBACK TRACKING (opcional)
-    # =========================================================================
+    #hardware feedback tracking
     def _hw_a_cm(self, x_hw: float, y_hw: float):
-        """Convierte coordenadas de hardware (mm, mismo marco que on_progress) a cm del canvas."""
+        """convert hardware coordinates in mm to canvas cm"""
         cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
         cal_ancho = cfg.get("marco_ancho_cm", 10.0)
         cal_alto = cfg.get("marco_alto_cm", 10.0)
@@ -270,11 +260,7 @@ class LogicaEjecucionMixin:
         )
 
     def _iniciar_feedback_ui(self):
-        """Conecta el callback de feedback y evalúa la disponibilidad del hardware AI.
-
-        En simulación se resuelve de forma síncrona (sin tocar DAQmx). Con hardware real,
-        la sonda de AI corre en un hilo para no bloquear la GUI.
-        """
+        """connect feedback callback and probe hardware availability"""
         self._fb_cola = deque()
         self._fb_programado = False
         self.puente.on_feedback_cb = self._cb_feedback
@@ -299,7 +285,7 @@ class LogicaEjecucionMixin:
             self.panel_general.set_feedback_visible(False)
 
     def _on_feedback_toggle(self, activo: bool):
-        """Activa/desactiva el Hardware Feedback Tracking desde el selector superior."""
+        """toggle feedback tracking from top bar selector"""
         if self.puente.is_running:
             self.barra_superior.forzar_feedback(self.puente.feedback_habilitado)
             return
@@ -312,7 +298,7 @@ class LogicaEjecucionMixin:
         self.terminal.log(tr("log_feedback_on") if estado else tr("log_feedback_off"))
 
     def _cb_feedback(self, puntos_xy_mm):
-        """Callback (hilo de trabajo): encola puntos medidos y agenda un único volcado a la GUI."""
+        """queue measured points and schedule gui dispatch"""
         if getattr(self, '_cerrando', False):
             return
         self._fb_cola.append(puntos_xy_mm)
@@ -324,7 +310,7 @@ class LogicaEjecucionMixin:
                 self._fb_programado = False
 
     def _despachar_feedback_gui(self):
-        """Vuelca los puntos medidos acumulados a las vistas 1:1 y zoom (hilo GUI)."""
+        """flush accumulated measured points to canvas"""
         self._fb_programado = False
         if getattr(self, '_cerrando', False):
             self._fb_cola.clear()
@@ -355,7 +341,7 @@ class LogicaEjecucionMixin:
         volt_x: float = None,
         volt_y: float = None
     ):
-        """Actualiza en el hilo principal de la GUI las coordenadas y gauges en tiempo real."""
+        """update coordinates gauges and canvas traces in real time"""
         if getattr(self, '_cerrando', False) or not self.puente.is_running:
             return
         try:
@@ -367,7 +353,7 @@ class LogicaEjecucionMixin:
             kx = cal_ancho / rango_x if rango_x > 0 else 1.0
             ky = cal_alto / rango_y if rango_y > 0 else 1.0
 
-            # Verificación de cambio de pasada
+            #verify pass change
             pass_en_curso = getattr(self.puente, "pass_actual", 1)
             if pass_en_curso > getattr(self, "_pass_actual", 1):
                 self._on_nueva_pasada(pass_en_curso)
@@ -381,7 +367,7 @@ class LogicaEjecucionMixin:
             self.pos_laser_actual = (cm_x_real, cm_y_real)
             pos_actual = (cm_x_real, cm_y_real)
 
-            # Actualizar el puntero visual del láser (puntito verde) en el canvas 1:1
+            #update laser pointer position on canvas
             self.panel_general.actualizar_puntero(cm_x_real, cm_y_real)
 
             trazos_cm = getattr(self.puente, 'trazos_fisicos_cm', None)
@@ -389,8 +375,7 @@ class LogicaEjecucionMixin:
             ultimo_seg = getattr(self, '_ultimo_seg_activo', None)
 
             if not laser_on:
-                # Transición a movimiento en vacío (G0 viaje o fin de corte):
-                # Cerrar cualquier segmento previo completando hasta el final de la figura
+                #transition to g0 rapid travel
                 if ultimo_seg is not None and trazos_cm:
                     prev_t, prev_pt = ultimo_seg
                     if 0 <= prev_t < len(trazos_cm):
@@ -408,14 +393,13 @@ class LogicaEjecucionMixin:
                 ancla = None
                 self._ultimo_seg_activo = None
             else:
-                # Segmento de marcado activo (G1 corte):
-                # Conectar estrictamente sobre los vectores CAD y forzar vértices al cambiar de segmento
+                #active g1 marking segment
                 if trazos_cm and 0 <= trazo_idx < len(trazos_cm) and 1 <= pt_idx < len(trazos_cm[trazo_idx]):
                     ruta_actual = trazos_cm[trazo_idx]
                     v_ini = ruta_actual[pt_idx - 1]
 
                     if ultimo_seg is None:
-                        # Comienza un nuevo tramo de corte: asegurar segmentos previos desde el inicio
+                        #start new contour segment
                         for s in range(1, pt_idx):
                             s_ini = ruta_actual[s - 1]
                             s_fin = ruta_actual[s]
@@ -426,7 +410,7 @@ class LogicaEjecucionMixin:
                     elif ultimo_seg != (trazo_idx, pt_idx):
                         prev_t, prev_pt = ultimo_seg
                         if prev_t == trazo_idx and prev_pt < pt_idx:
-                            # Completar con fidelidad geométrica los segmentos intermedios hasta el vértice
+                            #interpolate intermediate segments to vertex
                             for s in range(prev_pt, pt_idx):
                                 s_ini = ruta_actual[s - 1]
                                 s_fin = ruta_actual[s]
@@ -435,7 +419,7 @@ class LogicaEjecucionMixin:
                                     self.trazos_completados.append((origen, s_fin))
                             ancla = v_ini
                         else:
-                            # Cambio de trayectoria / ruta: completar la ruta anterior hasta su último vértice
+                            #contour change: complete previous path
                             if 0 <= prev_t < len(trazos_cm):
                                 ruta_ant = trazos_cm[prev_t]
                                 for s in range(prev_pt, len(ruta_ant)):
@@ -444,7 +428,7 @@ class LogicaEjecucionMixin:
                                     origen = ancla if s == prev_pt and ancla is not None else s_ini
                                     if self.panel_general.agregar_segmento_completado(origen, s_fin, forzar=True):
                                         self.trazos_completados.append((origen, s_fin))
-                            # Y asegurar segmentos iniciales de la nueva ruta hasta pt_idx
+                            #ensure initial segments of new contour
                             for s in range(1, pt_idx):
                                 s_ini = ruta_actual[s - 1]
                                 s_fin = ruta_actual[s]
@@ -460,7 +444,7 @@ class LogicaEjecucionMixin:
                         self.trazos_completados.append((ancla, pos_actual))
                         ancla = pos_actual
                 else:
-                    # Fallback de seguridad si trazos_fisicos_cm no está disponible
+                    #safety fallback
                     if ancla is None:
                         ancla = (prev_x, prev_y)
                     if self.panel_general.agregar_segmento_completado(ancla, pos_actual):
@@ -469,7 +453,7 @@ class LogicaEjecucionMixin:
 
             self._ancla_trazo = ancla
 
-            # Zoom relativo: el seguimiento usa la escala del canvas general como base
+            #relative zoom scale
             escala_general = getattr(self.panel_general, '_escala_pixel', None)
             if escala_general:
                 self.panel_derecho.escala_referencia_px_cm = escala_general
@@ -477,7 +461,7 @@ class LogicaEjecucionMixin:
 
             self.panel_derecho.actualizar_coordenadas(cm_x, cm_y)
 
-            # Thorlabs GVS112/M mirror deflection voltages (-10V to +10V)
+            #thorlabs galvo deflection voltages
             if volt_x is not None and volt_y is not None:
                 vx = max(-10.0, min(10.0, round(volt_x, 3)))
                 vy = max(-10.0, min(10.0, round(volt_y, 3)))
@@ -487,10 +471,10 @@ class LogicaEjecucionMixin:
                 vy = max(-10.0, min(10.0, round((y - self.puente.centro_y) * scale_v, 3)))
             self.panel_derecho.actualizar_voltajes(vx, vy, laser_on)
 
-            # Medidores circulares: porcentaje de pieza actual (Trazo) y total acumulado
+            #circular progress gauges
             self.panel_derecho.dibujar_gauges(trace_pct, total_pct)
 
-            # Redibujar canvas trace (zoom 4x) con descarte de lineas fuera del visor
+            #redraw trace canvas
             self.panel_derecho.redibujar_trace(
                 getattr(self.puente, 'trazos_fisicos_cm', self.puente.trazos_calibrados),
                 self.trazos_completados,
@@ -501,7 +485,7 @@ class LogicaEjecucionMixin:
             pass
 
     def _cb_log(self, mensaje: str):
-        """Callback para imprimir logs en el terminal flotante."""
+        """log callback for floating terminal"""
         if getattr(self, '_cerrando', False):
             return
         try:
@@ -510,7 +494,7 @@ class LogicaEjecucionMixin:
             pass
 
     def _cb_finalizado(self, estado: str, error_msg: str, duracion_s: float):
-        """Callback al terminar la secuencia de ejecución (ejecutado desde hilo de trabajo)."""
+        """execution finished callback from worker thread"""
         if getattr(self, '_cerrando', False):
             return
         try:
@@ -519,7 +503,7 @@ class LogicaEjecucionMixin:
             pass
 
     def _restaurar_ui_idle(self, estado: str, error_msg: str, duracion_s: float):
-        """Restaura la interfaz al estado de reposo (Idle)."""
+        """restore ui to idle state"""
         if getattr(self, '_cerrando', False):
             return
         es_framing = getattr(self, '_es_framing', False)
@@ -529,7 +513,7 @@ class LogicaEjecucionMixin:
             self.panel_derecho.set_modo_idle()
             self.panel_derecho.actualizar_timer("0:00:00")
 
-            # Retornar el puntero visual del láser al centro (Home) en ambos canvases
+            #return laser pointer to home center
             cx = self.puente.centro_cm_x
             cy = self.puente.centro_cm_y
             self.pos_laser_actual = (cx, cy)
@@ -558,7 +542,7 @@ class LogicaEjecucionMixin:
             if estado in ("COMPLETADO", "COMPLETED"):
                 self.panel_derecho.dibujar_gauges(100.0, 100.0)
                 self.panel_derecho.set_estado_sistema("COMPLETED")
-                # Al completar el trabajo con éxito, asegurar que todos los trazos se muestren 100% completados
+                #mark all trajectories complete on successful finish
                 trazos_cm = getattr(self.puente, 'trazos_fisicos_cm', None)
                 if trazos_cm:
                     for ruta in trazos_cm:
@@ -597,7 +581,7 @@ class LogicaEjecucionMixin:
         except Exception:
             pass
 
-        # Mostrar feedback de resultado con protección contra app cerrando (solo para corte, no framing)
+        #show cycle result dialog
         def _mostrar_resultado():
             if getattr(self, '_cerrando', False) or es_framing:
                 return
@@ -617,7 +601,7 @@ class LogicaEjecucionMixin:
             pass
 
     def _actualizar_timer_loop(self):
-        """Bucle continuo para actualizar el cronometro LCD de ejecucion."""
+        """lcd execution timer loop"""
         if getattr(self, '_cerrando', False):
             return
 
@@ -641,7 +625,7 @@ class LogicaEjecucionMixin:
             pass
 
     def _set_bloqueo_edicion_ejecucion(self, bloqueado: bool):
-        """Bloquea o habilita todos los controles configurables mientras el trabajo está en ejecución."""
+        """lock or unlock configurable controls during execution"""
         if hasattr(self, 'barra_superior') and hasattr(self.barra_superior, 'set_bloqueo_ejecucion'):
             self.barra_superior.set_bloqueo_ejecucion(bloqueado)
         if hasattr(self, 'panel_config') and hasattr(self.panel_config, 'set_bloqueo_ejecucion'):

@@ -1,19 +1,4 @@
-"""Deterministic low-level NI-DAQmx controller for galvanometer laser scanning.
-
-Targets an NI PXIe-1073 chassis with an NI PXI-6229 multifunction card:
-
-* Analog Output (AO): X and Y mirror commands, -10 V to +10 V.
-* Digital Output (DO): laser gate line, hardware-timed on port0.
-
-Both tasks are clocked by a single hardware sample clock (the AO onboard
-clock) so that the laser gate is sample-aligned with the mirror trajectory.
-The whole waveform is loaded into the card buffers *before* the trigger and
-generated in FINITE mode (no regeneration, no CPU involvement while running).
-
-If ``nidaqmx`` or the hardware is unavailable, the class can run in
-simulation (mock) mode, which validates every input and emulates the state
-machine without touching any driver.
-"""
+"""deterministic ni-daqmx controller for galvo laser scanning"""
 
 from __future__ import annotations
 import logging
@@ -22,7 +7,7 @@ from types import TracebackType
 from typing import Any, Dict, List, Optional, Sequence, Type
 import numpy as np
 from core.config_loader import get_volts_per_mm, load_hardware_config
-try:  # The driver is optional so the module can be imported on any machine.
+try:  #optional driver import
     import nidaqmx  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     from nidaqmx.constants import AcquisitionType, LineGrouping  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     from nidaqmx.errors import DaqError  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
@@ -33,7 +18,7 @@ except Exception:  # pragma: no cover - depends on local installation
     DaqError = Exception  # type: ignore[assignment,misc]
     NIDAQMX_AVAILABLE = False
 
-try:  # Optional: only needed for the opt-in Hardware Feedback Tracking (AI readback).
+try:  #optional feedback imports
     from nidaqmx.constants import TerminalConfiguration, READ_ALL_AVAILABLE  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
 except Exception:  # pragma: no cover - depends on local installation
     TerminalConfiguration = None  # type: ignore[assignment]
@@ -47,11 +32,11 @@ PARK_VOLTAGE: float = 0.0
 
 
 class NIDaqError(RuntimeError):
-    """Raised for any configuration, state, or driver failure."""
+    """raised for configuration or driver failure"""
 
 
 class NIDaqController:
-    """Hardware-timed AO + DO waveform generator with safe shutdown."""
+    """hardware-timed ao and do waveform generator"""
 
     _STATE_IDLE = "idle"
     _STATE_CONFIGURED = "configured"
@@ -64,18 +49,7 @@ class NIDaqController:
         config: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
     ) -> None:
-        """Create the controller.
-
-        Args:
-            simulate: ``True`` forces simulation mode, ``False`` forces real
-                hardware (raises if ``nidaqmx`` is missing), ``None`` selects
-                simulation automatically when ``nidaqmx`` cannot be imported.
-            config: Optional configuration dictionary.
-            config_path: Optional explicit path to hardware_config.json.
-
-        Raises:
-            NIDaqError: If real hardware is requested but ``nidaqmx`` is missing.
-        """
+        """create controller instance"""
         if simulate is None:
             daq_probe = probe_daq_hardware()
             simulate = not daq_probe["available"]
@@ -94,7 +68,7 @@ class NIDaqController:
                 simulate = True
         self.simulate: bool = simulate
 
-        # Resolve configuration dictionary (explicit dict or from file/fallback)
+        #resolve configuration dictionary
         self.config: Dict[str, Any] = config if config is not None else load_hardware_config(config_path)
 
         raw_v_limits = self.config.get("voltage_limits") or self.config.get("galvo_dynamics", {}).get("voltage_limits", {})
@@ -117,11 +91,11 @@ class NIDaqController:
         self._state: str = self._STATE_IDLE
         self._start_time: float = 0.0
 
-        # Simulation bookkeeping (inspectable from unit tests).
+        #simulation state
         self.simulated_voltages: Optional[np.ndarray] = None
         self.simulated_gate: Optional[np.ndarray] = None
 
-        # Optional Hardware Feedback Tracking (AI readback). Inactive unless enabled.
+        #optional hardware feedback tracking
         self._ai_task: Any = None
         self.feedback_active: bool = False
         self._ai_channels: List[str] = []
@@ -129,7 +103,7 @@ class NIDaqController:
         mode = "SIMULATION" if self.simulate else "HARDWARE"
         logger.info("NIDaqController created (%s mode).", mode)
 
-    # ---------------------------------------------------------------- context
+    #context
     def __enter__(self) -> "NIDaqController":
         return self
 
@@ -139,15 +113,15 @@ class NIDaqController:
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> None:
-        """Always park the outputs and release resources on exit."""
+        """park outputs and release resources on exit"""
         self.stop_and_clear()
 
     @property
     def state(self) -> str:
-        """Current state: idle, configured, loaded, or running."""
+        """current state of controller"""
         return self._state
 
-    # ------------------------------------------------------------------ setup
+    #setup
     def setup_hardware(
         self,
         ao_channels: Optional[Sequence[str]] = None,
@@ -155,32 +129,13 @@ class NIDaqController:
         f_s: Optional[float] = None,
         sync_clock: Optional[str] = None,
     ) -> None:
-        """Create the AO and DO tasks and their channels.
-
-        The AO task owns the master sample clock (onboard clock). The DO task
-        will be clocked from ``sync_clock`` (defaulting to ``/<Dev>/ao/SampleClock``).
-        Sample-clock timing is finalized in :meth:`write_buffers`, once the number
-        of samples is known.
-
-        If parameters are omitted, values from ``hardware_config.json`` or fallback
-        defaults are automatically loaded.
-
-        Args:
-            ao_channels: Two physical AO channels ``(X, Y)``.
-            do_channel: Digital line used as laser gate (must be on a
-                hardware-timed port, i.e. port0 on the PXI-6229).
-            f_s: Sample rate in Hz.
-            sync_clock: Hardware synchronization sample clock terminal.
-
-        Raises:
-            NIDaqError: On invalid arguments, wrong state, or driver errors.
-        """
+        """create ao and do tasks and channels"""
         if self._state != self._STATE_IDLE:
             raise NIDaqError("Hardware is already configured; call stop_and_clear() first.")
 
         daq_cfg = self.config.get("daq", {})
 
-        # Default fallback from configuration
+        #fallback from configuration
         if ao_channels is None:
             ao_channels = tuple(daq_cfg.get("analog_channels", ("Dev1/ao0", "Dev1/ao1")))
         if do_channel is None:
@@ -214,7 +169,7 @@ class NIDaqController:
                     self._do_channel, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES
                 )
             except (DaqError, Exception) as error:
-                # Never leave a half-configured task reserved in the driver.
+                #cleanup partial tasks on error
                 self._close_tasks()
                 logger.warning(
                     "NI-DAQmx hardware initialization failed or device not present (%s). "
@@ -226,22 +181,9 @@ class NIDaqController:
         mode_str = "SIMULATION" if self.simulate else "HARDWARE"
         logger.info("Configured AO=%s DO=%s at %.0f Hz (%s mode).", self._ao_channels, self._do_channel, f_s, mode_str)
 
-    # ----------------------------------------------------------------- buffers
+    #buffers
     def write_buffers(self, voltage_matrix_2xn: np.ndarray, laser_gate_vector: np.ndarray) -> None:
-        """Validate and transfer both waveforms to the card buffers.
-
-        Configures FINITE sample-clock timing for AO (onboard clock) and for
-        DO (clock source ``/<Dev>/ao/SampleClock``), then writes the data
-        without auto-start, so nothing is generated until :meth:`start_emission`.
-
-        Args:
-            voltage_matrix_2xn: Array of shape ``(2, n)`` in volts.
-            laser_gate_vector: Array of shape ``(1, n)`` or ``(n,)``; non-zero
-                means laser on.
-
-        Raises:
-            NIDaqError: On invalid data, wrong state, or driver errors.
-        """
+        """validate and transfer waveforms to card buffers"""
         if self._state not in (self._STATE_CONFIGURED, self._STATE_LOADED):
             raise NIDaqError(f"Cannot write buffers in state '{self._state}'.")
 
@@ -254,14 +196,14 @@ class NIDaqController:
         if not np.all(np.isfinite(voltages)):
             raise NIDaqError("Voltage matrix contains NaN or infinite values.")
 
-        # Strict electrical clamping to protect Thorlabs GVS112/M servo amplifiers
+        #clamp voltages to protect servo amplifiers
         v_min_safe = max(AO_VOLTAGE_MIN, self.voltage_min)
         v_max_safe = min(AO_VOLTAGE_MAX, self.voltage_max)
         voltages = np.clip(voltages, -10.0, 10.0)
         voltages = np.clip(voltages, v_min_safe, v_max_safe)
 
         gate = np.asarray(laser_gate_vector).reshape(-1)
-        # Guarantee exact length match between laser gate and analog command channels
+        #ensure exact length match between gate and analog channels
         if gate.size != n_samples:
             logger.warning(
                 "Laser gate length (%d) mismatch with analog samples (%d); adjusting to match exactly.",
@@ -280,21 +222,21 @@ class NIDaqController:
             try:
                 device = self._ao_channels[0].strip("/").split("/")[0]
                 sync_clock_src = self._sync_clock if self._sync_clock else f"/{device}/ao/SampleClock"
-                # Master clock: AO onboard clock, FINITE (no regeneration).
+                #master clock ao onboard clock
                 self._ao_task.timing.cfg_samp_clk_timing(
                     rate=self._sample_rate_hz,
                     source="OnboardClock",
                     sample_mode=AcquisitionType.FINITE,
                     samps_per_chan=n_samples,
                 )
-                # Slave: DO shares the AO sample clock -> zero relative skew.
+                #slave do shares ao sample clock
                 self._do_task.timing.cfg_samp_clk_timing(
                     rate=self._sample_rate_hz,
                     source=sync_clock_src,
                     sample_mode=AcquisitionType.FINITE,
                     samps_per_chan=n_samples,
                 )
-                # Preload the onboard FIFO / DMA buffers; tasks are not started.
+                #preload fifo and dma buffers
                 self._ao_task.write(voltages, auto_start=False)
                 self._do_task.write(gate_u32, auto_start=False)
             except BaseException as error:
@@ -310,9 +252,9 @@ class NIDaqController:
         self._state = self._STATE_LOADED
         logger.info("Loaded %d samples (%.3f ms).", n_samples, n_samples / self._sample_rate_hz * 1e3)
 
-    # ------------------------------------------------------ hardware feedback
+    #hardware feedback
     def _feedback_cfg(self) -> Dict[str, Any]:
-        """Resolve feedback settings from the 'daq' config section."""
+        """resolve feedback settings from daq config section"""
         daq_cfg = self.config.get("daq", {})
         device = str(daq_cfg.get("device_name", "Dev1")).strip().strip("/") or "Dev1"
         channels = daq_cfg.get("ai_channels") or [f"{device}/ai0", f"{device}/ai1"]
@@ -327,16 +269,9 @@ class NIDaqController:
             "volts_per_mm": get_volts_per_mm(self.config),
         }
 
+    #hardware feedback
     def enable_feedback(self) -> bool:
-        """Create the optional AI task that reads the GVS position monitor.
-
-        Must be called after :meth:`write_buffers` and before :meth:`start_emission`.
-        The AI task is clocked by the AO sample clock (sample-aligned with the
-        command). Never raises: on any problem feedback stays disabled.
-
-        Returns:
-            ``True`` if feedback is active for this emission.
-        """
+        """create optional ai task to read position monitor"""
         self.feedback_active = False
         if self.simulate or not NIDAQMX_AVAILABLE or TerminalConfiguration is None:
             return False
@@ -364,19 +299,13 @@ class NIDaqController:
             self.feedback_active = True
             logger.info("Hardware feedback armed on %s (%s).", self._ai_channels, cfg["terminal"])
             return True
-        except BaseException as error:  # noqa: BLE001 - feedback is optional
+        except BaseException as error:  #feedback is optional
             logger.warning("Hardware feedback unavailable (%s). Continuing without feedback.", error)
             self.disable_feedback()
             return False
 
     def read_feedback(self) -> Optional[np.ndarray]:
-        """Non-blocking read of the newly available feedback samples.
-
-        Returns:
-            Array ``(2, m)`` in volts, already corrected by the configured sign
-            and offset per axis, or ``None`` when nothing is available (or
-            feedback is not active). Never raises.
-        """
+        """non-blocking read of feedback samples"""
         if not self.feedback_active or self._ai_task is None:
             return None
         try:
@@ -388,15 +317,15 @@ class NIDaqController:
             arr[0] = cfg["sign_x"] * (arr[0] - cfg["offset_x"])
             arr[1] = cfg["sign_y"] * (arr[1] - cfg["offset_y"])
             return arr
-        except BaseException as error:  # noqa: BLE001 - never interrupt the scan
+        except BaseException as error:  #never interrupt scan
             if "-200284" in str(error) or "-200278" in str(error) or "timeout" in str(error).lower():
-                return None  # samples simply not available yet
+                return None  #samples not yet available
             logger.warning("Hardware feedback read failed (%s). Disabling feedback.", error)
             self.disable_feedback()
             return None
 
     def disable_feedback(self) -> None:
-        """Release the AI task (idempotent, never raises)."""
+        """release ai feedback task"""
         self.feedback_active = False
         task, self._ai_task = self._ai_task, None
         if task is None:
@@ -404,27 +333,19 @@ class NIDaqController:
         for action in (task.stop, task.close):
             try:
                 action()
-            except BaseException:  # noqa: BLE001
+            except BaseException:
                 pass
 
-    # ---------------------------------------------------------------- emission
+    #emission
     def start_emission(self) -> None:
-        """Arm both tasks and release the master clock.
-
-        The DO task is started first: it is armed and waits for the AO sample
-        clock. Starting the AO task last then releases the clock for both tasks
-        on the same edge.
-
-        Raises:
-            NIDaqError: If buffers are not loaded or the driver fails.
-        """
+        """arm tasks and release master clock"""
         if self._state != self._STATE_LOADED:
             raise NIDaqError(f"Cannot start emission in state '{self._state}'; load buffers first.")
-        # Optional feedback task: armed first so it waits for the AO sample clock.
+        #arm feedback task first
         if self._ai_task is not None:
             try:
                 self._ai_task.start()
-            except BaseException as error:  # noqa: BLE001 - feedback must never break emission
+            except BaseException as error:
                 logger.warning("Feedback AI task could not start (%s). Continuing without feedback.", error)
                 self.disable_feedback()
         if not self.simulate:
@@ -444,21 +365,7 @@ class NIDaqController:
         logger.info("Emission started.")
 
     def wait_until_done(self, timeout: float = 10.0) -> bool:
-        """Block until the finite waveform has been fully generated.
-
-        On timeout, error, or ``KeyboardInterrupt`` the outputs are parked
-        safely before the exception propagates.
-
-        Args:
-            timeout: Maximum wait in seconds.
-
-        Returns:
-            ``True`` when generation completed.
-
-        Raises:
-            NIDaqError: If not running or on driver failure.
-            TimeoutError: If the sweep does not finish within ``timeout``.
-        """
+        """block until waveform is fully generated"""
         if self._state != self._STATE_RUNNING:
             raise NIDaqError(f"Cannot wait in state '{self._state}'; emission is not running.")
         try:
@@ -474,7 +381,7 @@ class NIDaqController:
                     self._ao_task.wait_until_done(timeout=timeout)
                     self._do_task.wait_until_done(timeout=timeout)
                 except DaqError as error:
-                    if getattr(error, "error_code", None) == -200560:  # DAQmxErrorSamplesNotYetAvailable
+                    if getattr(error, "error_code", None) == -200560:  #samples not yet available
                         raise TimeoutError(f"Sweep did not finish within {timeout} s.") from error
                     if "timeout" in str(error).lower() or "-200474" in str(error):
                         raise TimeoutError(f"Sweep did not finish within {timeout} s.") from error
@@ -488,17 +395,13 @@ class NIDaqController:
             logger.info("Emission finished.")
             return True
         except BaseException:
-            # Covers TimeoutError, NIDaqError and KeyboardInterrupt alike.
+            #clean up on exception
             self.stop_and_clear()
             raise
 
-    # ---------------------------------------------------------------- shutdown
+    #shutdown
     def stop_and_clear(self) -> None:
-        """Safe shutdown: stop, release tasks, park outputs at 0 V / laser off.
-
-        Idempotent and never raises; failures are logged so that the cleanup
-        always proceeds through every step.
-        """
+        """safe shutdown outputs at 0v and laser off"""
         try:
             self._stop_tasks()
         finally:
@@ -512,19 +415,19 @@ class NIDaqController:
                     self._state = self._STATE_IDLE
                     logger.info("Outputs parked and DAQmx resources released.")
 
-    # --------------------------------------------------------------- internals
+    #internals
     def _stop_tasks(self) -> None:
-        """Stop the running timed tasks (DO first so the laser drops first)."""
+        """stop running timed tasks"""
         for task in (self._do_task, self._ao_task, self._ai_task):
             if task is None:
                 continue
             try:
                 task.stop()
-            except BaseException as error:  # noqa: BLE001 - cleanup must continue
+            except BaseException as error:
                 logger.error("Error stopping task: %s", error)
 
     def _close_tasks(self) -> None:
-        """Release the DAQmx tasks (including the optional feedback AI task)."""
+        """release daqmx tasks"""
         self.disable_feedback()
         for name in ("_do_task", "_ao_task"):
             task = getattr(self, name)
@@ -532,23 +435,23 @@ class NIDaqController:
                 continue
             try:
                 task.close()
-            except BaseException as error:  # noqa: BLE001 - cleanup must continue
+            except BaseException as error:
                 logger.error("Error closing task: %s", error)
             finally:
                 setattr(self, name, None)
 
     def _park_outputs(self) -> None:
-        """Drive AO to 0 V and DO low using short on-demand tasks."""
+        """drive ao to 0v and do low"""
         if self.simulate or not self._ao_channels or not self._do_channel:
             return
-        # Laser line first, mirrors second.
+        #laser line first mirrors second
         try:
             with nidaqmx.Task("ParkDO") as do_task:
                 do_task.do_channels.add_do_chan(
                     self._do_channel, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES
                 )
                 do_task.write(0, auto_start=True)
-        except BaseException as error:  # noqa: BLE001
+        except BaseException as error:
             logger.error("Could not switch laser gate off: %s", error)
         try:
             with nidaqmx.Task("ParkAO") as ao_task:
@@ -557,20 +460,12 @@ class NIDaqController:
                         channel, min_val=AO_VOLTAGE_MIN, max_val=AO_VOLTAGE_MAX
                     )
                 ao_task.write([PARK_VOLTAGE, PARK_VOLTAGE], auto_start=True)
-        except BaseException as error:  # noqa: BLE001
+        except BaseException as error:
             logger.error("Could not park analog outputs at 0 V: %s", error)
 
 
 def probe_daq_hardware() -> Dict[str, Any]:
-    """Inspect system to determine if physical NI-DAQmx hardware is present and operational.
-
-    Returns:
-        Dict[str, Any] with:
-            - 'available': True if physical device(s) are connected and driver is operational.
-            - 'driver_loaded': True if NI-DAQmx C runtime (nicaiu.dll) loaded successfully.
-            - 'devices': list of device names (e.g. ['Dev1']).
-            - 'description': human-readable diagnostic status string.
-    """
+    """probe if physical daq hardware is present and operational"""
     info: Dict[str, Any] = {
         "available": False,
         "driver_loaded": False,
@@ -603,12 +498,7 @@ def probe_daq_hardware() -> Dict[str, Any]:
 
 
 def probe_feedback_hardware(config: Optional[Dict[str, Any]] = None) -> tuple:
-    """Check (without side effects) whether AI feedback channels can be opened.
-
-    Returns:
-        ``(available, reason_key)`` where ``reason_key`` is ``"ok"``,
-        ``"no_driver"`` or ``"no_device"``. Never raises.
-    """
+    """probe if ai feedback channels can be opened"""
     if not NIDAQMX_AVAILABLE or TerminalConfiguration is None:
         return False, "no_driver"
     try:
@@ -628,6 +518,7 @@ def probe_feedback_hardware(config: Optional[Dict[str, Any]] = None) -> tuple:
                 )
             task.read(number_of_samples_per_channel=1, timeout=1.0)
         return True, "ok"
-    except BaseException as error:  # noqa: BLE001
+    except BaseException as error:
         logger.info("Feedback probe failed: %s", error)
         return False, "no_device"
+

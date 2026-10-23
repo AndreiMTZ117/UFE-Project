@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-database/__init__.py — API pública del módulo de persistencia SQLite3
-
-Exporta las clases y funciones principales para uso desde la HMI
-y la lógica del sistema láser.
-"""
+"""sqlite3 persistence api"""
 
 from .gestor_db import GestorDB
 from .recetas import GestorRecetas, MODOS_PROCESO_VALIDOS

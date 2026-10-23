@@ -1,33 +1,16 @@
 # -*- coding: utf-8 -*-
-"""
-database/recetas.py — CRUD Completo de Recetas de Proceso
-
-Operaciones disponibles:
-  CREATE  → crear_receta(datos)
-  READ    → obtener_receta(id), listar_recetas(), buscar_por_polimero(polimero)
-  UPDATE  → actualizar_receta(id, datos)
-  UTILITY → receta_a_config(id)  →  retorna dict de configuración listo para el sistema
-"""
+"""recipes crud operations"""
 
 from .gestor_db import GestorDB, gestor_global
 
-# Modos de proceso canónicos restringidos para el sistema láser
+#canonical process modes for laser
 MODOS_PROCESO_VALIDOS = {"Cutting", "Welding", "Marking"}
 
 
 class GestorRecetas:
-    """
-    Gestiona las operaciones CRUD sobre la tabla `recetas`.
+    """manage recipes crud operations"""
 
-    Uso:
-        gr = GestorRecetas()
-        id_nuevo = gr.crear_receta({"nombre": "Mi Receta", "polimero": "Acrílico", ...})
-        receta   = gr.obtener_receta(id_nuevo)
-        gr.actualizar_receta(id_nuevo, {"velocidad_trazado": 1.8})
-        gr.eliminar_receta(id_nuevo)
-    """
-
-    # Columnas numéricas con sus rangos de validación mínima (compatibles con galvanómetros de alta velocidad)
+    #numerical validation ranges
     _VALIDACIONES = {
         "velocidad_trazado":         (0.01, 50000.0),
         "velocidad_viaje":           (0.01, 50000.0),
@@ -52,24 +35,9 @@ class GestorRecetas:
     def __init__(self, gestor: GestorDB = None):
         self._db = gestor or gestor_global
 
-    # ----------------------------------------------------------
-    # CREATE
-    # ----------------------------------------------------------
+    #create
     def crear_receta(self, datos: dict) -> int:
-        """
-        Inserta una nueva receta en la base de datos.
-
-        Args:
-            datos: Diccionario con los campos de la receta.
-                   'nombre' y 'polimero' son obligatorios.
-
-        Returns:
-            int: ID autoincremental de la receta creada.
-
-        Raises:
-            ValueError: Si falta 'nombre' o 'polimero', o si ya existe ese nombre.
-            sqlite3.IntegrityError: Si el nombre ya existe (UNIQUE constraint).
-        """
+        """insert recipe into db"""
         if not datos.get("nombre", "").strip():
             raise ValueError("El campo 'nombre' es obligatorio y no puede estar vacío.")
         if not datos.get("polimero", "").strip():
@@ -96,7 +64,7 @@ class GestorRecetas:
                 :cooling_delay_s, :invert_x, :invert_y, :swap_xy
             )
         """
-        # Aplicar valores por defecto para campos opcionales no enviados
+        #apply defaults for optional fields
         registro = self._aplicar_defaults(datos)
 
         with self._db.conexion() as conn:
@@ -106,84 +74,44 @@ class GestorRecetas:
         print(f"[Recetas] [OK] Receta creada: '{datos['nombre']}' (ID={nuevo_id})")
         return nuevo_id
 
-    # ----------------------------------------------------------
-    # READ
-    # ----------------------------------------------------------
+    #read
     def obtener_receta(self, receta_id: int) -> dict:
-        """
-        Recupera una receta por su ID.
-
-        Returns:
-            dict con todos los campos de la receta, o {} si no existe.
-        """
+        """get recipe by id"""
         sql = "SELECT * FROM recetas WHERE id = ?"
         with self._db.conexion() as conn:
             row = conn.execute(sql, (receta_id,)).fetchone()
         return self._db.fila_a_dict(row)
 
     def obtener_receta_por_nombre(self, nombre: str) -> dict:
-        """
-        Recupera una receta buscando por nombre exacto (case-insensitive).
-
-        Returns:
-            dict con todos los campos, o {} si no existe.
-        """
+        """get recipe by name"""
         sql = "SELECT * FROM recetas WHERE LOWER(nombre) = LOWER(?)"
         with self._db.conexion() as conn:
             row = conn.execute(sql, (nombre.strip(),)).fetchone()
         return self._db.fila_a_dict(row)
 
     def listar_recetas(self) -> list:
-        """
-        Retorna todas las recetas ordenadas por nombre ascendente.
-
-        Returns:
-            list[dict]: Lista de todas las recetas como diccionarios.
-        """
+        """list all recipes"""
         sql = "SELECT * FROM recetas ORDER BY nombre ASC"
         with self._db.conexion() as conn:
             rows = conn.execute(sql).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
 
     def buscar_por_polimero(self, polimero: str) -> list:
-        """
-        Filtra recetas por tipo de polímero (búsqueda parcial, case-insensitive).
-
-        Args:
-            polimero: Texto a buscar dentro del campo 'polimero'.
-
-        Returns:
-            list[dict]: Recetas cuyo campo polimero contiene el texto.
-        """
+        """search recipes by polymer"""
         sql = "SELECT * FROM recetas WHERE LOWER(polimero) LIKE LOWER(?) ORDER BY nombre ASC"
         with self._db.conexion() as conn:
             rows = conn.execute(sql, (f"%{polimero}%",)).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
 
-    # ----------------------------------------------------------
-    # UPDATE
-    # ----------------------------------------------------------
+    #update
     def actualizar_receta(self, receta_id: int, datos: dict) -> bool:
-        """
-        Actualiza los campos especificados en 'datos' de la receta con el ID dado.
-        Solo se actualizan los campos presentes en el diccionario (actualización parcial).
-
-        Args:
-            receta_id: ID de la receta a modificar.
-            datos: Diccionario con solo los campos que cambian.
-
-        Returns:
-            True si se modificó al menos 1 fila. False si el ID no existe.
-
-        Raises:
-            ValueError: Si se intenta cambiar el nombre a uno ya existente.
-        """
+        """update recipe fields by id"""
         if not datos:
             return False
 
         self._validar_rangos(datos)
 
-        # Construir SET dinámico solo con los campos enviados (sin tocar el resto)
+        #build dynamic set clause
         campos_editables = {
             "nombre", "polimero", "notas", "rotar_90_grados", "modo_proceso",
             *self._VALIDACIONES,
@@ -212,22 +140,10 @@ class GestorRecetas:
             print(f"[Recetas] [AVISO] No se encontro receta con ID={receta_id}.")
         return filas > 0
 
-    # ----------------------------------------------------------
-    # DELETE
-    # ----------------------------------------------------------
+    #delete
     def eliminar_receta(self, receta_id: int) -> bool:
-        """
-        Elimina la receta con el ID especificado.
-        Las entradas en historial_produccion que referencian esta receta
-        quedan con receta_id = NULL (ON DELETE SET NULL).
-
-        Args:
-            receta_id: ID de la receta a eliminar.
-
-        Returns:
-            True si se eliminó. False si no existía.
-        """
-        # Nombre previo (proyección mínima) y borrado en una sola conexión/transacción
+        """delete recipe by id"""
+        #fetch name and delete in single transaction
         with self._db.conexion() as conn:
             row = conn.execute("SELECT nombre FROM recetas WHERE id = ?", (receta_id,)).fetchone()
             nombre_prev = row["nombre"] if row else f"ID={receta_id}"
@@ -239,24 +155,15 @@ class GestorRecetas:
             print(f"[Recetas] [AVISO] No se encontro receta con ID={receta_id}.")
         return filas > 0
 
-    # ----------------------------------------------------------
-    # UTILITY
-    # ----------------------------------------------------------
+    #utility
     def receta_a_config(self, receta_id: int) -> dict:
-        """
-        Convierte una receta almacenada en la base de datos al formato
-        de parámetros de ejecución del sistema.
-
-        Returns:
-            dict con claves compatibles con las variables de config_galvo.py,
-            o {} si la receta no existe.
-        """
+        """convert db recipe to config dict"""
         receta = self.obtener_receta(receta_id)
         if not receta:
             return {}
 
         return {
-            # Cinemáticos
+            #kinematics
             "velocidad_trazado":        receta.get("velocidad_trazado", 2.0),
             "velocidad_viaje":          receta.get("velocidad_viaje", 3.5),
             "num_pasadas":              receta.get("num_pasadas", 1),
@@ -268,28 +175,26 @@ class GestorRecetas:
             "invert_x":                 bool(receta.get("invert_x", 0)),
             "invert_y":                 bool(receta.get("invert_y", 0)),
             "swap_xy":                  bool(receta.get("swap_xy", 0)),
-            # Temporización óptica
+            #delays
             "laser_on_delay_ms":        receta.get("laser_on_delay_ms", 0),
             "laser_off_delay_ms":       receta.get("laser_off_delay_ms", 0),
             "mark_delay_ms":            receta.get("mark_delay_ms", 0),
             "jump_delay_ms":            receta.get("jump_delay_ms", 0),
-            # Geométricos
+            #geometry
             "tolerancia_rdp":           receta.get("tolerancia_rdp", 0.0),
             "tolerancia_union":         receta.get("tolerancia_union", 0.08),
             "longitud_min_trazo":       receta.get("longitud_min_trazo", 0.01),
             "escala_dibujo":            receta.get("escala_dibujo", 0.90),
             "rotar_90_grados":          bool(receta.get("rotar_90_grados", 0)),
-            # Metadatos
+            #metadata
             "_receta_id":               receta.get("id"),
             "_receta_nombre":           receta.get("nombre", "Manual"),
             "_polimero":                receta.get("polimero", "General"),
         }
 
-    # ----------------------------------------------------------
-    # PRIVADOS: Validación y Defaults
-    # ----------------------------------------------------------
+    #helpers
     def _validar_rangos(self, datos: dict):
-        """Valida que los valores numéricos y atributos estén dentro de rangos y opciones físicamente válidos."""
+        """validate value ranges and process modes"""
         for campo, (minv, maxv) in self._VALIDACIONES.items():
             if campo in datos:
                 val = datos[campo]
@@ -310,7 +215,7 @@ class GestorRecetas:
                 )
 
     def _aplicar_defaults(self, datos: dict) -> dict:
-        """Devuelve el dict con valores por defecto para los campos no enviados."""
+        """apply defaults for missing fields"""
         defaults = {
             "nombre":                    "",
             "polimero":                  "Genérico",

@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/gestion_datos.py - CARGA INICIAL Y GESTION DE DATOS
-
-Modulo encargado de la sincronizacion inicial con SQLite3,
-estado del hardware Thorlabs GVS112/M y carga de ficheros DXF.
-"""
+"""initial data loading and synchronization for sqlite3 hardware and dxf"""
 
 import os
 import threading
@@ -13,11 +8,11 @@ from interfaz.i18n import tr
 
 
 class GestionDatosMixin:
-    """Mixin que gestiona la carga inicial y el enlace de datos."""
+    """mixin for initial data loading and binding"""
 
     def _cargar_datos_iniciales(self):
-        """Carga inicial de recetas de SQLite3, estado del hardware y archivos DXF."""
-        # 1. Recetas SQLite3
+        """initial load of sqlite3 recipes hardware state and dxf files"""
+        #sqlite3 recipes
         self.lista_recetas = self.puente.get_recipes()
         nombres_recetas = [r["nombre"] for r in self.lista_recetas] if self.lista_recetas else ["Acrylic — Standard"]
         self.panel_config.set_recetas(nombres_recetas)
@@ -31,7 +26,7 @@ class GestionDatosMixin:
             es_default = receta_def.get("nombre") in RECETAS_PREDETERMINADAS
             self.panel_config.set_delete_visible(not es_default)
 
-        # 2. Estado del hardware Thorlabs GVS112/M
+        #hardware state
         conectado_fisico = self.puente.is_physically_connected()
         self.barra_superior.set_estado_com(conectado_fisico)
         if conectado_fisico:
@@ -39,11 +34,11 @@ class GestionDatosMixin:
         else:
             self.terminal.log(tr("log_hw_sim"))
 
-        # Mostrar estado en el selector de puertos COM
+        #display state in com port selector
         estado_hw = "Thorlabs GVS112/M" if conectado_fisico else "Virtual Simulation"
         self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
 
-        # 3. Archivos DXF
+        #dxf files
         dxfs = self.puente.list_dxf_files()
         nombres_dxf = [os.path.basename(f) for f in dxfs]
 
@@ -54,11 +49,7 @@ class GestionDatosMixin:
             self._cargar_archivo_dxf(archivo_sel, asincrono=False)
 
     def _cargar_archivo_dxf(self, ruta: str, asincrono: bool = True):
-        """Carga de DXF: ejecuta CADConverter, GCodeParser y PathOptimizer.
-        
-        Si asincrono=True se ejecuta en segundo plano para evitar congelar la GUI interactiva.
-        Si asincrono=False se ejecuta en el hilo actual (ideal para inicializacion de arranque).
-        """
+        """load dxf file synchronously or asynchronously in background thread"""
         if getattr(self, "_cargando_dxf", False):
             return
 

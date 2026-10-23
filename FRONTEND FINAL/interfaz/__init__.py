@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Módulo de interfaz gráfica CustomTkinter para UFE Laser."""
+"""customtkinter gui package for ufe laser"""
 from .conexion_interfaz import PuenteLaser
 from .interfaz_app import AppLaserCTk, iniciar
 

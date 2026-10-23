@@ -1,15 +1,4 @@
-"""G-code parser for FreeCAD Path Workbench output (ISO 6983).
-
-Converts a G-code file into a list of discrete 2D trajectory blocks suitable
-for a galvanometric laser scanner. Supported words:
-
-* ``G0`` / ``G00``: rapid move (laser off).
-* ``G1`` / ``G01``: linear working move (laser on).
-* ``G2`` / ``G3``: circular arcs (I/J center format), linearized into G1 blocks.
-* ``G20`` / ``G21``: inches / millimetres.
-* ``G90`` / ``G91``: absolute / relative positioning.
-* ``F``: feed rate in mm/min (converted to mm/s).
-"""
+"""parse gcode files into discrete trajectory blocks"""
 
 from __future__ import annotations
 
@@ -31,19 +20,12 @@ _VALID_LINE_PATTERN = re.compile(r"^(?:[A-Za-z]\s*[+-]?(?:\d+\.?\d*|\.\d+)\s*)+$
 
 
 class GCodeParseError(ValueError):
-    """Raised when a G-code line is malformed or uses unsupported features."""
+    """raised when gcode syntax is invalid"""
 
 
 @dataclass(frozen=True)
 class TrajectoryBlock:
-    """A single discrete motion segment.
-
-    Attributes:
-        motion_type: ``"G0"`` (rapid, no emission) or ``"G1"`` (working move).
-        start: Start coordinates ``(x1, y1)`` in millimetres.
-        end: End coordinates ``(x2, y2)`` in millimetres.
-        velocity: Scalar speed in mm/s associated with the block.
-    """
+    """single discrete motion segment"""
 
     motion_type: str
     start: Tuple[float, float]
@@ -52,12 +34,12 @@ class TrajectoryBlock:
 
     @property
     def length(self) -> float:
-        """Euclidean length of the segment in millimetres."""
+        """euclidean length of segment in mm"""
         return math.hypot(self.end[0] - self.start[0], self.end[1] - self.start[1])
 
 
 class GCodeParser:
-    """Parses a G-code file into a list of :class:`TrajectoryBlock`."""
+    """parse gcode into trajectory blocks"""
 
     def __init__(
         self,
@@ -66,18 +48,7 @@ class GCodeParser:
         rapid_speed_mm_s: float = 100.0,
         arc_tolerance_mm: float = 0.01,
     ) -> None:
-        """Initialize the parser.
-
-        Args:
-            file_path: Path to the G-code file.
-            default_feed_mm_s: Speed used for G1 moves before any F word.
-            rapid_speed_mm_s: Speed assigned to G0 blocks.
-            arc_tolerance_mm: Maximum chord error when linearizing arcs.
-
-        Raises:
-            TypeError: If ``file_path`` is not a string / path-like.
-            ValueError: If numeric parameters are not strictly positive.
-        """
+        """initialize gcode parser"""
         if not isinstance(file_path, (str, os.PathLike)):
             raise TypeError("file_path must be a string or path-like object.")
         if default_feed_mm_s <= 0 or rapid_speed_mm_s <= 0 or arc_tolerance_mm <= 0:
@@ -95,17 +66,9 @@ class GCodeParser:
         self._absolute: bool = True
         self._unit_scale: float = 1.0
 
-    # ------------------------------------------------------------------ API
+    #api
     def parse(self) -> List[TrajectoryBlock]:
-        """Read and parse the file.
-
-        Returns:
-            Ordered list of trajectory blocks.
-
-        Raises:
-            FileNotFoundError: If the file does not exist.
-            GCodeParseError: If the file is unreadable text or has invalid lines.
-        """
+        """read and parse gcode file into trajectory blocks"""
         if not os.path.isfile(self.file_path):
             logger.error("G-code file not found: %s", self.file_path)
             raise FileNotFoundError(f"G-code file not found: {self.file_path}")
@@ -129,9 +92,9 @@ class GCodeParser:
         logger.info("Parsed %d trajectory blocks from %s", len(blocks), self.file_path)
         return blocks
 
-    # ------------------------------------------------------------- internals
+    #internals
     def _reset_state(self) -> None:
-        """Reset the modal machine state before parsing."""
+        """reset modal machine state before parsing"""
         self._x = 0.0
         self._y = 0.0
         self._feed = self.default_feed_mm_s
@@ -141,7 +104,7 @@ class GCodeParser:
 
     @staticmethod
     def _clean_line(raw_line: str) -> str:
-        """Strip comments, block-delete markers, and whitespace."""
+        """strip comments block delete markers and whitespace"""
         line = _PAREN_COMMENT_PATTERN.sub("", raw_line)
         line = line.split(";", 1)[0].strip()
         if line.startswith("/"):
@@ -151,7 +114,7 @@ class GCodeParser:
         return line
 
     def _parse_line(self, raw_line: str) -> List[TrajectoryBlock]:
-        """Parse one line and return the blocks it generates (possibly none)."""
+        """parse single gcode line"""
         line = self._clean_line(raw_line)
         if not line:
             return []
@@ -191,7 +154,7 @@ class GCodeParser:
         return blocks
 
     def _handle_g_code(self, code: float) -> None:
-        """Update modal state from a G word."""
+        """update modal state from g word"""
         if code in (0, 1, 2, 3):
             self._motion = f"G{int(code)}"
         elif code == 20:
@@ -206,7 +169,7 @@ class GCodeParser:
             logger.debug("Ignoring unsupported G%s", code)
 
     def _resolve_target(self, axes: dict) -> Tuple[float, float]:
-        """Compute absolute target coordinates from axis words."""
+        """compute absolute target coordinates from axis words"""
         if self._absolute:
             return axes.get("X", self._x), axes.get("Y", self._y)
         return self._x + axes.get("X", 0.0), self._y + axes.get("Y", 0.0)
@@ -214,7 +177,7 @@ class GCodeParser:
     def _linear_block(
         self, motion: str, start: Tuple[float, float], end: Tuple[float, float]
     ) -> List[TrajectoryBlock]:
-        """Create a linear block; zero-length moves yield no block."""
+        """create linear block ignoring zero length moves"""
         if start == end:
             return []
         speed = self.rapid_speed_mm_s if motion == "G0" else self._feed
@@ -227,7 +190,7 @@ class GCodeParser:
         end: Tuple[float, float],
         axes: dict,
     ) -> List[TrajectoryBlock]:
-        """Linearize a G2/G3 arc (I/J center format) into G1 blocks."""
+        """linearize g2 and g3 arcs into g1 blocks"""
         if "I" not in axes and "J" not in axes:
             raise GCodeParseError("Arc without I/J center offsets is not supported.")
         center_x = start[0] + axes.get("I", 0.0)

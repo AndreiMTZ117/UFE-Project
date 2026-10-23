@@ -1,20 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-core/CADConverter.py - Headless DXF to G-code (ISO 6983) converter.
-
-Runs ``FreeCADcmd`` through ``subprocess.run`` and executes an in-memory script
-(passed with ``-c``, so no temporary files are created) that:
-
-1. Imports the DXF into a new FreeCAD document.
-2. Collects every edge, chains them into wires and discretizes them.
-3. Builds the cutting toolpath with the FreeCAD Path/CAM module
-   (``Path.Command`` / ``Path.Path``).
-4. Writes standard ISO 6983 G-code exactly to ``output_gcode_path``.
-
-Usage:
-    converter = CADConverter(timeout_s=30.0)
-    converter.dxf_to_gcode("part.dxf", "part.gcode")
-"""
+"""headless dxf to gcode converter using freecad"""
 
 from __future__ import annotations
 
@@ -27,8 +12,7 @@ from core.config_loader import load_hardware_config
 
 _ALLOWED_EXTENSIONS = (".gcode", ".nc")
 
-# Script executed inside FreeCAD. Parameters are received via environment
-# variables to avoid any quoting/escaping problems with Windows paths.
+#freecad execution script using environment variables
 _FREECAD_SCRIPT = r'''
 import os, sys, traceback
 
@@ -72,7 +56,7 @@ def _run():
         if len(pts) < 2:
             continue
         start = pts[0]
-        # Rapid move (laser off) only when we are not already at the start point
+        #rapid move when not at start point
         if cursor is None or cursor.distanceToPoint(start) > join_tol:
             commands.append(PathMod.Command("M5"))
             commands.append(PathMod.Command("G0", {"X": start.x, "Y": start.y, "F": rapid}))
@@ -117,7 +101,7 @@ os._exit(code)
 
 
 class CADConverter:
-    """Converts DXF drawings into ISO 6983 G-code using headless FreeCAD."""
+    """convert dxf drawings to iso 6983 gcode"""
 
     def __init__(
         self,
@@ -130,16 +114,7 @@ class CADConverter:
         config: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
     ) -> None:
-        """
-        freecad_cmd: Executable name or full path of ``FreeCADcmd``.
-        timeout_s: Maximum seconds to wait for FreeCAD before aborting.
-        feed_rate: Cutting feed rate written on G1 moves (units/min).
-        rapid_rate: Feed rate written on G0 moves (units/min).
-        deflection: Max curve discretization error in drawing units.
-        join_tolerance: Distance below which consecutive paths are considered connected (no rapid move emitted).
-        config: Optional configuration dictionary.
-        config_path: Optional explicit path to hardware_config.json.
-        """
+        """initialize cad converter options"""
         cfg = config if config is not None else load_hardware_config(config_path)
         self.config: Dict[str, Any] = cfg
         cad_cam_cfg = cfg.get("cad_cam", {})
@@ -157,16 +132,7 @@ class CADConverter:
         self.join_tolerance: float = join_tolerance
 
     def dxf_to_gcode(self, dxf_path: str, output_gcode_path: str) -> str:
-        """Convert a DXF file to G-code.
-            dxf_path: Path to an existing, non-empty DXF file.
-            output_gcode_path: Explicit destination path (``.gcode`` or ``.nc``).
-        Returns:
-            The absolute path of the generated G-code file.
-        Raises:
-            FileNotFoundError: DXF missing/empty or FreeCADcmd not found.
-            ValueError: Output path undefined or with an invalid extension.
-            RuntimeError: FreeCAD failed, produced no output or timed out.
-        """
+        """convert dxf file to gcode"""
         if not dxf_path or not os.path.isfile(dxf_path) or os.path.getsize(dxf_path) == 0:
             raise FileNotFoundError(f"DXF file not found or empty: {dxf_path!r}")
 
@@ -180,7 +146,7 @@ class CADConverter:
 
         executable = shutil.which(self.freecad_cmd)
         if executable is None:
-            # Fallback check for standard Windows FreeCAD install directories
+            #fallback paths for windows freecad
             candidates = [
                 r"C:\Program Files\FreeCAD 1.0\bin\FreeCADcmd.exe",
                 r"C:\Program Files\FreeCAD 0.21\bin\FreeCADcmd.exe",
@@ -197,7 +163,7 @@ class CADConverter:
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
 
-        # Remove stale output so a failed run can never be mistaken for success.
+        #remove stale output
         if os.path.isfile(out_abs):
             os.remove(out_abs)
 

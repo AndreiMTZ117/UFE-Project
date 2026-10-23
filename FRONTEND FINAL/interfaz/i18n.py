@@ -1,25 +1,20 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/i18n.py — Gestor Central de Internacionalización (English / Čeština)
-Arquitectura modular y reactiva para el sistema láser ÚFE.
-"""
+"""central internationalization manager for english and czech"""
 
 from typing import Callable, Dict, List, Any
 
-# Idiomas disponibles
+#available languages
 IDIOMA_EN = "EN"
 IDIOMA_CS = "CS"
 IDIOMAS_DISPONIBLES = [IDIOMA_EN, IDIOMA_CS]
 
-# Estado global
+#global state
 _idioma_activo: str = IDIOMA_EN
 _observadores: List[Callable[[], None]] = []
 
-# Diccionario integral de traducciones (Inglés base / Checo)
+#translation dictionary
 _TEXTOS: Dict[str, Dict[str, str]] = {
-    # -------------------------------------------------------------------------
-    # Barra Superior
-    # -------------------------------------------------------------------------
+    #top bar
     "ports_scanning": {
         "EN": "Scanning ports...",
         "CS": "Skenování portů...",
@@ -97,9 +92,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "[Feedback] Sledování zpětné vazby hardwaru vypnuto.",
     },
 
-    # -------------------------------------------------------------------------
-    # Panel Izquierdo: Configuración y Recetas
-    # -------------------------------------------------------------------------
+    #left panel configuration and recipes
     "recipe_parameters": {
         "EN": "RECIPE & PARAMETERS",
         "CS": "RECEPTURA A PARAMETRY",
@@ -133,7 +126,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "Smazat aktivní recepturu z databáze.",
     },
 
-    # Divisores y etiquetas de parámetros
+    #parameter dividers and labels
     "sec_kinematics": {
         "EN": "KINEMATICS",
         "CS": "KINEMATIKA",
@@ -264,7 +257,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "Provést rychlou kontrolu obvodu rámečku (laser přísně vypnut) k ověření vyrovnání obrobku.",
     },
 
-    # Tooltips de parámetros técnicos
+    #technical parameter tooltips
     "help_velocidad_trazado": {
         "EN": "Beam speed while laser is ON (marking).\nLower speed = higher energy per mm (deeper mark) and slower trajectory.",
         "CS": "Rychlost paprsku při zapnutém laseru (značení).\nNižší rychlost = vyšší hustota energie na mm (hlubší stopa) a pomalejší pohyb.",
@@ -338,9 +331,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "Prohodit XY: zamění souřadnice X a Y ((x, y) -> (y, x)).",
     },
 
-    # -------------------------------------------------------------------------
-    # Panel Central: Canvas 1:1
-    # -------------------------------------------------------------------------
+    #center panel canvas
     "canvas_title": {
         "EN": "VECTOR CANVAS (1:1 ISOMETRIC)",
         "CS": "VEKTOROVÉ PLÁTNO (1:1 IZOMETRICKÉ)",
@@ -414,9 +405,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "Kliknutím upravíte rozměry základny pracovní plochy (Šířka x Výška).",
     },
 
-    # -------------------------------------------------------------------------
-    # Panel Derecho: Telemetría y Controles
-    # -------------------------------------------------------------------------
+    #right panel telemetry and controls
     "gauge_trace": {
         "EN": "PATH TRACE",
         "CS": "PRŮBĚH TRASY",
@@ -498,9 +487,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "DOKONČENO",
     },
 
-    # -------------------------------------------------------------------------
-    # Terminal Flotante y Tabla de Historial
-    # -------------------------------------------------------------------------
+    #floating terminal and history table
     "term_history": {
         "EN": "📋 History",
         "CS": "📋 Historie",
@@ -562,9 +549,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "[Export] Chyba exportu: {err}",
     },
 
-    # -------------------------------------------------------------------------
-    # Comandos y Mensajes de Log de Terminal
-    # -------------------------------------------------------------------------
+    #terminal commands and log messages
     "log_console_init": {
         "EN": "[UFE Laser Console Initialized]\nSystem ready.",
         "CS": "[Konzole laseru ÚFE inicializována]\nSystém připraven.",
@@ -722,9 +707,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "[DB] Záznam cyklu uložen: Stav={status}, Doba={dur}s",
     },
 
-    # -------------------------------------------------------------------------
-    # Diálogos y Avisos de Inicio, Parada y Confirmación
-    # -------------------------------------------------------------------------
+    #dialogs and notices
     "dlg_hw_notice_title": {
         "EN": "Hardware Notice",
         "CS": "Upozornění na hardware",
@@ -798,7 +781,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "CS": "Během vykreslování došlo k chybě:\n{err}",
     },
 
-    # Diálogos de recetas
+    #recipe dialogs
     "dlg_save_recipe_title": {
         "EN": "Save Parameters",
         "CS": "Uložit parametry",
@@ -847,11 +830,7 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
 
 
 def tr(clave: str, **kwargs: Any) -> str:
-    """
-    Obtiene la cadena traducida correspondiente a la clave en el idioma activo.
-    Si la clave no existe o no tiene traducción en el idioma activo, se devuelve
-    el texto en inglés o la clave original.
-    """
+    """get translated string for key in active language"""
     entrada = _TEXTOS.get(clave)
     if not entrada:
         return clave
@@ -866,15 +845,12 @@ def tr(clave: str, **kwargs: Any) -> str:
 
 
 def obtener_idioma() -> str:
-    """Devuelve el código del idioma activo ('EN' o 'CS')."""
+    """get active language code en or cs"""
     return _idioma_activo
 
 
 def cambiar_idioma(nuevo_idioma: str):
-    """
-    Establece el idioma activo y notifica a todos los componentes observadores
-    para que actualicen sus textos en caliente.
-    """
+    """set active language and notify observers"""
     global _idioma_activo
     nuevo = nuevo_idioma.upper()
     if nuevo in IDIOMAS_DISPONIBLES and nuevo != _idioma_activo:
@@ -887,12 +863,12 @@ def cambiar_idioma(nuevo_idioma: str):
 
 
 def registrar_observador(callback: Callable[[], None]):
-    """Registra una función callback que se ejecutará al cambiar de idioma."""
+    """register callback observer for language changes"""
     if callback not in _observadores:
         _observadores.append(callback)
 
 
 def desregistrar_observador(callback: Callable[[], None]):
-    """Elimina una función observadora previamente registrada."""
+    """unregister language change observer"""
     if callback in _observadores:
         _observadores.remove(callback)

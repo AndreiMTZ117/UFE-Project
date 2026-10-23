@@ -1,29 +1,15 @@
 # -*- coding: utf-8 -*-
-"""
-database/gestor_db.py — Motor Central de Conexión y Gestión de la Base de Datos SQLite3
-
-Responsabilidades:
-  - Localizar y crear el archivo laser_system.db junto a este módulo.
-  - Crear las tablas si no existen (migraciones idempotentes).
-  - Proveer un context manager thread-safe para transacciones.
-  - Precargar recetas por defecto si la tabla está vacía.
-"""
+"""sqlite3 database connection and schema management"""
 
 import sqlite3
 import os
 from contextlib import contextmanager
 
-# =========================================================
-# RUTA DEL ARCHIVO DE BASE DE DATOS
-# Siempre se ubica dentro de la carpeta database/
-# =========================================================
+#database file path
 _DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(_DIR, "laser_system.db")
 
-# =========================================================
-# DDL: DEFINICIÓN DE TABLAS
-# =========================================================
-
+#table schemas
 _SQL_CREAR_TABLA_RECETAS = """
 CREATE TABLE IF NOT EXISTS recetas (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,39 +17,39 @@ CREATE TABLE IF NOT EXISTS recetas (
     polimero              TEXT    NOT NULL DEFAULT 'Genérico',
     notas                 TEXT    DEFAULT '',
 
-    -- Parámetros cinemáticos
+    --kinematic parameters
     velocidad_trazado     REAL    NOT NULL DEFAULT 2.0,
     velocidad_viaje       REAL    NOT NULL DEFAULT 3.5,
     num_pasadas           INTEGER NOT NULL DEFAULT 1,
 
-    -- Temporización óptica (ms)
+    --optical delays
     laser_on_delay_ms     INTEGER NOT NULL DEFAULT 0,
     laser_off_delay_ms    INTEGER NOT NULL DEFAULT 0,
     mark_delay_ms         INTEGER NOT NULL DEFAULT 0,
     jump_delay_ms         INTEGER NOT NULL DEFAULT 0,
 
-    -- Filtrado y optimización geométrica
+    --geometry
     tolerancia_rdp        REAL    NOT NULL DEFAULT 0.0,
     tolerancia_union      REAL    NOT NULL DEFAULT 0.08,
     longitud_min_trazo    REAL    NOT NULL DEFAULT 0.01,
 
-    -- Transformaciones espaciales predeterminadas
+    --spatial transform
     escala_dibujo         REAL    NOT NULL DEFAULT 0.90,
     rotar_90_grados       INTEGER NOT NULL DEFAULT 0,
 
-    -- Control cinemático avanzado y modo de proceso
+    --process mode
     duracion_min_segmento_ms INTEGER NOT NULL DEFAULT 0,
     duracion_min_viaje_ms    INTEGER NOT NULL DEFAULT 0,
     optimizar_tsp            INTEGER NOT NULL DEFAULT 1,
     modo_proceso             TEXT    NOT NULL DEFAULT 'Cutting' CHECK(modo_proceso IN ('Cutting', 'Welding', 'Marking')),
 
-    -- Parámetros de disipación térmica y mapeo de ejes
+    --thermal cooling
     cooling_delay_s       REAL    NOT NULL DEFAULT 0.0,
     invert_x              INTEGER NOT NULL DEFAULT 0,
     invert_y              INTEGER NOT NULL DEFAULT 0,
     swap_xy               INTEGER NOT NULL DEFAULT 0,
 
-    -- Metadatos de auditoría
+    --audit timestamps
     fecha_creacion        TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
     fecha_modificacion    TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
@@ -75,15 +61,15 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
     timestamp           TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
     operador            TEXT    NOT NULL DEFAULT 'Operador',
 
-    -- Referencia a la receta usada (puede ser NULL si se usó config manual)
+    --recipe reference
     receta_id           INTEGER REFERENCES recetas(id) ON DELETE SET NULL,
     receta_nombre       TEXT    DEFAULT 'Manual',
 
-    -- Archivo procesado
+    --processed file
     archivo_dxf         TEXT    NOT NULL,
     hardware_usado      TEXT    NOT NULL DEFAULT 'thorlabs_galvo',
 
-    -- Snapshot de parámetros en el momento de ejecución
+    --parameter snapshot
     modo_proceso        TEXT    NOT NULL DEFAULT 'Cutting' CHECK(modo_proceso IN ('Cutting', 'Welding', 'Marking')),
     velocidad_trazado   REAL,
     velocidad_viaje     REAL,
@@ -92,26 +78,23 @@ CREATE TABLE IF NOT EXISTS historial_produccion (
     tolerancia_rdp      REAL,
     tolerancia_union    REAL,
 
-    -- Métricas del ciclo
+    --cycle metrics
     trazos_totales      INTEGER DEFAULT 0,
     waypoints_totales   INTEGER DEFAULT 0,
     duracion_segundos   REAL    DEFAULT 0.0,
 
-    -- Resultado final
+    --final result
     estado              TEXT    NOT NULL DEFAULT 'COMPLETADO',
     mensaje_error       TEXT    DEFAULT '',
 
-    -- Error de seguimiento del galvo (Hardware Feedback Tracking, NULL si no se uso)
+    --tracking feedback
     tracking_rms_um     REAL,
     tracking_max_um     REAL,
     tracking_lag_ms     REAL
 );
 """
 
-# =========================================================
-# RECETAS POR DEFECTO PARA POLÍMEROS COMUNES
-# Se insertan solo si la tabla recetas está vacía
-# =========================================================
+#default recipes for common polymers
 _RECETAS_DEFAULT = [
     {
         "nombre":             "Acrylic — Standard",
@@ -188,32 +171,22 @@ _RECETAS_DEFAULT = [
 ]
 
 
-# =========================================================
-# CLASE PRINCIPAL: GestorDB
-# =========================================================
-
+#database manager class
 class GestorDB:
-    """
-    Motor central de la base de datos SQLite3.
-
-    Uso recomendado como singleton:
-        db = GestorDB()
-        with db.conexion() as conn:
-            conn.execute("SELECT ...")
-    """
+    """sqlite3 database manager"""
 
     def __init__(self, ruta_db: str = DB_PATH):
         self.ruta_db = ruta_db
         self._inicializar()
 
     def _inicializar(self):
-        """Crea las tablas e inserta recetas por defecto si es la primera ejecución."""
+        """create tables and insert default recipes if empty"""
         print(f"[DB] Inicializando base de datos en: {self.ruta_db}")
         with self.conexion() as conn:
             conn.execute(_SQL_CREAR_TABLA_RECETAS)
             conn.execute(_SQL_CREAR_TABLA_HISTORIAL)
 
-            # Migración suave retrocompatible: verificar si faltan columnas nuevas en recetas
+            #schema migrations
             info_cols = {r[1] for r in conn.execute("PRAGMA table_info(recetas)").fetchall()}
             columnas_extra = [
                 ("duracion_min_segmento_ms", "INTEGER NOT NULL DEFAULT 0"),
@@ -236,12 +209,12 @@ class GestorDB:
                 conn.execute("ALTER TABLE historial_produccion ADD COLUMN modo_proceso TEXT DEFAULT 'Cutting'")
                 migrated = True
 
-            # Migracion aditiva: columnas de error de seguimiento (no activa la normalizacion de datos)
+            #tracking feedback columns migration
             for col_name in ("tracking_rms_um", "tracking_max_um", "tracking_lag_ms"):
                 if col_name not in info_cols_hist:
                     conn.execute(f"ALTER TABLE historial_produccion ADD COLUMN {col_name} REAL")
 
-            # Normalizar modos de proceso únicamente si se acaba de aplicar una migración estructural
+            #normalize process modes
             if migrated:
                 conn.execute(
                     "UPDATE recetas SET modo_proceso = 'Cutting' "
@@ -254,7 +227,7 @@ class GestorDB:
                     "WHERE modo_proceso IS NULL OR modo_proceso NOT IN ('Cutting', 'Welding', 'Marking')"
                 )
 
-            # Insertar recetas por defecto solo si la tabla está vacía
+            #insert default recipes if table is empty
             total = conn.execute("SELECT COUNT(*) FROM recetas").fetchone()[0]
             if total == 0:
                 self._insertar_recetas_default(conn)
@@ -263,7 +236,7 @@ class GestorDB:
                 print(f"[DB] {total} receta(s) ya existente(s). No se sobreescriben.")
 
     def _insertar_recetas_default(self, conn):
-        """Inserta el conjunto inicial de recetas de fábrica."""
+        """insert default recipe set"""
         sql = """
             INSERT OR IGNORE INTO recetas (
                 nombre, polimero, notas, modo_proceso,
@@ -284,19 +257,12 @@ class GestorDB:
 
     @contextmanager
     def conexion(self):
-        """
-        Context manager que abre y cierra automáticamente la conexión.
-        En caso de excepción, hace ROLLBACK automático.
-
-        Uso:
-            with db.conexion() as conn:
-                conn.execute("...")
-        """
+        """thread-safe context manager for sqlite connection"""
         conn = sqlite3.connect(self.ruta_db, timeout=10.0, check_same_thread=False)
-        conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
-        conn.execute("PRAGMA journal_mode=WAL;")    # Write-Ahead Logging: mayor concurrencia
-        conn.execute("PRAGMA synchronous=NORMAL;")  # Integridad de datos y rendimiento optimizado en WAL
-        conn.execute("PRAGMA foreign_keys=ON;")     # Integridad referencial activa
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
         try:
             yield conn
             conn.commit()
@@ -307,13 +273,9 @@ class GestorDB:
             conn.close()
 
     def fila_a_dict(self, row) -> dict:
-        """Convierte un sqlite3.Row a dict plano para facilitar su uso."""
+        """convert sqlite3 row to dict"""
         return dict(row) if row else {}
 
 
-# =========================================================
-# INSTANCIA GLOBAL (singleton del módulo)
-# =========================================================
-# Puede importarse directamente en otros módulos:
-#   from database.gestor_db import gestor_global
+#global singleton instance
 gestor_global = GestorDB()

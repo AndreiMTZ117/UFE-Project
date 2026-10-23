@@ -1,60 +1,40 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/interfaz_app.py — Orquestador Principal de la HMI UFE Laser (CustomTkinter)
-
-Estructura modular segmentada en archivos dedicados:
-  1. CONSTANTES DE DISEÑO (CYBER-BRUTALISM)                 -> interfaz/constantes.py
-  2. BARRA SUPERIOR                                         -> interfaz/barra_superior.py
-  3. PANEL IZQUIERDO: CONFIGURACIÓN Y RECETAS (SQLite3)     -> interfaz/panel_configuracion.py
-  4. PANEL CENTRAL: CANVAS GENERAL CON REGLAS Y PROP. 1:1   -> interfaz/panel_general.py
-  5. PANEL DERECHO: GAUGES + TRACE POINT + CONTROLS         -> interfaz/panel_derecho.py
-  6. TERMINAL FLOTANTE (CYBER-BRUTALIST)                    -> interfaz/terminal_flotante.py
-  7. CARGA INICIAL Y GESTIÓN DE DATOS                       -> interfaz/gestion_datos.py
-  8. EVENTOS DE INTERACCIÓN                                 -> interfaz/eventos_interaccion.py
-  9. RENDERIZADO DUAL EN CANVAS (CYBER-BRUTALISM)           -> interfaz/renderizado_dual.py
-  10. LÓGICA DE EJECUCIÓN: START, PAUSE/RESUME, STOP        -> interfaz/logica_ejecucion.py
-"""
+"""main orchestrator for ufe laser workstation gui"""
 
 import os
 import sys
 import customtkinter as ctk
 from typing import Dict, List, Tuple, Optional
 
-# Rutas del proyecto
+#project paths
 _DIR_ACTUAL = os.path.dirname(os.path.abspath(__file__))
 _DIR_RAIZ = os.path.abspath(os.path.join(_DIR_ACTUAL, ".."))
 if _DIR_RAIZ not in sys.path:
     sys.path.insert(0, _DIR_RAIZ)
 
-# =============================================================================
-# 1. CONSTANTES DE DISEÑO (CYBER-BRUTALISM)
-# =============================================================================
+#design constants
 from interfaz.constantes import (
     COLOR_BG,
     cargar_fuentes_windows,
     configurar_dpi_awareness
 )
 
-# Inicializar configuración del sistema y fuentes TrueType
+#initialize system config and truetype fonts
 configurar_dpi_awareness()
 cargar_fuentes_windows()
 
-# Puente de conexión con el backend
+#backend bridge
 from interfaz.conexion_interfaz import PuenteLaser
 from interfaz.i18n import tr
 
-# =============================================================================
-# 2 A 6. COMPONENTES VISUALES
-# =============================================================================
+#visual components
 from interfaz.barra_superior import BarraSuperior
 from interfaz.panel_configuracion import PanelConfiguracion
 from interfaz.panel_general import PanelGeneral
 from interfaz.panel_derecho import PanelDerecho
 from interfaz.terminal_flotante import TerminalFlotante
 
-# =============================================================================
-# 7 A 10. MÓDULOS DE LÓGICA, DATOS Y EVENTOS
-# =============================================================================
+#logic and event mixins
 from interfaz.gestion_datos import GestionDatosMixin
 from interfaz.eventos_interaccion import EventosInteraccionMixin
 from interfaz.renderizado_dual import RenderizadoDualMixin
@@ -68,24 +48,24 @@ class AppLaserCTk(
     RenderizadoDualMixin,
     LogicaEjecucionMixin
 ):
-    """Aplicación principal de la estación de trabajo láser UFE."""
+    """main application window for ufe laser workstation"""
 
     def __init__(self):
         super().__init__()
 
-        # Configuración de ventana Cyber-Brutalism
+        #window configuration
         self.title("Thorlabs GVS112/M — Industrial Galvanometer Laser Workstation")
         self.geometry("1280x760")
         self.minsize(1150, 700)
         ctk.set_appearance_mode("light")
         self.configure(fg_color=COLOR_BG)
 
-        # Puente con el backend
+        #backend bridge
         self.puente = PuenteLaser()
         self.receta_activa: Dict = {}
         self.lista_recetas: List[Dict] = []
 
-        # Estado de telemetría y ejecución
+        #telemetry and execution state
         self.tiempo_inicio_ejecucion = 0.0
         self.tiempo_pausa_acumulado = 0.0
         self.tiempo_ultima_pausa = 0.0
@@ -93,13 +73,13 @@ class AppLaserCTk(
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
 
-        # Construir layout modular
+        #build layout
         self._construir_layout()
 
-        # 7. Carga inicial de datos (desde GestionDatosMixin)
+        #initial data loading
         self._cargar_datos_iniciales()
 
-        # Configurar valores iniciales de límites, centro y dimensiones en los paneles
+        #set initial limits center and dimensions
         self._aplicar_limites_hardware()
         self._iniciar_feedback_ui()
         self.panel_derecho.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
@@ -107,32 +87,32 @@ class AppLaserCTk(
         self.panel_derecho.actualizar_coordenadas(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_general.actualizar_dimensiones(self.puente.ancho_base_cm, self.puente.alto_base_cm)
 
-        # 10. Bucle de actualización del cronómetro LCD (desde LogicaEjecucionMixin)
+        #timer loop
         self._actualizar_timer_loop()
 
-        # 11. Manejo seguro de cierre de ventana y liberación de hardware
+        #safe window close handler
         self.protocol("WM_DELETE_WINDOW", self._on_cerrar_aplicacion)
 
     def _on_cerrar_aplicacion(self):
-        """Libera de forma segura los recursos del hardware y cierra la aplicacion de inmediato."""
+        """safely release hardware resources and close application"""
         if getattr(self, '_cerrando', False):
             return
         self._cerrando = True
 
-        # Deshabilitar el protocolo para evitar reentradas
+        #disable close protocol to avoid reentrancy
         try:
             self.protocol("WM_DELETE_WINDOW", lambda: None)
         except Exception:
             pass
 
-        # Cancelar timer programado del cronometro
+        #cancel scheduled timer
         if hasattr(self, '_timer_after_id') and self._timer_after_id:
             try:
                 self.after_cancel(self._timer_after_id)
             except Exception:
                 pass
 
-        # Detener la ejecucion y apagar laser de inmediato
+        #stop execution and turn off laser
         try:
             if hasattr(self, 'puente'):
                 if self.puente.is_running:
@@ -146,17 +126,15 @@ class AppLaserCTk(
         except Exception:
             pass
 
-        # Destruir ventana de forma segura
+        #destroy window safely
         try:
             self.destroy()
         except Exception:
             pass
 
-    # =========================================================================
-    # CONSTRUCCIÓN DE LAYOUT Y COMPONENTES
-    # =========================================================================
+    #layout construction
     def _construir_layout(self):
-        # 2. BARRA SUPERIOR
+        #top bar
         self.barra_superior = BarraSuperior(
             self,
             on_com_seleccionado=self._on_com_seleccionado,
@@ -168,7 +146,7 @@ class AppLaserCTk(
         )
         self.barra_superior.pack(fill="x", padx=16, pady=(10, 4))
 
-        # Contenedor central (Grid de 3 columnas)
+        #central frame
         self.frame_cuerpo = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_cuerpo.pack(fill="both", expand=True, padx=16, pady=(4, 12))
 
@@ -177,7 +155,7 @@ class AppLaserCTk(
         self.frame_cuerpo.grid_columnconfigure(2, weight=0, minsize=370)
         self.frame_cuerpo.grid_rowconfigure(0, weight=1)
 
-        # 3. PANEL IZQUIERDO: CONFIGURACIÓN Y RECETAS (SQLite3)
+        #left panel configuration and recipes
         self.panel_config = PanelConfiguracion(
             self.frame_cuerpo,
             on_receta_seleccionada=self._on_receta_seleccionada,
@@ -192,14 +170,14 @@ class AppLaserCTk(
         )
         self.panel_config.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
-        # 4. PANEL CENTRAL: CANVAS GENERAL CON REGLAS Y PROPORCIÓN 1:1 (BASE EDITABLE)
+        #center panel canvas
         self.panel_general = PanelGeneral(
             self.frame_cuerpo,
             on_dimensiones_cambiadas=self._on_dimensiones_cambiadas
         )
         self.panel_general.grid(row=0, column=1, sticky="nsew", padx=6)
 
-        # 5. PANEL DERECHO: GAUGES + TRACE POINT + EXECUTION CONTROLS (CENTRO EDITABLE)
+        #right panel gauges trace and controls
         self.panel_derecho = PanelDerecho(
             self.frame_cuerpo,
             on_click_start=self._on_click_start,
@@ -210,7 +188,7 @@ class AppLaserCTk(
         )
         self.panel_derecho.grid(row=0, column=2, sticky="nsew", padx=(8, 0))
 
-        # 6. TERMINAL FLOTANTE (CYBER-BRUTALIST)
+        #floating terminal
         self.terminal = TerminalFlotante(
             self,
             on_cerrar=lambda: self.barra_superior.set_terminal_activo(False),
@@ -218,7 +196,7 @@ class AppLaserCTk(
         )
 
     def _on_viewport_zoom_cambiado(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
-        """Sincroniza el marco visual de la cámara de zoom en el Canvas 1:1."""
+        """synchronize zoom camera frame on main canvas"""
         if hasattr(self, "panel_general"):
             if bbox_cm is not None:
                 self.panel_general.actualizar_frustum_zoom(bbox_cm)
@@ -226,7 +204,7 @@ class AppLaserCTk(
                 self.panel_general.ocultar_frustum_zoom()
 
     def _on_idioma_cambiado(self, nuevo_idioma: str):
-        """Notificación cuando el usuario cambia el idioma (EN / CS)."""
+        """handle language change notification"""
         if hasattr(self, 'terminal'):
             self.terminal.log(tr("log_lang_changed"))
 

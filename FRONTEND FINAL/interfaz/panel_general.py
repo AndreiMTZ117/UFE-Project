@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/panel_general.py — Panel Central: Canvas General con Reglas y Proporción 1:1
-"""
+"""central canvas panel with graduated rulers and 1 to 1 isometric scale"""
+
 
 import math
 import tkinter as tk
@@ -19,7 +18,7 @@ from .i18n import tr, registrar_observador, obtener_idioma
 
 
 class PanelGeneral(ctk.CTkFrame):
-    """Panel central con canvas isométrico 1:1, reglas graduadas y base editable."""
+    """central canvas panel with 1 to 1 isometric scale graduated rulers and editable base"""
 
     def __init__(
         self,
@@ -46,15 +45,15 @@ class PanelGeneral(ctk.CTkFrame):
         self.frame_box_cm: Optional[Tuple[float, float, float, float]] = None
         self._frustum_zoom_cm: Optional[Tuple[float, float, float, float]] = None
 
-        # Hardware Feedback Tracking: trayectoria medida (cm), capa magenta opcional
+        #hardware feedback tracking measured trajectory in cm
         self._fb_pts_cm: List[Tuple[float, float]] = []
         self._fb_visible = False
 
-        # Estado responsivo de la leyenda (Modo extendido vs Botón compacto desplegable)
+        #responsive legend state
         self._modo_compacto_leyenda = False
         self._popup_abierto = False
 
-        # Parametros de escala para renderizado incremental
+        #scale parameters for incremental rendering
         self._escala_pixel = None
         self._base_x0 = 0.0
         self._base_y0 = 0.0
@@ -65,7 +64,7 @@ class PanelGeneral(ctk.CTkFrame):
 
 
     def _crear_widgets(self):
-        # 1. Título "General" y Leyenda de Trazos (top)
+        #general title and toolpath legend
         self.top_header = ctk.CTkFrame(self, fg_color="transparent")
         self.top_header.pack(side="top", fill="x", pady=(2, 4))
         self.top_header.bind("<Configure>", self._on_header_configure)
@@ -79,7 +78,7 @@ class PanelGeneral(ctk.CTkFrame):
         )
         self.lbl_title.pack(side="left")
 
-        # Leyenda de trazos horizontal arriba del recuadro (Modo extendido / Pantalla completa)
+        #horizontal toolpath legend
         self.legend_frame = ctk.CTkFrame(
             self.top_header,
             fg_color=COLOR_CARD,
@@ -92,7 +91,7 @@ class PanelGeneral(ctk.CTkFrame):
 
         f_leg = self.f_leg
 
-        # 1. Guía CAD (Gris)
+        #cad guide
         box_guide = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
         box_guide.pack(side="left", padx=(8, 4), pady=2)
         c_guide = tk.Canvas(box_guide, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
@@ -101,15 +100,15 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_legend_guide = ctk.CTkLabel(box_guide, text=tr("legend_guide"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_guide.pack(side="left", padx=(3, 2))
 
-        # Separador vertical
+        #vertical separator
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
 
-        # 2. Salto en vacío (Naranja punteado)
+        #rapid traverse jump
         box_jump = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
         box_jump.pack(side="left", padx=(4, 4), pady=2)
         c_jump = tk.Canvas(box_jump, width=28, height=16, bg=COLOR_CARD, highlightthickness=0)
         c_jump.pack(side="left")
-        # Bolitas naranjas notorias de 6px de diámetro
+        #marker dots
         r_bolita = 3.0
         cy = 8.0
         for bx in (5.0, 13.0, 21.0):
@@ -117,10 +116,10 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_legend_jump = ctk.CTkLabel(box_jump, text=tr("legend_jump"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_jump.pack(side="left", padx=(4, 6))
 
-        # Separador vertical
+        #vertical separator
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
 
-        # 3. Trazo ejecutado activo (Azul eléctrico)
+        #active executed toolpath
         box_trail = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
         box_trail.pack(side="left", padx=(4, 4), pady=2)
         c_trail = tk.Canvas(box_trail, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
@@ -129,10 +128,10 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_legend_trail = ctk.CTkLabel(box_trail, text=tr("legend_trace"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_trail.pack(side="left", padx=(3, 2))
 
-        # Separador vertical
+        #vertical separator
         ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1").pack(side="left", padx=3, pady=4)
 
-        # 4. Puntero del haz (Punto verde)
+        #beam pointer
         box_pointer = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
         box_pointer.pack(side="left", padx=(4, 8), pady=2)
         c_pointer = tk.Canvas(box_pointer, width=16, height=14, bg=COLOR_CARD, highlightthickness=0)
@@ -141,7 +140,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=tr("legend_pointer"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_pointer.pack(side="left", padx=(3, 2))
 
-        # 5. Trayectoria medida por feedback (Magenta) - solo visible con Hardware Feedback activo
+        #feedback measured trajectory
         self.sep_legend_fb = ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1")
         self.box_legend_fb = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
         c_fb = tk.Canvas(self.box_legend_fb, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
@@ -159,7 +158,7 @@ class PanelGeneral(ctk.CTkFrame):
             "• Green dot: Real-time beam / cursor position"
         )
 
-        # Botón compacto desplegable (Modo reducido / cuando no hay espacio suficiente)
+        #compact dropdown button
         self.btn_legend_toggle = ctk.CTkButton(
             self.top_header,
             text=f"{tr('legend_btn_guide')}",
@@ -176,20 +175,20 @@ class PanelGeneral(ctk.CTkFrame):
         )
         agregar_tooltip(self.btn_legend_toggle, tr("legend_btn_tooltip"))
 
-        # Construir tarjeta popover flotante con la guía de líneas
+        #floating popover card
         self._crear_popup_leyenda()
 
-        # Comprobación de tamaño inicial tras renderizado
+        #initial size check
         self.after(50, lambda: self._ajustar_modo_leyenda(self.top_header.winfo_width()))
 
-        # 2. Footer Area size (anclado abajo primero, EDITABLE)
+        #footer area size
         self.footer_area = ctk.CTkFrame(self, fg_color="transparent", height=34)
         self.footer_area.pack(side="bottom", fill="x", pady=(6, 0))
 
         self.lbl_area = ctk.CTkLabel(self.footer_area, text=f"{tr('base_dim_title')}:", font=self.f_bold, text_color=COLOR_TEXT)
         self.lbl_area.pack(side="left", padx=(2, 6))
 
-        # Píldora editable X
+        #editable x dimension
         self.pill_x = ctk.CTkFrame(
             self.footer_area,
             fg_color=COLOR_CARD,
@@ -221,7 +220,7 @@ class PanelGeneral(ctk.CTkFrame):
                                      "Defines the canvas scale and drawing placement area. "
                                      "Press Enter to apply.")
 
-        # Píldora editable Y
+        #editable y dimension
         self.pill_y = ctk.CTkFrame(
             self.footer_area,
             fg_color=COLOR_CARD,
@@ -253,7 +252,7 @@ class PanelGeneral(ctk.CTkFrame):
                                      "Defines the canvas scale and drawing placement area. "
                                      "Press Enter to apply.")
 
-        # 3. Tarjeta blanca con borde negro grueso (al centro expandible, simple cuadrado)
+        #canvas card container
         self.card_general = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -273,7 +272,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.canvas.bind("<ButtonPress-1>", lambda e: self._cerrar_popup_leyenda(), add="+")
 
     def set_bloqueo_ejecucion(self, bloqueado: bool):
-        """Bloquea o habilita la edición de dimensiones de la base durante la ejecución."""
+        """lock or unlock base dimensions editing during execution"""
         self.bloqueado_ejecucion = bloqueado
         estado = "disabled" if bloqueado else "normal"
         self.entry_dim_x.configure(state=estado)
@@ -296,7 +295,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def actualizar_dimensiones(self, ancho_cm: float, alto_cm: float):
-        """Actualiza los inputs numéricos de dimensiones de la base / pieza."""
+        """update base dimension numeric entry fields"""
         try:
             self.ocultar_frame_dxf()
             self.ancho_base_cm = float(ancho_cm)
@@ -316,14 +315,14 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def set_limites_hardware(self, x_min: float, x_max: float, y_min: float, y_max: float):
-        """Define los límites absolutos del hardware/máquina para mapeo fiel en canvas."""
+        """set absolute hardware limits for canvas mapping"""
         self._maq_x_min = x_min
         self._maq_x_max = x_max
         self._maq_y_min = y_min
         self._maq_y_max = y_max
 
     def set_centro(self, x: float, y: float):
-        """Define el centro físico de reposo (Home) para los saltos en vacío."""
+        """set physical home center coordinates"""
         try:
             self.centro_home = (float(x), float(y))
             self.pos_puntero = (float(x), float(y))
@@ -338,14 +337,10 @@ class PanelGeneral(ctk.CTkFrame):
         trazos_completados: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None,
         trazos_pasadas_previas: Optional[List[Tuple[Tuple[float, float], Tuple[float, float]]]] = None
     ):
-        """Renderizado isometrico 1:1 basado en las dimensiones de la base fisica.
-        
-        Cuando se llama con nuevos trazos (carga DXF / cambio receta), redibuja todo.
-        Durante la ejecucion, solo se usa agregar_segmento_completado para incrementar.
-        """
+        """full 1 to 1 isometric redraw on base canvas"""
         if trazos is not None:
             self.trazos_actuales = trazos
-            # Limpiar completados si cambio la figura base
+            #clear completed segments on base geometry change
             self.trazos_completados = []
             self.trazos_pasadas_previas = []
         if trazos_completados is not None:
@@ -368,10 +363,10 @@ class PanelGeneral(ctk.CTkFrame):
         if w <= 50 or h <= 50:
             return
 
-        pad_left = 38     # Espacio para ticks y números del eje Y
-        pad_right = 50    # Espacio para "X [cm]"
-        pad_top = 22      # Espacio para "Y [cm]"
-        pad_bottom = 28   # Espacio para ticks y números del eje X
+        pad_left = 38     #space for y axis ticks and labels
+        pad_right = 50    #space for x axis label
+        pad_top = 22      #space for y axis label
+        pad_bottom = 28   #space for x axis ticks and labels
 
         avail_w = max(10, w - pad_left - pad_right)
         avail_h = max(10, h - pad_top - pad_bottom)
@@ -390,17 +385,17 @@ class PanelGeneral(ctk.CTkFrame):
         except Exception:
             rango_h = 25.0
 
-        # Escala isométrica 1:1 estricta
+        #strict 1 to 1 isometric scale
         self._escala_pixel = min(avail_w / rango_w, avail_h / rango_h) * 0.96
         base_w_px = rango_w * self._escala_pixel
         base_h_px = rango_h * self._escala_pixel
 
-        # Centrar la base dentro del área de dibujo
+        #center base in drawing area
         self._base_x0 = pad_left + (avail_w - base_w_px) / 2.0
         self._base_y0 = pad_top + (avail_h - base_h_px) / 2.0
         self._base_h_px = base_h_px
 
-        # Dibujar reglas graduadas alineadas exactamente con el contorno de la base
+        #draw graduated rulers aligned with base outline
         try:
             self._dibujar_reglas(c, self._base_x0, self._base_y0, base_w_px, base_h_px)
         except Exception:
@@ -417,13 +412,13 @@ class PanelGeneral(ctk.CTkFrame):
                 self._dibujar_frustum_zoom(c)
             return
 
-        # Helper: mapear coordenada fisica metrica (cm) -> pixel del canvas
+        #map physical coordinates in cm to canvas pixels
         def to_px(x_cm, y_cm):
             px = self._base_x0 + float(x_cm) * self._escala_pixel
             py = (self._base_y0 + self._base_h_px) - (float(y_cm) * self._escala_pixel)
             return px, py
 
-        # 1. Dibujar saltos en vacío (G0 rapid jumps) con línea punteada naranja ANTES de la geometría
+        #draw rapid jumps before geometry
         hx, hy = getattr(self, "centro_home", (rango_w / 2.0, rango_h / 2.0))
         pos_salto = (hx, hy)
         viajes = []
@@ -447,7 +442,7 @@ class PanelGeneral(ctk.CTkFrame):
             except Exception:
                 pass
 
-        # 2. Dibujar geometria base completa (guía vectorial CAD) en gris
+        #draw complete base geometry in gray
         total_puntos = sum(len(r) for r in self.trazos_actuales if r)
         stride_render = max(1, math.ceil(total_puntos / 25000)) if total_puntos > 25000 else 1
 
@@ -488,7 +483,7 @@ class PanelGeneral(ctk.CTkFrame):
                 except Exception:
                     pass
 
-        # 3. Redibujar segmentos de pasadas previas (capa translúcida al 50%)
+        #redraw previous passes in faded blue
         for segmento in getattr(self, "trazos_pasadas_previas", []):
             if not segmento or len(segmento) < 2:
                 continue
@@ -503,7 +498,7 @@ class PanelGeneral(ctk.CTkFrame):
             except Exception:
                 pass
 
-        # 4. Redibujar segmentos completados de la pasada activa en azul eléctrico
+        #redraw active pass completed segments in electric blue
         for segmento in self.trazos_completados:
             if not segmento or len(segmento) < 2:
                 continue
@@ -518,24 +513,24 @@ class PanelGeneral(ctk.CTkFrame):
             except Exception:
                 pass
 
-        # 4. Redibujar marco perimetral naranja si está activo
+        #redraw orange perimeter framing box
         if getattr(self, "frame_box_cm", None) is not None:
             self._dibujar_frame_dxf(c)
 
-        # 5. Dibujar puntero del haz láser (puntito verde en coordenadas del cursor)
+        #draw laser beam pointer
         if getattr(self, "pos_puntero", None) is not None:
             self.actualizar_puntero(self.pos_puntero[0], self.pos_puntero[1])
 
-        # 6. Redibujar encuadre de cámara zoom (rectángulo verde punteado) si está en modo libre
+        #redraw zoom camera frustum box
         if getattr(self, "_frustum_zoom_cm", None) is not None:
             self._dibujar_frustum_zoom(c)
 
-        # 7. Redibujar trayectoria medida por feedback de hardware (magenta)
+        #redraw feedback measured trajectory
         if self._fb_pts_cm:
             self._redibujar_feedback_completo(c)
 
     def actualizar_puntero(self, x_cm: float, y_cm: float):
-        """Actualiza la posición visual del puntero/cursor láser (puntito verde) en el canvas 1:1."""
+        """update laser beam pointer visual position on 1 to 1 canvas"""
         try:
             self.pos_puntero = (float(x_cm), float(y_cm))
             c = self.canvas
@@ -544,7 +539,7 @@ class PanelGeneral(ctk.CTkFrame):
                 return
             px = self._base_x0 + float(x_cm) * self._escala_pixel
             py = (self._base_y0 + self._base_h_px) - (float(y_cm) * self._escala_pixel)
-            r = 3.5  # Puntito pequeño visible y nítido (7px de diámetro)
+            r = 3.5  #sharp small dot
             c.create_oval(
                 px - r, py - r, px + r, py + r,
                 fill="#22C55E", outline="#15803D", width=1.0,
@@ -555,27 +550,14 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def mostrar_frame_dxf(self, bbox_cm: Optional[Tuple[float, float, float, float]] = None):
-        """
-        Calcula y dibuja el marco rectangular delimitador (Bounding Box) en línea naranja punteada
-        al pulsar el botón de encuadre (Framing) en el panel izquierdo.
-        """
+        """compute and display dxf bounding box framing overlay"""
         if bbox_cm is not None:
             self.frame_box_cm = bbox_cm
-        elif self.trazos_actuales:
-            all_x = [pt[0] for ruta in self.trazos_actuales for pt in ruta if pt and len(pt) >= 2]
-            all_y = [pt[1] for ruta in self.trazos_actuales for pt in ruta if pt and len(pt) >= 2]
-            if all_x and all_y:
-                self.frame_box_cm = (min(all_x), min(all_y), max(all_x), max(all_y))
-            else:
-                self.frame_box_cm = None
-        else:
-            self.frame_box_cm = None
-
-        if self.frame_box_cm is not None:
             self._dibujar_frame_dxf(self.canvas)
+            return
 
     def _dibujar_frame_dxf(self, c: tk.Canvas):
-        """Dibuja el marco de límites delimitadores del DXF en línea naranja punteada."""
+        """draw dxf bounding box framing in dashed orange"""
         if getattr(self, "frame_box_cm", None) is None:
             return
         if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
@@ -593,8 +575,7 @@ class PanelGeneral(ctk.CTkFrame):
             px1, py1 = to_px(min_x, min_y)
             px2, py2 = to_px(max_x, max_y)
 
-            # Rectángulo delimitador cerrado:
-            # (min_x, min_y) -> (max_x, min_y) -> (max_x, max_y) -> (min_x, max_y) -> (min_x, min_y)
+            #closed bounding box coordinates
             coords = [px1, py1, px2, py1, px2, py2, px1, py2, px1, py1]
             c.create_line(
                 coords,
@@ -612,7 +593,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def ocultar_frame_dxf(self):
-        """Oculta y elimina el marco naranja punteado de delimitación DXF de forma no permanente."""
+        """hide dxf framing box"""
         self.frame_box_cm = None
         try:
             self.canvas.delete("frame_dxf")
@@ -620,12 +601,12 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def actualizar_frustum_zoom(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
-        """Dibuja o actualiza el recuadro verde punteado que representa el encuadre de la cámara de zoom."""
+        """update zoom camera frustum box overlay"""
         self._frustum_zoom_cm = bbox_cm
         self._dibujar_frustum_zoom(self.canvas)
 
     def ocultar_frustum_zoom(self):
-        """Elimina el recuadro verde punteado del encuadre de la cámara de zoom."""
+        """hide zoom camera frustum box"""
         self._frustum_zoom_cm = None
         try:
             self.canvas.delete("frustum_zoom_cam")
@@ -633,7 +614,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def _dibujar_frustum_zoom(self, c: tk.Canvas):
-        """Renderiza en el canvas 1:1 el rectángulo verde punteado delgado de la cámara zoom."""
+        """render zoom camera green dashed rectangle on canvas"""
         if getattr(self, "_frustum_zoom_cm", None) is None:
             try:
                 c.delete("frustum_zoom_cam")
@@ -672,7 +653,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def archivar_pasada_completada(self):
-        """Convierte los segmentos completados de la pasada anterior a la capa translúcida."""
+        """convert completed pass segments to translucent previous layer"""
         c = getattr(self, "canvas", None)
         if c:
             try:
@@ -687,7 +668,7 @@ class PanelGeneral(ctk.CTkFrame):
             self.trazos_completados = []
 
     def limpiar_completados(self):
-        """Elimina todos los segmentos marcados/completados del canvas y limpia la lista interna."""
+        """clear all completed segments from canvas and memory"""
         self.trazos_completados = []
         self.trazos_pasadas_previas = []
         self.limpiar_feedback()
@@ -697,11 +678,9 @@ class PanelGeneral(ctk.CTkFrame):
         except Exception:
             pass
 
-    # ------------------------------------------------------------------
-    # Hardware Feedback Tracking (capa medida, magenta)
-    # ------------------------------------------------------------------
+    #hardware feedback tracking layer
     def set_feedback_visible(self, visible: bool):
-        """Muestra/oculta la entrada de leyenda de la capa medida (no afecta a las demás)."""
+        """toggle visibility of measured feedback layer in legend"""
         self._fb_visible = bool(visible)
         try:
             if visible:
@@ -720,7 +699,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def limpiar_feedback(self):
-        """Borra la trayectoria medida del canvas y de la memoria."""
+        """clear measured feedback trajectory from canvas and memory"""
         self._fb_pts_cm = []
         try:
             self.canvas.delete("fb_trace")
@@ -728,7 +707,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def agregar_puntos_feedback(self, puntos_cm: List[Tuple[float, float]]):
-        """Agrega puntos medidos (cm) y dibuja solo los segmentos nuevos (render incremental)."""
+        """append measured feedback points and draw incremental segments"""
         c = self.canvas
         if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
             return
@@ -745,7 +724,7 @@ class PanelGeneral(ctk.CTkFrame):
                 px1, py1 = to_px(*self._fb_pts_cm[-1])
                 px2, py2 = to_px(*p)
                 if (px2 - px1) ** 2 + (py2 - py1) ** 2 < 1.0:
-                    continue  # decimación a >= 1 px
+                    continue  #decimate to at least 1px
                 c.create_line(px1, py1, px2, py2, fill="#D946EF", width=2.0,
                               capstyle="round", tags="fb_trace")
                 self._fb_pts_cm.append(p)
@@ -758,7 +737,7 @@ class PanelGeneral(ctk.CTkFrame):
             pass
 
     def _redibujar_feedback_completo(self, c: tk.Canvas):
-        """Redibuja la capa medida completa tras un redimensionado del canvas."""
+        """redraw full measured feedback layer after canvas resize"""
         if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
             return
         try:
@@ -781,16 +760,10 @@ class PanelGeneral(ctk.CTkFrame):
     def agregar_segmento_completado(
         self, p1: Tuple[float, float], p2: Tuple[float, float], forzar: bool = False
     ) -> bool:
-        """
-        Renderizado INCREMENTAL: agrega solo el nuevo segmento completado al canvas
-        sin redibujar toda la figura. Esto evita el trabamiento al acumularse trazos.
-
-        Retorna True si el segmento se dibuja. Si el desplazamiento es insignificante
-        y no se fuerza, no se dibuja y retorna False para que el llamador acumule.
-        """
+        """draw single incremental completed segment without full canvas redraw"""
         c = self.canvas
         if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
-            return False  # Canvas aun no inicializado
+            return False  #canvas not initialized
         try:
             if c.winfo_width() <= 50 or c.winfo_height() <= 50:
                 return False
@@ -855,7 +828,7 @@ class PanelGeneral(ctk.CTkFrame):
         while val <= val_max + 1e-4:
             ticks.append(round(val, 2))
             val += paso_elegido
-            if len(ticks) > 100:  # Guarda contra bucle infinito
+            if len(ticks) > 100:  #guard against infinite loop
                 break
 
         if not ticks:
@@ -872,53 +845,51 @@ class PanelGeneral(ctk.CTkFrame):
         x1 = x0 + w_px
         y1 = y0 + h_px
 
-        # 1. Rectángulo de base visible (contorno punteado gris pegado exactamente a min y max)
+        #visible base rectangle
         c.create_rectangle(
             x0, y0, x1, y1,
             outline="#94A3B8", width=1.5, dash=(6, 4)
         )
 
-        # 2. Generar ticks métricos exactos
+        #generate metric ticks
         ticks_y = self._calcular_ticks(self.alto_base_cm)
         ticks_x = self._calcular_ticks(self.ancho_base_cm)
 
-        # Eje Y: Ticks, etiquetas y grilla interna
+        #y axis ticks labels and internal grid
         rango_y = max(0.1, self.alto_base_cm)
         for val_y in ticks_y:
             y_pos = y1 - (val_y / rango_y) * h_px
-            # Grilla métrica interna
+            #internal metric grid
             c.create_line(x0, y_pos, x1, y_pos, fill=COLOR_GRID, width=1)
-            # Tick a la izquierda
+            #left tick
             c.create_line(x0 - 5, y_pos, x0, y_pos, fill=COLOR_BORDER, width=1.5)
-            # Etiqueta numérica
+            #numeric label
             texto_y = f"{int(val_y)}" if abs(val_y - round(val_y)) < 1e-4 else f"{val_y:.1f}"
             c.create_text(x0 - 8, y_pos, text=texto_y, font=(FONT_TEACHERS, 9), fill=COLOR_TEXT, anchor="e")
 
-        # Eje X: Ticks, etiquetas y grilla interna
+        #x axis ticks labels and internal grid
         rango_x = max(0.1, self.ancho_base_cm)
         for val_x in ticks_x:
             x_pos = x0 + (val_x / rango_x) * w_px
-            # Grilla métrica interna
+            #internal metric grid
             c.create_line(x_pos, y0, x_pos, y1, fill=COLOR_GRID, width=1)
-            # Tick abajo
+            #bottom tick
             c.create_line(x_pos, y1, x_pos, y1 + 5, fill=COLOR_BORDER, width=1.5)
-            # Etiqueta numérica
+            #numeric label
             texto_x = f"{int(val_x)}" if abs(val_x - round(val_x)) < 1e-4 else f"{val_x:.1f}"
             c.create_text(x_pos, y1 + 7, text=texto_x, font=(FONT_TEACHERS, 9), fill=COLOR_TEXT, anchor="n")
 
-        # 3. Ejes principales sólidos en borde carbón (pegados a los bordes izquierdo e inferior)
-        c.create_line(x0, y0, x0, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  # Eje Y
-        c.create_line(x0, y1, x1, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  # Eje X
+        #main solid axes
+        c.create_line(x0, y0, x0, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  #y axis
+        c.create_line(x0, y1, x1, y1, fill=COLOR_BORDER, width=BRUTAL_BORDER)  #x axis
 
-        # 4. Rótulos de ejes: "Y [cm]" arriba del eje Y y "X [cm]" a la derecha del eje X
+        #axis labels
         c.create_text(x0 - 4, y0 - 8, text="Y [cm]", font=(FONT_TEACHERS, 9, "bold"), fill=COLOR_TEXT, anchor="sw")
         c.create_text(x1 + 6, y1, text="X [cm]", font=(FONT_TEACHERS, 9, "bold"), fill=COLOR_TEXT, anchor="w")
 
-    # =========================================================================
-    # LEYENDA RESPONSIVA Y POPOVER FLOTANTE
-    # =========================================================================
+    #responsive legend and popover
     def _crear_popup_leyenda(self):
-        """Crea la tarjeta flotante emergente con la guía de líneas detallada."""
+        """create popover card with detailed toolpath guide"""
         self.legend_popup = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -928,7 +899,7 @@ class PanelGeneral(ctk.CTkFrame):
             width=280
         )
 
-        # Header de la tarjeta emergente
+        #popover card header
         header_pop = ctk.CTkFrame(self.legend_popup, fg_color="#F1F5F9", corner_radius=BRUTAL_CORNER, height=28)
         header_pop.pack(fill="x", padx=4, pady=(4, 4))
 
@@ -953,7 +924,7 @@ class PanelGeneral(ctk.CTkFrame):
         )
         btn_close_pop.pack(side="right", padx=2)
 
-        # 1. Guía CAD (Gris)
+        #cad guide
         row1 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
         row1.pack(fill="x", padx=8, pady=3)
         c1 = tk.Canvas(row1, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
@@ -966,7 +937,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_guide_desc = ctk.CTkLabel(t1, text=tr("legend_guide_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
         self.lbl_pop_guide_desc.pack(anchor="w")
 
-        # 2. Salto en vacío (Naranja punteado)
+        #rapid traverse jump
         row2 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
         row2.pack(fill="x", padx=8, pady=3)
         c2 = tk.Canvas(row2, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
@@ -980,7 +951,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_jump_desc = ctk.CTkLabel(t2, text=tr("legend_jump_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
         self.lbl_pop_jump_desc.pack(anchor="w")
 
-        # 3. Trazo ejecutado activo (Azul eléctrico)
+        #active executed toolpath
         row3 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
         row3.pack(fill="x", padx=8, pady=3)
         c3 = tk.Canvas(row3, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
@@ -993,7 +964,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_trail_desc = ctk.CTkLabel(t3, text=tr("legend_trace_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
         self.lbl_pop_trail_desc.pack(anchor="w")
 
-        # 4. Puntero del haz (Punto verde)
+        #laser pointer
         row4 = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
         row4.pack(fill="x", padx=8, pady=(3, 6))
         c4 = tk.Canvas(row4, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
@@ -1006,7 +977,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_pointer_desc = ctk.CTkLabel(t4, text=tr("legend_pointer_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
         self.lbl_pop_pointer_desc.pack(anchor="w")
 
-        # 5. Trayectoria medida (Magenta) - solo se muestra con Hardware Feedback activo
+        #measured feedback trajectory
         self.row_pop_fb = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
         c5 = tk.Canvas(self.row_pop_fb, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
         c5.pack(side="left", padx=(0, 6))
@@ -1019,7 +990,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_fb_desc.pack(anchor="w")
 
     def _toggle_popup_leyenda(self):
-        """Muestra u oculta la tarjeta flotante con la guía de trazos."""
+        """toggle floating toolpath guide popup"""
         if getattr(self, "_popup_abierto", False):
             self._cerrar_popup_leyenda()
         else:
@@ -1055,7 +1026,7 @@ class PanelGeneral(ctk.CTkFrame):
         self._ajustar_modo_leyenda(ancho)
 
     def _ajustar_modo_leyenda(self, ancho: int):
-        # 780px es el límite donde el título y el rectángulo horizontal colisionan
+        #threshold where title and horizontal legend collide
         limite = 780
         if ancho < limite:
             if not getattr(self, "_modo_compacto_leyenda", False):
@@ -1070,7 +1041,7 @@ class PanelGeneral(ctk.CTkFrame):
                 self.legend_frame.pack(side="right")
 
     def actualizar_idioma(self):
-        """Actualiza títulos, leyendas y tooltips del panel central al cambiar el idioma."""
+        """update central panel titles legends and tooltips on language change"""
         if hasattr(self, "lbl_title"):
             self.lbl_title.configure(text=tr("canvas_title"))
         if hasattr(self, "lbl_legend_guide"):

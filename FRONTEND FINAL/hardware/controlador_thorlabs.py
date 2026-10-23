@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-hardware/controlador_thorlabs.py — Driver para Thorlabs GVS112/M
-
-Controla los canales analogicos X/Y (voltaje analogico de +/- 10V) y senal de modulacion
-del laser (TTL/PWM) para escaneo galvanometrico.
-"""
+"""thorlabs gvs112 driver"""
 
 from .config_galvo import (
     VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
@@ -20,7 +15,7 @@ class ControladorThorlabsGVS:
             print('[Thorlabs GVS112/M] Modo Simulacion listo. Conectar tarjeta DAQ/DAC cuando este en laboratorio.')
 
     def ir_a_posicion(self, x_mm: float = 0.0, y_mm: float = 0.0):
-        """Posiciona los espejos galvo de forma estática (on-demand) a (x_mm, y_mm) si hay hardware físico."""
+        """static move mirrors to position in mm"""
         if self.tipo_interfaz == 'SIMULACION':
             return
         try:
@@ -39,11 +34,11 @@ class ControladorThorlabsGVS:
             pass
 
     def center(self):
-        """Envía los espejos a la posición central de reposo (0.0 V, 0.0 V)."""
+        """park mirrors at center 0v"""
         self.ir_a_posicion(0.0, 0.0)
 
     def _escribir_linea_digital(self, nivel: int):
-        """Escribe nivel lógico (0 o 1) a la compuerta digital TTL del láser si hay hardware físico activo."""
+        """write digital level to laser gate"""
         if self.tipo_interfaz == 'SIMULACION':
             return
         try:
@@ -56,24 +51,23 @@ class ControladorThorlabsGVS:
                 task.do_channels.add_do_chan(do_channel, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                 task.write(nivel, auto_start=True)
         except Exception:
-            # Si el hardware no está conectado o la línea está reservada por una tarea de barrido,
-            # no bloquear ni interrumpir la ejecución.
+            #ignore if hardware disconnected or line busy
             pass
 
     def apagar_laser(self):
-        """Desactiva la señal de modulación del láser (TTL LOW / 0V)."""
+        """switch laser off ttl low"""
         self.laser_encendido = False
         self._escribir_linea_digital(0)
         print('[Thorlabs GVS112/M] Láser desactivado (TTL 0V / Haz apagado).')
 
     def encender_laser(self):
-        """Activa la señal de modulación del láser (TTL HIGH / 5V)."""
+        """switch laser on ttl high"""
         self.laser_encendido = True
         self._escribir_linea_digital(1)
         print('[Thorlabs GVS112/M] Láser activado (TTL 5V / Emisión activa).')
 
     def abortar_inmediato(self):
-        """Parada de emergencia inmediata: apaga el haz y mantiene galvos en reposo."""
+        """emergency stop switch laser off"""
         self.apagar_laser()
         print('[Thorlabs GVS112/M] Parada de emergencia ejecutada.')
 

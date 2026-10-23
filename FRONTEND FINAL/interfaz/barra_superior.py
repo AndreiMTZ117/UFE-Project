@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-interfaz/barra_superior.py — Barra Superior (Cyber-Brutalism)
-"""
+"""cyber brutalist top bar with logo device selectors and terminal toggle"""
 
 import tkinter as tk
 import customtkinter as ctk
@@ -20,7 +18,7 @@ from .i18n import (
 
 
 class BarraSuperior(ctk.CTkFrame):
-    """Barra superior con logo, selectores segmentados y botón de terminal."""
+    """top bar with logo segmented selectors and terminal toggle button"""
 
     def __init__(
         self,
@@ -55,20 +53,20 @@ class BarraSuperior(ctk.CTkFrame):
         registrar_observador(self.actualizar_idioma)
 
     def _crear_widgets(self):
-        # 1. Logo "ŪFE" con barra amarilla exactamente sobre la U
+        #logo box
         self.logo_box = ctk.CTkFrame(self, fg_color="transparent", width=96, height=44)
         self.logo_box.pack(side="left", padx=(2, 16))
         self.logo_box.pack_propagate(False)
 
         self.logo_canvas = tk.Canvas(self.logo_box, bg=COLOR_BG, highlightthickness=0, width=96, height=44)
         self.logo_canvas.pack(fill="both", expand=True)
-        # Barra amarilla superior
+        #top yellow bar
         self.logo_canvas.create_rectangle(6, 6, 26, 11, fill=COLOR_YELLOW, outline="")
-        # Tipografía UFE
+        #logo text
         self.logo_canvas.create_text(8, 26, text="U", font=(FONT_TEACHERS, 18, "bold"), fill=COLOR_TEXT, anchor="w")
         self.logo_canvas.create_text(28, 26, text="FE", font=(FONT_TEACHERS, 18, "bold"), fill=COLOR_TEXT, anchor="w")
 
-        # 2. Cápsula segmentada central (Puerto, DXF, Idioma) con bordes rectos
+        #segmented central capsule
         self.capsule_box = ctk.CTkFrame(
             self,
             fg_color=COLOR_CARD,
@@ -79,7 +77,7 @@ class BarraSuperior(ctk.CTkFrame):
         )
         self.capsule_box.pack(side="left", padx=4)
 
-        # Segmento 1: Puerto COM con indicador LED circular (Verde: Conectado / Rojo: Desconectado)
+        #com port segment with led indicator
         self.com_frame = ctk.CTkFrame(self.capsule_box, fg_color="transparent")
         self.com_frame.pack(side="left", padx=(8, 2), pady=3)
 
@@ -105,11 +103,11 @@ class BarraSuperior(ctk.CTkFrame):
         )
         self.opt_com.pack(side="left", padx=(0, 4))
 
-        # Separador vertical 1
+        #separator 1
         sep1 = ctk.CTkFrame(self.capsule_box, width=2, fg_color=COLOR_BORDER, height=20)
         sep1.pack(side="left", pady=4)
 
-        # Segmento 2: Selector DXF (BrutalOptionMenu interactivo con auto-cierre)
+        #dxf selector segment
         self.opt_dxf = BrutalOptionMenu(
             self.capsule_box,
             values=[tr("dxf_loading")],
@@ -128,11 +126,11 @@ class BarraSuperior(ctk.CTkFrame):
         )
         self.opt_dxf.pack(side="left", padx=(4, 4), pady=3)
 
-        # Separador vertical 2 (hacia Selector de Idioma)
+        #separator 2
         sep2 = ctk.CTkFrame(self.capsule_box, width=2, fg_color=COLOR_BORDER, height=20)
         sep2.pack(side="left", pady=4)
 
-        # Segmento 3: Selector de Idioma (EN / CS)
+        #language selector segment
         self.opt_lang = BrutalOptionMenu(
             self.capsule_box,
             values=IDIOMAS_DISPONIBLES,
@@ -152,11 +150,11 @@ class BarraSuperior(ctk.CTkFrame):
         self.opt_lang.set(obtener_idioma())
         self.opt_lang.pack(side="left", padx=(4, 6), pady=3)
 
-        # Separador vertical 3 (hacia Hardware Feedback Tracking)
+        #separator 3
         sep3 = ctk.CTkFrame(self.capsule_box, width=2, fg_color=COLOR_BORDER, height=20)
         sep3.pack(side="left", pady=4)
 
-        # Segmento 4: Hardware Feedback Tracking (opcional; deshabilitado si no hay hardware AI)
+        #hardware feedback tracking segment
         self.sw_feedback = ctk.CTkSwitch(
             self.capsule_box,
             text=tr("feedback_toggle"),
@@ -170,7 +168,7 @@ class BarraSuperior(ctk.CTkFrame):
         self.sw_feedback.pack(side="left", padx=(8, 10), pady=3)
         self.sw_feedback.configure(state="disabled")
 
-        # 3. Botón Terminal rectangular con borde grueso
+        #terminal button
         self.btn_terminal = ctk.CTkButton(
             self,
             text=tr("btn_terminal"),
@@ -187,14 +185,14 @@ class BarraSuperior(ctk.CTkFrame):
         )
         self.btn_terminal.pack(side="right", padx=(8, 2))
 
-        # Text helpers
+        #tooltips
         agregar_tooltip(self.com_frame, tr("tooltip_com"))
         agregar_tooltip(self.opt_dxf, tr("tooltip_dxf"))
         agregar_tooltip(self.opt_lang, tr("tooltip_lang"))
         agregar_tooltip(self.btn_terminal, tr("tooltip_terminal"))
         self._actualizar_tooltip_feedback()
 
-    # Métodos de callback internos
+    #internal callbacks
     def _cb_com(self, val: str):
         if getattr(self, "bloqueado_ejecucion", False):
             return
@@ -219,7 +217,7 @@ class BarraSuperior(ctk.CTkFrame):
             self.on_idioma_cambiado(val)
 
     def _cb_feedback(self):
-        """Conmuta el Hardware Feedback Tracking (solo si está disponible y no hay ejecución)."""
+        """toggle hardware feedback tracking"""
         if getattr(self, "bloqueado_ejecucion", False) or not self._fb_disponible:
             self.sw_feedback.deselect()
             return
@@ -236,7 +234,7 @@ class BarraSuperior(ctk.CTkFrame):
         agregar_tooltip(self.sw_feedback, tr(clave))
 
     def set_feedback_disponible(self, disponible: bool, clave: str = "ok"):
-        """Habilita o bloquea el selector de feedback según la disponibilidad real del hardware AI."""
+        """enable or disable feedback switch based on hardware availability"""
         self._fb_disponible = bool(disponible)
         self._fb_clave = clave if clave else ("ok" if disponible else "no_device")
         if not disponible:
@@ -246,7 +244,7 @@ class BarraSuperior(ctk.CTkFrame):
         self._actualizar_tooltip_feedback()
 
     def forzar_feedback(self, activo: bool):
-        """Fija visualmente el estado del selector (p. ej. para revertirlo)."""
+        """set visual feedback switch state"""
         if activo:
             self.sw_feedback.select()
         else:
@@ -265,11 +263,11 @@ class BarraSuperior(ctk.CTkFrame):
             self.on_toggle_terminal()
 
     def actualizar_idioma(self):
-        """Actualiza textos, tooltips y opciones desplegables de la barra superior."""
+        """update texts tooltips and dropdown options on language change"""
         self.opt_lang.set(obtener_idioma())
         self.btn_terminal.configure(text=tr("btn_terminal"))
 
-        # Actualizar textos de menús desplegables manteniendo selección
+        #update dropdown texts keeping current selection
         if self._cached_puertos:
             self.set_puertos_com(self._cached_puertos, self._cached_seleccionado_com)
         elif self.opt_com.get() in ("Scanning ports...", "Skenování portů..."):
@@ -289,25 +287,25 @@ class BarraSuperior(ctk.CTkFrame):
         self.sw_feedback.configure(text=tr("feedback_toggle"))
         self._actualizar_tooltip_feedback()
 
-    # Métodos públicos para actualización
+    #public update methods
     def set_bloqueo_carga(self, bloqueado: bool):
-        """Bloquea o habilita temporalmente el menú DXF durante la carga asíncrona."""
+        """temporarily lock or unlock dxf dropdown during async loading"""
         self.bloqueado_carga = bloqueado
         estado = "disabled" if (bloqueado or getattr(self, "bloqueado_ejecucion", False)) else "normal"
         self.opt_dxf.configure(state=estado)
 
     def set_bloqueo_ejecucion(self, bloqueado: bool):
-        """Bloquea o habilita la selección de hardware y archivos durante la ejecución."""
+        """lock or unlock selectors during execution"""
         self.bloqueado_ejecucion = bloqueado
         estado = "disabled" if bloqueado else "normal"
         self.opt_com.configure(state=estado)
         self.opt_dxf.configure(state=estado)
         self.opt_lang.configure(state=estado)
-        # El feedback solo se habilita si el hardware AI está disponible y no hay ejecución
+        #feedback enabled only if ai hardware available and not executing
         self.sw_feedback.configure(state="normal" if (not bloqueado and self._fb_disponible) else "disabled")
 
     def set_estado_com(self, conectado_fisico: bool):
-        """Pone el LED en Verde (#16A34A) si está conectado físicamente, o Rojo (#DC2626) si no."""
+        """set led green if connected or red if disconnected"""
         color = COLOR_GREEN if conectado_fisico else COLOR_RED
         self.led_com.itemconfig(self._led_circle, fill=color)
 

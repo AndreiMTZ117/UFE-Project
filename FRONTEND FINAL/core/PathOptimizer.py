@@ -1,9 +1,4 @@
-"""Spatial optimization of laser trajectories.
-
-Provides contour simplification (Ramer-Douglas-Peucker) and travel-distance
-minimization (nearest neighbour + 2-opt) to reduce the scanner cycle time and
-mirror stress.
-"""
+"""spatial optimization of laser trajectories"""
 
 from __future__ import annotations
 
@@ -22,7 +17,7 @@ Point = Tuple[float, float]
 
 
 class PathOptimizer:
-    """Simplifies cutting contours and reorders them to minimize G0 travel."""
+    """simplifies cutting contours and reorders them to minimize g0 travel"""
 
     def __init__(
         self,
@@ -33,19 +28,7 @@ class PathOptimizer:
         config: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
     ) -> None:
-        """Initialize the optimizer.
-
-        Args:
-            epsilon: RDP geometric tolerance in millimetres (default from config).
-            rapid_speed_mm_s: Speed assigned to generated G0 blocks.
-            connection_tolerance: Max gap (mm) to consider two G1 blocks chained.
-            max_2opt_passes: Upper bound on full 2-opt sweeps.
-            config: Optional configuration dictionary.
-            config_path: Optional explicit path to hardware_config.json.
-
-        Raises:
-            ValueError: If any parameter is out of range.
-        """
+        """initialize path optimizer"""
         if epsilon is None:
             cfg = config if config is not None else load_hardware_config(config_path)
             cad_cam_cfg = cfg.get("cad_cam", {})
@@ -64,26 +47,10 @@ class PathOptimizer:
         self.connection_tolerance: float = connection_tolerance
         self.max_2opt_passes: int = max_2opt_passes
 
-    # ------------------------------------------------------------------ RDP
+    #rdp
     @staticmethod
     def rdp(points: np.ndarray, epsilon: float) -> np.ndarray:
-        """Ramer-Douglas-Peucker polyline simplification (NumPy vectorized).
-
-        The perpendicular distance of all points of a sub-polyline is computed
-        in a single vectorized operation; recursion is replaced by an explicit
-        stack to avoid recursion limits.
-
-        Args:
-            points: Array of shape ``(N, 2)``.
-            epsilon: Maximum allowed deviation in millimetres.
-
-        Returns:
-            Simplified array of shape ``(M, 2)`` with ``M <= N``; first and last
-            points are always preserved.
-
-        Raises:
-            ValueError: If ``points`` has an invalid shape or ``epsilon`` < 0.
-        """
+        """rdp polyline simplification using numpy"""
         array = np.asarray(points, dtype=float)
         if array.ndim != 2 or array.shape[1] != 2:
             raise ValueError("points must have shape (N, 2).")
@@ -115,26 +82,11 @@ class PathOptimizer:
                 stack.append((split, last))
         return array[keep]
 
-    # ------------------------------------------------------------------ TSP
+    #tsp
     def tsp_2opt(
         self, contours: Sequence[np.ndarray], start_point: Optional[Point] = None
     ) -> List[np.ndarray]:
-        """Reorder (and possibly reverse) contours to minimize rapid travel.
-
-        Uses a nearest-neighbour construction followed by 2-opt improvement.
-        Each contour may be traversed in either direction.
-
-        Args:
-            contours: Sequence of ``(N_i, 2)`` arrays.
-            start_point: Initial scanner position; defaults to the first
-                point of the first contour.
-
-        Returns:
-            New list of contours in the optimized visiting order.
-
-        Raises:
-            ValueError: If any contour has an invalid shape.
-        """
+        """reorder and flip contours to minimize rapid travel"""
         order, flips = self._solve_order(contours, start_point)
         result: List[np.ndarray] = []
         for index, flipped in zip(order, flips):
@@ -145,7 +97,7 @@ class PathOptimizer:
     def _solve_order(
         self, contours: Sequence[np.ndarray], start_point: Optional[Point]
     ) -> Tuple[List[int], List[bool]]:
-        """Compute visiting order and reversal flags for the contours."""
+        """compute visiting order and reversal flags for contours"""
         arrays = [np.asarray(c, dtype=float) for c in contours]
         for array in arrays:
             if array.ndim != 2 or array.shape[1] != 2 or array.shape[0] < 1:
@@ -158,7 +110,7 @@ class PathOptimizer:
         lasts = np.array([a[-1] for a in arrays], dtype=float)
         origin = firsts[0] if start_point is None else np.asarray(start_point, dtype=float)
 
-        # Nearest-neighbour construction (orientation-aware).
+        #nearest neighbor construction
         remaining = np.ones(count, dtype=bool)
         order: List[int] = []
         flips: List[bool] = []
@@ -178,17 +130,14 @@ class PathOptimizer:
             flips.append(flipped)
             position = firsts[chosen] if flipped else lasts[chosen]
 
-        # Heuristic Pruning safeguard (O(N^2) quadratic prevention):
-        # If N > 100 contours: bypass 2-Opt to avoid quadratic stalls on dense geometries
-        # and retain the Greedy Nearest-Neighbor order (sub-second computation).
-        # If N <= 100 contours: execute 2-Opt with a strict iteration cap.
+        #heuristic pruning bypass 2-opt if count > 100
         if count > 100:
             logger.info("Contour count N=%d > 100: utilizing Greedy Nearest-Neighbor (skipping 2-Opt).", count)
             return order, flips
 
         max_passes = min(self.max_2opt_passes, 20 if count > 50 else 30)
 
-        # 2-opt with reversal (segment reversal also flips contour orientation).
+        #2-opt with contour reversal
         def entry(pos: int) -> np.ndarray:
             return lasts[order[pos]] if flips[pos] else firsts[order[pos]]
 
@@ -217,23 +166,9 @@ class PathOptimizer:
                 break
         return order, flips
 
-    # --------------------------------------------------------- orchestration
+    #orchestration
     def optimize(self, trajectories: Sequence[TrajectoryBlock]) -> List[TrajectoryBlock]:
-        """Simplify G1 contours and reorder them to minimize rapid travel.
-
-        Original G0 blocks are discarded and regenerated between the
-        reordered contours. Consecutive connected G1 blocks with equal speed
-        form a contour.
-
-        Args:
-            trajectories: Blocks produced by :class:`core.GCodeParser.GCodeParser`.
-
-        Returns:
-            Optimized list of G0/G1 blocks.
-
-        Raises:
-            TypeError: If an element is not a ``TrajectoryBlock``.
-        """
+        """simplify contours and reorder to minimize rapid travel"""
         for block in trajectories:
             if not isinstance(block, TrajectoryBlock):
                 raise TypeError("trajectories must contain TrajectoryBlock instances.")
@@ -279,7 +214,7 @@ class PathOptimizer:
     def _extract_contours(
         self, trajectories: Sequence[TrajectoryBlock]
     ) -> Tuple[List[np.ndarray], List[float]]:
-        """Group consecutive connected, equal-speed G1 blocks into contours."""
+        """group connected g1 blocks into contours"""
         contours: List[np.ndarray] = []
         speeds: List[float] = []
         current: List[Point] = []
@@ -311,7 +246,7 @@ class PathOptimizer:
 
     @staticmethod
     def _travel_length(contours: Sequence[np.ndarray], origin: Point) -> float:
-        """Total rapid distance when visiting contours in the given order."""
+        """total rapid distance for contours"""
         total = 0.0
         position = np.asarray(origin, dtype=float)
         for contour in contours:
@@ -320,15 +255,12 @@ class PathOptimizer:
         return total
 
 
-# ==============================================================================
-# Helper & Compatibility Functions (Vectorized Trajectory & Polyline Optimization)
-# ==============================================================================
-
+#helpers
 def simplificar_trayectoria_rdp(
     puntos: Sequence[Point],
     epsilon: float = 0.01,
 ) -> List[Point]:
-    """Simplificación vectorial RDP de alto rendimiento basada en NumPy."""
+    """vectorized rdp polyline simplification"""
     if len(puntos) < 3 or epsilon <= 0:
         return list(puntos)
     arr = PathOptimizer.rdp(np.asarray(puntos, dtype=float), float(epsilon))
@@ -339,7 +271,7 @@ def fusionar_trazos_contiguos(
     trazos: Sequence[Sequence[Point]],
     tol_union: float = 0.02,
 ) -> List[List[Point]]:
-    """Fusiona trazos continuos contiguos y cierra bucles casi cerrados."""
+    """merge contiguous strokes and close near loops"""
     if not trazos:
         return []
 
@@ -366,7 +298,7 @@ def optimizar_y_unir_trazos(
     tol_union: float = 0.02,
     pos_inicial: Point = (0.0, 0.0),
 ) -> List[List[Point]]:
-    """Optimiza el orden de dibujo vectorial (TSP / 2-Opt) y une segmentos contiguos."""
+    """optimize stroke order using tsp and merge contiguous segments"""
     valid = [np.asarray(r, dtype=float) for r in trayectorias if len(r) >= 2]
     if not valid:
         return []
