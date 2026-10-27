@@ -24,6 +24,9 @@ class GalvoSignalGenerator:
         mark_delay_us: Optional[float] = None,
         laser_on_delay_us: Optional[float] = None,
         laser_off_delay_us: Optional[float] = None,
+        pincushion_kx: Optional[float] = None,
+        pincushion_ky: Optional[float] = None,
+        field_half_width_mm: Optional[float] = None,
         connection_tolerance_mm: float = 1e-6,
         config: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
@@ -64,6 +67,19 @@ class GalvoSignalGenerator:
         if laser_off_delay_us is None:
             laser_off_delay_us = float(dyn_cfg.get("laser_off_delay_us", 20.0))
 
+        #resolve optical pincushion distortion correction
+        dist_cfg = cfg.get("distortion_correction", {})
+        correction_enabled = bool(dist_cfg.get("enabled", True))
+        if pincushion_kx is None:
+            pincushion_kx = float(dist_cfg.get("pincushion_kx", 0.0)) if correction_enabled else 0.0
+        if pincushion_ky is None:
+            pincushion_ky = float(dist_cfg.get("pincushion_ky", 0.0)) if correction_enabled else 0.0
+        if field_half_width_mm is None:
+            field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 50.0))
+
+        if field_half_width_mm <= 0:
+            raise ValueError("field_half_width_mm must be positive.")
+
         if sample_rate_hz <= 0:
             raise ValueError("sample_rate_hz must be positive.")
         if scale_factor_v_per_mm <= 0:
@@ -88,6 +104,9 @@ class GalvoSignalGenerator:
         self.scale_factor_v_per_mm: float = float(scale_factor_v_per_mm)
         self.voltage_limits: Tuple[float, float] = (float(voltage_limits[0]), float(voltage_limits[1]))
         self.connection_tolerance_mm: float = connection_tolerance_mm
+        self.pincushion_kx: float = float(pincushion_kx)
+        self.pincushion_ky: float = float(pincushion_ky)
+        self.field_half_width_mm: float = float(field_half_width_mm)
 
         #convert delays from microseconds to sample counts
         self.n_jump: int = self._us_to_samples(jump_delay_us)
@@ -98,6 +117,34 @@ class GalvoSignalGenerator:
     def _us_to_samples(self, delay_us: float) -> int:
         """convert delay in microseconds to sample count"""
         return int(round(delay_us / MICROSECONDS_PER_SECOND * self.sample_rate_hz))
+
+    def _apply_pincushion_correction(self, positions: np.ndarray) -> np.ndarray:
+        """
+        Apply cross-axis geometric pre-distortion to counteract optical pincushion distortion.
+
+        Mathematical model:
+            X_corr = X * (1 - k_x * (Y / W)^2)
+            Y_corr = Y * (1 - k_y * (X / W)^2)
+
+        where W is field_half_width_mm (scan field half-width).
+        """
+        if self.pincushion_kx == 0.0 and self.pincushion_ky == 0.0:
+            return positions
+
+        if positions.shape[0] == 0:
+            return positions
+
+        w = self.field_half_width_mm
+        x = positions[:, 0]
+        y = positions[:, 1]
+
+        y_norm_sq = (y / w) ** 2
+        x_norm_sq = (x / w) ** 2
+
+        x_corr = x * (1.0 - self.pincushion_kx * y_norm_sq)
+        y_corr = y * (1.0 - self.pincushion_ky * x_norm_sq)
+
+        return np.column_stack((x_corr, y_corr))
 
     def generate_signals(self) -> Tuple[np.ndarray, np.ndarray]:
         """build synchronized analog and digital output arrays"""
@@ -165,8 +212,11 @@ class GalvoSignalGenerator:
             np.add.at(gate_delta, off_index, -1)
         gate = (np.cumsum(gate_delta[:-1]) > 0).astype(np.uint8)
 
+        #apply optical pincushion distortion correction
+        positions_corr = self._apply_pincushion_correction(positions)
+
         #spatial to voltage mapping with saturation
-        voltages = positions.T * self.scale_factor_v_per_mm
+        voltages = positions_corr.T * self.scale_factor_v_per_mm
 
         #electrical safety limits
         v_min = max(-10.0, float(self.voltage_limits[0]))

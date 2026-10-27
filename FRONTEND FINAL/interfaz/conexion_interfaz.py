@@ -839,7 +839,8 @@ class PuenteLaser:
                     jump_delay_us=5000.0,
                     mark_delay_us=0.0,
                     laser_on_delay_us=0.0,
-                    laser_off_delay_us=0.0
+                    laser_off_delay_us=0.0,
+                    config=self.hardware_cfg,
                 )
                 voltages, gate = generator.generate_signals()
                 #laser gate always 0
@@ -1054,10 +1055,13 @@ class PuenteLaser:
                 mark_delay_us=mark_delay_ms * 1000.0,
                 laser_on_delay_us=laser_on_delay_ms * 1000.0,
                 laser_off_delay_us=laser_off_delay_ms * 1000.0,
+                config=self.hardware_cfg,
             )
             voltages, gate = generator.generate_signals()
             n_samples = int(voltages.shape[1])
             k_last = n_samples - 1
+            if generator.pincushion_kx > 0 or generator.pincushion_ky > 0:
+                on_log(f"[Óptica] Corrección almohada activa: kx={generator.pincushion_kx:.4f}, ky={generator.pincushion_ky:.4f} (W={generator.field_half_width_mm:.1f} mm)")
             on_log(f"Signal timeline: {n_samples} samples @ {fs:.0f} Hz "
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
 

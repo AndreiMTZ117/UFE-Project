@@ -4,6 +4,12 @@
     "min": -10.0,
     "max": 10.0
   },
+  "distortion_correction": {
+    "enabled": true,
+    "pincushion_kx": 0.035,
+    "pincushion_ky": 0.035,
+    "field_half_width_mm": 50.0
+  },
   "daq": {
     "device_name": "PXI1Slot5",
     "analog_channels": [

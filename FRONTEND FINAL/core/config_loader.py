@@ -33,6 +33,12 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "timeout_seconds": 30,
         "rdp_tolerance": 0.0,
     },
+    "distortion_correction": {
+        "enabled": True,
+        "pincushion_kx": 0.0,
+        "pincushion_ky": 0.0,
+        "field_half_width_mm": 50.0,
+    },
 }
 
 REQUIRED_DAQ_KEYS = ("device_name", "analog_channels", "laser_gate_channel", "ai_channels")
