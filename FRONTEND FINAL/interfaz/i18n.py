@@ -442,6 +442,14 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "RESUME",
         "CS": "POKRAČOVAT",
     },
+    "btn_pause_tooltip": {
+        "EN": "Pause: In hardware, finishes current pass cleanly and rests safely (0V) before next pass. In simulation, pauses timeline.",
+        "CS": "Pauza: V hardware čistě dokončí aktuální průchod a bezpečně počká (0V) před dalším. V simulaci ihned.",
+    },
+    "btn_resume_tooltip": {
+        "EN": "Resume: Continues with the next scheduled pass.",
+        "CS": "Pokračovat: Pokračuje s dalším naplánovaným průchodem.",
+    },
     "btn_stop": {
         "EN": "STOP",
         "CS": "ZASTAVIT",

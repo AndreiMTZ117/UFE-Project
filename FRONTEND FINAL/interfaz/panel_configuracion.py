@@ -438,7 +438,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             height=32
         )
         self.btn_frame_pause.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
-        agregar_tooltip(self.btn_frame_pause, tr("btn_pause"))
+        agregar_tooltip(self.btn_frame_pause, tr("btn_pause_tooltip"))
 
         self.btn_frame_stop = ctk.CTkButton(
             self.frame_running_box,
@@ -820,7 +820,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             agregar_tooltip(self.btn_frame, tr("tooltip_btn_frame"))
         if hasattr(self, "btn_frame_pause"):
             self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}")
-            agregar_tooltip(self.btn_frame_pause, tr("btn_pause"))
+            agregar_tooltip(self.btn_frame_pause, tr("btn_pause_tooltip"))
         if hasattr(self, "btn_frame_stop"):
             self.btn_frame_stop.configure(text=f"⏹ {tr('btn_framing_stop')}")
             agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))

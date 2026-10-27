@@ -144,7 +144,7 @@ class PanelDerecho(ctk.CTkFrame):
             height=42
         )
         self.btn_pause_resume.pack(side="left", padx=(0, 6))
-        agregar_tooltip(self.btn_pause_resume, "Pause execution (shuts off laser and freezes timer) or resume.")
+        self.tooltip_pause = agregar_tooltip(self.btn_pause_resume, tr("btn_pause_tooltip"))
 
         #emergency stop button
         self.btn_stop = ctk.CTkButton(
@@ -665,10 +665,14 @@ class PanelDerecho(ctk.CTkFrame):
         self._esta_pausado = pausado
         if pausado:
             self.btn_pause_resume.configure(text=tr("btn_resume"), fg_color=COLOR_YELLOW)
+            if hasattr(self, "tooltip_pause") and self.tooltip_pause:
+                self.tooltip_pause.texto = tr("btn_resume_tooltip")
             self.set_estado_sistema("PAUSED")
             self.set_laser_activo(False)
         else:
             self.btn_pause_resume.configure(text=tr("btn_pause"), fg_color=COLOR_PAUSE)
+            if hasattr(self, "tooltip_pause") and self.tooltip_pause:
+                self.tooltip_pause.texto = tr("btn_pause_tooltip")
             self.set_estado_sistema("SCANNING")
 
     def set_estado_sistema(self, estado: str):
@@ -1012,6 +1016,8 @@ class PanelDerecho(ctk.CTkFrame):
                 self.btn_pause_resume.configure(text=tr("btn_resume"))
             else:
                 self.btn_pause_resume.configure(text=tr("btn_pause"))
+            if hasattr(self, "tooltip_pause") and self.tooltip_pause:
+                self.tooltip_pause.texto = tr("btn_resume_tooltip") if getattr(self, "_esta_pausado", False) else tr("btn_pause_tooltip")
         if hasattr(self, "btn_home"):
             agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
         if hasattr(self, "btn_auto_center"):
