@@ -1060,8 +1060,8 @@ class PuenteLaser:
             voltages, gate = generator.generate_signals()
             n_samples = int(voltages.shape[1])
             k_last = n_samples - 1
-            if generator.pincushion_kx > 0 or generator.pincushion_ky > 0:
-                on_log(f"[Óptica] Corrección almohada activa: kx={generator.pincushion_kx:.4f}, ky={generator.pincushion_ky:.4f} (W={generator.field_half_width_mm:.1f} mm)")
+            if generator.pincushion_kx != 0.0 or generator.pincushion_ky != 0.0:
+                on_log(f"[Óptica] Corrección geométrica activa: kx={generator.pincushion_kx:.4f}, ky={generator.pincushion_ky:.4f} (W={generator.field_half_width_mm:.1f} mm)")
             on_log(f"Signal timeline: {n_samples} samples @ {fs:.0f} Hz "
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
 
