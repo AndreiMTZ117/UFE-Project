@@ -218,11 +218,11 @@ class NIDaqController:
                 gate = np.pad(gate, (0, n_samples - gate.size), mode="constant", constant_values=0)
             else:
                 gate = gate[:n_samples]
-        gate_u32 = (gate != 0).astype(np.uint32)
+        gate_bool = (gate != 0).astype(bool)
 
         if self.simulate:
             self.simulated_voltages = voltages.copy()
-            self.simulated_gate = gate_u32.astype(np.uint8)
+            self.simulated_gate = gate_bool.astype(np.uint8)
         else:
             try:
                 device = self._ao_channels[0].strip("/").split("/")[0]
@@ -243,7 +243,7 @@ class NIDaqController:
                 )
                 #preload fifo and dma buffers
                 self._ao_task.write(voltages, auto_start=False)
-                self._do_task.write(gate_u32, auto_start=False)
+                self._do_task.write(gate_bool, auto_start=False)
             except BaseException as error:
                 self.stop_and_clear()
                 logger.warning(
@@ -251,7 +251,7 @@ class NIDaqController:
                 )
                 self.simulate = True
                 self.simulated_voltages = voltages.copy()
-                self.simulated_gate = gate_u32.astype(np.uint8)
+                self.simulated_gate = gate_bool.astype(np.uint8)
 
         self._n_samples = n_samples
         self._state = self._STATE_LOADED
@@ -454,7 +454,7 @@ class NIDaqController:
                 do_task.do_channels.add_do_chan(
                     self._do_channel, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES
                 )
-                do_task.write(0, auto_start=True)
+                do_task.write(False, auto_start=True)
         except BaseException as error:
             logger.error("Could not switch laser gate off: %s", error)
         try:

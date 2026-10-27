@@ -63,6 +63,7 @@ class LogicaEjecucionMixin:
                 params["_receta_nombre"] = self.receta_activa.get("nombre", "Manual")
 
             self._pass_actual = 1
+            self._num_passes_total = int(params.get("num_passes", 1))
             self.puente.start_execution(
                 params_receta=params,
                 on_progress=self._cb_progreso,
@@ -81,7 +82,10 @@ class LogicaEjecucionMixin:
             self.panel_config.set_estado_pausa(is_paused)
         if is_paused:
             self.tiempo_ultima_pausa = time.time()
-            self.terminal.log(tr("log_pause"))
+            if not self.puente.es_simulacion and getattr(self, "_pass_actual", 1) < getattr(self, "_num_passes_total", 1):
+                self.terminal.log("[HW] Pausa solicitada: La pasada actual terminará limpiamente y el sistema esperará en reposo seguro.")
+            else:
+                self.terminal.log(tr("log_pause"))
         else:
             if self.tiempo_ultima_pausa > 0:
                 self.tiempo_pausa_acumulado += (time.time() - self.tiempo_ultima_pausa)
@@ -89,28 +93,8 @@ class LogicaEjecucionMixin:
             self.terminal.log(tr("log_resume"))
 
     def _on_click_stop(self):
-        """emergency stop with confirmation dialog"""
+        """emergency stop - immediately halts DAQ, shuts off laser, and returns to idle"""
         if not self.puente.is_running:
-            return
-
-        estaba_pausado = self.puente.is_paused
-        if not estaba_pausado:
-            self.puente.toggle_pause()
-            self.panel_derecho.set_estado_pausa(True)
-            if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
-                self.panel_config.set_estado_pausa(True)
-
-        es_framing = getattr(self, "_es_framing", False)
-        titulo = tr("dlg_cancel_framing_title") if es_framing else tr("dlg_cancel_exec_title")
-        pregunta = tr("dlg_cancel_framing_msg") if es_framing else tr("dlg_cancel_exec_msg")
-
-        confirma = messagebox.askyesno(titulo, pregunta)
-        if not confirma:
-            if not estaba_pausado:
-                self.puente.toggle_pause()
-                self.panel_derecho.set_estado_pausa(False)
-                if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
-                    self.panel_config.set_estado_pausa(False)
             return
 
         self._progreso_pendiente = None

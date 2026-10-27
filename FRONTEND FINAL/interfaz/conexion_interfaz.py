@@ -436,6 +436,9 @@ class PuenteLaser:
 
     def laser_off(self):
         """safely turn laser off"""
+        if hasattr(self, "daq_controller") and self.daq_controller and not self.daq_controller.simulate:
+            if getattr(self.daq_controller, "_do_task", None) is not None:
+                return
         if self.controlador_hardware:
             try:
                 if hasattr(self.controlador_hardware, "apagar_laser"):
@@ -445,9 +448,12 @@ class PuenteLaser:
 
     def center_galvos(self):
         """park mirrors at home position"""
-        if hasattr(self, "daq_controller") and self.daq_controller:
+        if hasattr(self, "daq_controller") and self.daq_controller and not self.daq_controller.simulate:
+            if getattr(self.daq_controller, "_ao_task", None) is not None:
+                return
             try:
                 self.daq_controller._park_outputs()
+                return
             except Exception:
                 pass
         if self.controlador_hardware:
@@ -723,11 +729,6 @@ class PuenteLaser:
         if self._esta_pausado:
             self._esta_pausado = False
             self._evento_pausa.set()
-            if hasattr(self.controlador_hardware, "encender_laser"):
-                try:
-                    self.controlador_hardware.encender_laser()
-                except Exception:
-                    pass
             return False
         else:
             self._esta_pausado = True
@@ -751,14 +752,6 @@ class PuenteLaser:
                 self.daq_controller.stop_and_clear()
             except Exception as e:
                 print(f"[PuenteLaser] Error al detener DAQ en E-STOP: {e}")
-        if self.controlador_hardware:
-            try:
-                if hasattr(self.controlador_hardware, "abortar_inmediato"):
-                    self.controlador_hardware.abortar_inmediato()
-                else:
-                    self.laser_off()
-            except Exception as e:
-                print(f"[PuenteLaser] Error al abortar hardware en E-STOP: {e}")
         self.laser_off()
         self.center_galvos()
 
@@ -911,12 +904,12 @@ class PuenteLaser:
                 if on_log:
                     on_log(f"[Framing ERROR] {e}")
             finally:
-                self.laser_off()
                 if hasattr(self, "daq_controller") and self.daq_controller:
                     try:
                         self.daq_controller.stop_and_clear()
                     except Exception:
                         pass
+                self.laser_off()
                 self._en_ejecucion = False
                 dur_s = round(time.time() - t_start, 2)
                 if on_finished:
@@ -1190,8 +1183,8 @@ class PuenteLaser:
                         state = "STOPPED"
                         break
 
-                    #pause, freeze timeline
-                    if not self._evento_pausa.is_set():
+                    #pause, freeze timeline (in simulation mode; in hardware mode, current pass finishes cleanly)
+                    if self.es_simulacion and not self._evento_pausa.is_set():
                         t_pausa = time.time()
                         while not self._evento_pausa.is_set():
                             if self._evento_detener.is_set():
@@ -1238,17 +1231,38 @@ class PuenteLaser:
                 if fb["on"] and not self._evento_detener.is_set():
                     _drain_feedback(final=True)
 
-                #laser off, clear daq
-                self.laser_off()
+                #clear daq, laser off
                 if hasattr(self, "daq_controller") and self.daq_controller:
                     try:
                         self.daq_controller.stop_and_clear()
                     except Exception:
                         pass
+                self.laser_off()
 
                 if self._evento_detener.is_set():
                     state = "STOPPED"
                     break
+
+                #inter-pass pause handling (Clean pause between passes)
+                if not self._evento_pausa.is_set() and pass_idx < num_passes:
+                    if on_log:
+                        on_log(
+                            f"[Pausa] Pasada {pass_idx}/{num_passes} completada limpiamente. "
+                            f"Sistema en reposo seguro (Láser apagado a 0V, espejos centrados). "
+                            f"Presione Reanudar para continuar con la pasada {pass_idx + 1}/{num_passes}."
+                        )
+                    while not self._evento_pausa.is_set():
+                        if self._evento_detener.is_set():
+                            state = "STOPPED"
+                            break
+                        time.sleep(0.05)
+
+                    if self._evento_detener.is_set():
+                        state = "STOPPED"
+                        break
+
+                    if on_log:
+                        on_log(f"[Reanudación] Reanudando ejecución para pasada {pass_idx + 1}/{num_passes}...")
 
                 #cooling between passes
                 if pass_idx < num_passes and cooling_delay_s > 0:
@@ -1284,21 +1298,14 @@ class PuenteLaser:
             on_log(f"[ERROR] Exception during execution: {e}")
 
         finally:
-            #failsafe: laser off, mirrors home
-            self.laser_off()
+            #failsafe: stop DAQ controller first, then laser off, mirrors home
             if hasattr(self, "daq_controller") and self.daq_controller:
                 try:
                     self.daq_controller.stop_and_clear()
                 except Exception as e_daq:
                     print(f"[PuenteLaser] DAQ cleanup notice in finally: {e_daq}")
-            if hasattr(self, "controlador_hardware") and self.controlador_hardware:
-                try:
-                    if hasattr(self.controlador_hardware, "abortar_inmediato"):
-                        self.controlador_hardware.abortar_inmediato()
-                    elif hasattr(self.controlador_hardware, "apagar_laser"):
-                        self.controlador_hardware.apagar_laser()
-                except Exception as e_hw:
-                    print(f"[PuenteLaser] Hardware cleanup notice in finally: {e_hw}")
+            self.laser_off()
+            self.center_galvos()
             duration_s = round(time.time() - t_start, 2)
 
             #tracking error metrics
