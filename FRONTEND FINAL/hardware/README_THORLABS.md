@@ -115,36 +115,36 @@ The system utilizes an **NI PXI-6229** Multifunction I/O module housed within an
                                                          |
          +-----------------------------------------------+
          |
-         |--> Pin 22 (Dev1/ao0) --------> Thorlabs Driver X: Command Input (+) [Pin 1]
+         |--> Pin 22 (PXI1Slot5/ao0) --------> Thorlabs Driver X: Command Input (+) [Pin 1]
          |--> Pin 55 (AO GND) ----------> Thorlabs Driver X: Command Input (-) [Pin 2]
          |
-         |--> Pin 21 (Dev1/ao1) --------> Thorlabs Driver Y: Command Input (+) [Pin 1]
+         |--> Pin 21 (PXI1Slot5/ao1) --------> Thorlabs Driver Y: Command Input (+) [Pin 1]
          |--> Pin 54 (AO GND) ----------> Thorlabs Driver Y: Command Input (-) [Pin 2]
          |
-         |--> Pin 52 (Dev1/port0/line0) -> High-Speed Gate Buffer / Optocoupler (+)
+         |--> Pin 52 (PXI1Slot5/port0/line0) -> High-Speed Gate Buffer / Optocoupler (+)
          |--> Pin 53 (DGND) ------------> Laser Modulation Common Return (-)
          |
          | [Optional Closed-Loop Hardware Feedback Tracking via Differential AI]
-         |--> Pin 68 (Dev1/ai0+) -------> Thorlabs Driver X: Position Output (+) [Pin 3]
-         |--> Pin 34 (Dev1/ai8 / ai0-) -> Thorlabs Driver X: Position Output (-) [Pin 4]
-         |--> Pin 33 (Dev1/ai1+) -------> Thorlabs Driver Y: Position Output (+) [Pin 3]
-         +--> Pin 66 (Dev1/ai9 / ai1-) -> Thorlabs Driver Y: Position Output (-) [Pin 4]
+         |--> Pin 68 (PXI1Slot5/ai0+) -------> Thorlabs Driver X: Position Output (+) [Pin 3]
+         |--> Pin 34 (PXI1Slot5/ai8 / ai0-) -> Thorlabs Driver X: Position Output (-) [Pin 4]
+         |--> Pin 33 (PXI1Slot5/ai1+) -------> Thorlabs Driver Y: Position Output (+) [Pin 3]
+         +--> Pin 66 (PXI1Slot5/ai9 / ai1-) -> Thorlabs Driver Y: Position Output (-) [Pin 4]
 ```
 
 ### 3.1 SCB-68A Terminal Connections Table
 
 | SCB-68A Terminal | Signal Name | Description | Thorlabs GVS112/M / Laser Connection |
 | :--- | :--- | :--- | :--- |
-| **Pin 22** | `Dev1/ao0` | Analog Output 0 (X-Axis deflection command) | Driver X, J4 Pin 1: Command Input (+) |
+| **Pin 22** | `PXI1Slot5/ao0` | Analog Output 0 (X-Axis deflection command) | Driver X, J4 Pin 1: Command Input (+) |
 | **Pin 55** | `AO GND` | Analog Ground (Reference for AO0) | Driver X, J4 Pin 2: Command Input (-) |
-| **Pin 21** | `Dev1/ao1` | Analog Output 1 (Y-Axis deflection command) | Driver Y, J4 Pin 1: Command Input (+) |
+| **Pin 21** | `PXI1Slot5/ao1` | Analog Output 1 (Y-Axis deflection command) | Driver Y, J4 Pin 1: Command Input (+) |
 | **Pin 54** | `AO GND` | Analog Ground (Reference for AO1) | Driver Y, J4 Pin 2: Command Input (-) |
-| **Pin 52** | `Dev1/port0/line0` | Digital Output (Hardware-timed Laser Gate) | Laser Gate Driver Input (TTL 5V = ON, 0V = OFF) |
+| **Pin 52** | `PXI1Slot5/port0/line0` | Digital Output (Hardware-timed Laser Gate) | Laser Gate Driver Input (TTL 5V = ON, 0V = OFF) |
 | **Pin 53** | `DGND` | Digital Ground | Laser Modulation Common Return (-) |
-| **Pin 68** | `Dev1/ai0` (+) | Analog Input 0 Positive (X Position Monitor) | Driver X, J4 Pin 3: Position Output (+) |
-| **Pin 34** | `Dev1/ai8` / `ai0` (-) | Analog Input 0 Negative (Differential return) | Driver X, J4 Pin 4: Position Output (-) |
-| **Pin 33** | `Dev1/ai1` (+) | Analog Input 1 Positive (Y Position Monitor) | Driver Y, J4 Pin 3: Position Output (+) |
-| **Pin 66** | `Dev1/ai9` / `ai1` (-) | Analog Input 1 Negative (Differential return) | Driver Y, J4 Pin 4: Position Output (-) |
+| **Pin 68** | `PXI1Slot5/ai0` (+) | Analog Input 0 Positive (X Position Monitor) | Driver X, J4 Pin 3: Position Output (+) |
+| **Pin 34** | `PXI1Slot5/ai8` / `ai0` (-) | Analog Input 0 Negative (Differential return) | Driver X, J4 Pin 4: Position Output (-) |
+| **Pin 33** | `PXI1Slot5/ai1` (+) | Analog Input 1 Positive (Y Position Monitor) | Driver Y, J4 Pin 3: Position Output (+) |
+| **Pin 66** | `PXI1Slot5/ai9` / `ai1` (-) | Analog Input 1 Negative (Differential return) | Driver Y, J4 Pin 4: Position Output (-) |
 | **Chassis Lug** | `SHIELD` | Cable Outer Braid Shield | Enclosure Star-Ground Grounding Lug |
 
 ### 3.2 Thorlabs Servo Driver Board Configuration
@@ -187,19 +187,19 @@ Because optical reflection doubles the angular deflection of the incident beam (
     "max": 10.0
   },
   "daq": {
-    "device_name": "Dev1",
+    "device_name": "PXI1Slot5",
     "analog_channels": [
-      "Dev1/ao0",
-      "Dev1/ao1"
+      "PXI1Slot5/ao0",
+      "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "Dev1/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line0",
     "ai_channels": [
-      "Dev1/ai0",
-      "Dev1/ai1"
+      "PXI1Slot5/ai0",
+      "PXI1Slot5/ai1"
     ],
     "ai_terminal_config": "DIFF",
     "sample_rate_hz": 100000.0,
-    "sync_clock": "/Dev1/ao/SampleClock",
+    "sync_clock": "/PXI1Slot5/ao/SampleClock",
     "feedback_sign_x": 1,
     "feedback_sign_y": 1,
     "feedback_offset_x_v": 0.0,
@@ -266,7 +266,7 @@ STATUS: ALL SYSTEM CRITICAL MODULES OPERATIONAL AND HARDENED.
 4. Gently touch the galvo motor housings; no high-frequency vibration, audible hum, or excessive heating should be present.
 
 ### Step 4: Full Pipeline Execution with Oscilloscope
-Connect oscilloscope probes to `Dev1/ao0` (Channel 1), `Dev1/ao1` (Channel 2), and `Dev1/port0/line0` (Channel 3) on the SCB-68A block. Run a diagnostic test cycle or comparative preview:
+Connect oscilloscope probes to `PXI1Slot5/ao0` (Channel 1), `PXI1Slot5/ao1` (Channel 2), and `PXI1Slot5/port0/line0` (Channel 3) on the SCB-68A block. Run a diagnostic test cycle or comparative preview:
 
 ```powershell
 python test_system_full.py
@@ -275,7 +275,7 @@ python test_system_full.py
 **Verification Criteria:**
 - Sample period Δt = 10.0 µs (100 kS/s).
 - Clean corner transitions with zero ringing or overshoot.
-- Digital laser modulation (`Dev1/port0/line0`) drops to 0.0 V (TTL LOW) during all rapid transit jumps (G0).
+- Digital laser modulation (`PXI1Slot5/port0/line0`) drops to 0.0 V (TTL LOW) during all rapid transit jumps (G0).
 
 ### Step 5: Low-Power Pilot Laser Beam Alignment
 1. Engage the red pilot diode (635 nm).

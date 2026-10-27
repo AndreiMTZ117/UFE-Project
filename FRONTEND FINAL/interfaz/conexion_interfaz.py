@@ -22,7 +22,7 @@ from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController, probe_feedback_hardware
-from core.config_loader import get_volts_per_mm, load_hardware_config
+from core.config_loader import ConfigError, get_daq_identity, get_volts_per_mm, load_hardware_config
 from database.recetas import GestorRecetas
 from database.trazabilidad import GestorTrazabilidad
 from interfaz.i18n import tr
@@ -226,6 +226,7 @@ class PuenteLaser:
 
         self.controlador_hardware: Optional[Any] = None
         self.es_simulacion = True
+        self.motivo_simulacion = ""  #why simulation is active (shown after a hardware scan)
         self._hw_lock = threading.Lock()
 
         #thorlabs profile
@@ -265,6 +266,8 @@ class PuenteLaser:
         #feedback tracking, off by default
         self.feedback_habilitado = False
         self.on_feedback_cb: Optional[Callable] = None  #callback(xy points list)
+        #callback(msg, critico) for hardware write failures; may be called from worker threads
+        self.on_alerta_hw_cb: Optional[Callable[[str, bool], None]] = None
         self.ultimo_tracking_rms_um: Optional[float] = None
         self.ultimo_tracking_max_um: Optional[float] = None
         self.ultimo_tracking_lag_ms: Optional[float] = None
@@ -276,19 +279,33 @@ class PuenteLaser:
         """probe physical hardware or switch to simulation"""
         try:
             from core.NIDaqController import probe_daq_hardware
-            daq_probe = probe_daq_hardware()
+            #the configured card must be present, not just any ni device in the chassis
+            try:
+                required = get_daq_identity(self.hardware_cfg)["device"]
+            except ConfigError as e:
+                self._enable_simulator(razon=str(e))
+                return
+            daq_probe = probe_daq_hardware(required_device=required)
             if daq_probe["available"]:
                 from hardware.controlador_thorlabs import ControladorThorlabsGVS
                 self.controlador_hardware = ControladorThorlabsGVS(tipo_interfaz="NI_DAQ")
+                self.controlador_hardware.on_alerta = self._emitir_alerta_hw
                 self.es_simulacion = False
+                self.motivo_simulacion = ""
                 print(f"[PuenteLaser] Thorlabs GVS112/M físico activo ({daq_probe['description']}).")
             else:
                 self._enable_simulator(razon=daq_probe["description"])
         except Exception as e:
             self._enable_simulator(razon=str(e))
 
+    def _emitir_alerta_hw(self, mensaje: str, critico: bool = False):
+        """forward hardware failure from controller to the gui"""
+        if self.on_alerta_hw_cb is not None:
+            self.on_alerta_hw_cb(mensaje, critico)
+
     def _enable_simulator(self, razon: str = ""):
         """start virtual simulation environment"""
+        self.motivo_simulacion = razon
         try:
             from hardware.simulador_thorlabs import SimuladorThorlabsGVS
             self.controlador_hardware = SimuladorThorlabsGVS()
@@ -304,6 +321,15 @@ class PuenteLaser:
         """try initializing physical thorlabs hardware"""
         self._init_hardware()
         return self.is_physically_connected()
+
+    def forzar_simulacion(self) -> bool:
+        """switch to virtual simulation on purpose, even if the daq card is present"""
+        if self.is_running:
+            return False
+        if not self.es_simulacion:
+            self.laser_off()  #park the real laser line before dropping the controller
+        self._enable_simulator(razon="selected manually")
+        return True
 
     def set_base_dimensions(self, ancho_cm: float, alto_cm: float):
         """set physical base dimensions and recalculate center"""

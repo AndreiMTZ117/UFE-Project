@@ -62,6 +62,7 @@ class AppLaserCTk(
 
         #backend bridge
         self.puente = PuenteLaser()
+        self.puente.on_alerta_hw_cb = self._cb_alerta_hw
         self.receta_activa: Dict = {}
         self.lista_recetas: List[Dict] = []
 

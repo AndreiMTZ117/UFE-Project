@@ -115,36 +115,36 @@ Systém využívá multifunkční I/O kartu **NI PXI-6229** umístěnou v šasi 
                                                          |
          +-----------------------------------------------+
          |
-         |--> Pin 22 (Dev1/ao0) --------> Ovladač Thorlabs X: Řídicí vstup (+) [Pin 1]
+         |--> Pin 22 (PXI1Slot5/ao0) --------> Ovladač Thorlabs X: Řídicí vstup (+) [Pin 1]
          |--> Pin 55 (AO GND) ----------> Ovladač Thorlabs X: Řídicí vstup (-) [Pin 2]
          |
-         |--> Pin 21 (Dev1/ao1) --------> Ovladač Thorlabs Y: Řídicí vstup (+) [Pin 1]
+         |--> Pin 21 (PXI1Slot5/ao1) --------> Ovladač Thorlabs Y: Řídicí vstup (+) [Pin 1]
          |--> Pin 54 (AO GND) ----------> Ovladač Thorlabs Y: Řídicí vstup (-) [Pin 2]
          |
-         |--> Pin 52 (Dev1/port0/line0) -> Hradlový oddělovač / optočlen laseru (+)
+         |--> Pin 52 (PXI1Slot5/port0/line0) -> Hradlový oddělovač / optočlen laseru (+)
          |--> Pin 53 (DGND) ------------> Zpětný vodič modulace laseru (-)
          |
          | [Volitelná zpětná vazba polohy zrcadel přes diferenciální AI]
-         |--> Pin 68 (Dev1/ai0+) -------> Ovladač Thorlabs X: Monitor polohy (+) [Pin 3]
-         |--> Pin 34 (Dev1/ai8 / ai0-) -> Ovladač Thorlabs X: Monitor polohy (-) [Pin 4]
-         |--> Pin 33 (Dev1/ai1+) -------> Ovladač Thorlabs Y: Monitor polohy (+) [Pin 3]
-         +--> Pin 66 (Dev1/ai9 / ai1-) -> Ovladač Thorlabs Y: Monitor polohy (-) [Pin 4]
+         |--> Pin 68 (PXI1Slot5/ai0+) -------> Ovladač Thorlabs X: Monitor polohy (+) [Pin 3]
+         |--> Pin 34 (PXI1Slot5/ai8 / ai0-) -> Ovladač Thorlabs X: Monitor polohy (-) [Pin 4]
+         |--> Pin 33 (PXI1Slot5/ai1+) -------> Ovladač Thorlabs Y: Monitor polohy (+) [Pin 3]
+         +--> Pin 66 (PXI1Slot5/ai9 / ai1-) -> Ovladač Thorlabs Y: Monitor polohy (-) [Pin 4]
 ```
 
 ### 3.1 Tabulka zapojení svorkovnice SCB-68A
 
 | Svorka SCB-68A | Název signálu | Popis signálu | Připojení Thorlabs GVS112/M / Laser |
 | :--- | :--- | :--- | :--- |
-| **Pin 22** | `Dev1/ao0` | Analogový výstup 0 (výchylka osy X) | Ovladač X, konektor J4 Pin 1: Řídicí vstup (+) |
+| **Pin 22** | `PXI1Slot5/ao0` | Analogový výstup 0 (výchylka osy X) | Ovladač X, konektor J4 Pin 1: Řídicí vstup (+) |
 | **Pin 55** | `AO GND` | Analogová zem (reference pro AO0) | Ovladač X, konektor J4 Pin 2: Řídicí vstup (-) |
-| **Pin 21** | `Dev1/ao1` | Analogový výstup 1 (výchylka osy Y) | Ovladač Y, konektor J4 Pin 1: Řídicí vstup (+) |
+| **Pin 21** | `PXI1Slot5/ao1` | Analogový výstup 1 (výchylka osy Y) | Ovladač Y, konektor J4 Pin 1: Řídicí vstup (+) |
 | **Pin 54** | `AO GND` | Analogová zem (reference pro AO1) | Ovladač Y, konektor J4 Pin 2: Řídicí vstup (-) |
-| **Pin 52** | `Dev1/port0/line0` | Digitální výstup (řízené hradlování laseru) | Vstup modulace laseru (TTL 5V = ZAP, 0V = VYP) |
+| **Pin 52** | `PXI1Slot5/port0/line0` | Digitální výstup (řízené hradlování laseru) | Vstup modulace laseru (TTL 5V = ZAP, 0V = VYP) |
 | **Pin 53** | `DGND` | Digitální zem | Společná signálová zem modulace laseru (-) |
-| **Pin 68** | `Dev1/ai0` (+) | Analogový vstup 0 kladný (monitor polohy X) | Ovladač X, konektor J4 Pin 3: Výstup polohy (+) |
-| **Pin 34** | `Dev1/ai8` / `ai0` (-) | Analogový vstup 0 záporný (diferenciální návrat) | Ovladač X, konektor J4 Pin 4: Výstup polohy (-) |
-| **Pin 33** | `Dev1/ai1` (+) | Analogový vstup 1 kladný (monitor polohy Y) | Ovladač Y, konektor J4 Pin 3: Výstup polohy (+) |
-| **Pin 66** | `Dev1/ai9` / `ai1` (-) | Analogový vstup 1 záporný (diferenciální návrat) | Ovladač Y, konektor J4 Pin 4: Výstup polohy (-) |
+| **Pin 68** | `PXI1Slot5/ai0` (+) | Analogový vstup 0 kladný (monitor polohy X) | Ovladač X, konektor J4 Pin 3: Výstup polohy (+) |
+| **Pin 34** | `PXI1Slot5/ai8` / `ai0` (-) | Analogový vstup 0 záporný (diferenciální návrat) | Ovladač X, konektor J4 Pin 4: Výstup polohy (-) |
+| **Pin 33** | `PXI1Slot5/ai1` (+) | Analogový vstup 1 kladný (monitor polohy Y) | Ovladač Y, konektor J4 Pin 3: Výstup polohy (+) |
+| **Pin 66** | `PXI1Slot5/ai9` / `ai1` (-) | Analogový vstup 1 záporný (diferenciální návrat) | Ovladač Y, konektor J4 Pin 4: Výstup polohy (-) |
 | **Svorník šasi** | `SHIELD` | Vnější stínění kabelu | Centrální zemnicí bod (star ground) šasi |
 
 ### 3.2 Konfigurace servozesilovačů Thorlabs
@@ -187,19 +187,19 @@ Jelikož optický odraz zdvojnásobuje úhlovou výchylku dopadajícího svazku 
     "max": 10.0
   },
   "daq": {
-    "device_name": "Dev1",
+    "device_name": "PXI1Slot5",
     "analog_channels": [
-      "Dev1/ao0",
-      "Dev1/ao1"
+      "PXI1Slot5/ao0",
+      "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "Dev1/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line0",
     "ai_channels": [
-      "Dev1/ai0",
-      "Dev1/ai1"
+      "PXI1Slot5/ai0",
+      "PXI1Slot5/ai1"
     ],
     "ai_terminal_config": "DIFF",
     "sample_rate_hz": 100000.0,
-    "sync_clock": "/Dev1/ao/SampleClock",
+    "sync_clock": "/PXI1Slot5/ao/SampleClock",
     "feedback_sign_x": 1,
     "feedback_sign_y": 1,
     "feedback_offset_x_v": 0.0,
@@ -266,7 +266,7 @@ STATUS: ALL SYSTEM CRITICAL MODULES OPERATIONAL AND HARDENED.
 4. Lehce se dotkněte těl motorů galva; nesmí vykazovat žádné vysokofrekvenční oscilace, bzučení ani nadměrné zahřívání.
 
 ### Krok 4: Testování trajektorie s osciloskopem
-Připojte sondy osciloskopu ke svorkám `Dev1/ao0` (kanál 1), `Dev1/ao1` (kanál 2) a `Dev1/port0/line0` (kanál 3) na bloku SCB-68A. Spusťte testovací cyklus:
+Připojte sondy osciloskopu ke svorkám `PXI1Slot5/ao0` (kanál 1), `PXI1Slot5/ao1` (kanál 2) a `PXI1Slot5/port0/line0` (kanál 3) na bloku SCB-68A. Spusťte testovací cyklus:
 
 ```powershell
 python test_system_full.py
@@ -275,7 +275,7 @@ python test_system_full.py
 **Kritéria ověření:**
 - Vzorkovací perioda signálu odpovídá Δt = 10.0 µs (100 kS/s).
 - Přechody v rozích jsou čisté bez překmitů (overshoot) a zvonění.
-- Signál modulace laseru (`Dev1/port0/line0`) spolehlivě padá na 0.0 V (úroveň TTL LOW) během všech přejezdů naprázdno (G0).
+- Signál modulace laseru (`PXI1Slot5/port0/line0`) spolehlivě padá na 0.0 V (úroveň TTL LOW) během všech přejezdů naprázdno (G0).
 
 ### Krok 5: Seřízení polohy pomocí červeného zaměřovacího laseru
 1. Zapněte červenou zaměřovací diodu (635 nm).

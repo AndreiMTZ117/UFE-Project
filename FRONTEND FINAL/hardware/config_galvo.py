@@ -30,5 +30,7 @@ LASER_OFF_DELAY_US = 20
 JUMP_DELAY_US      = 150
 MARK_DELAY_US      = 50
 
-#dac interface mode
+#default interface mode used ONLY when ControladorThorlabsGVS() is built without arguments.
+#'SIMULACION' = never touch the daq (safe default). The gui does not use this value: it
+#probes the hardware on startup / on the 'Scan...' action and passes the mode explicitly.
 TIPO_INTERFAZ_DAC = 'SIMULACION'

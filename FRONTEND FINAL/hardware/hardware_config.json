@@ -5,19 +5,19 @@
     "max": 10.0
   },
   "daq": {
-    "device_name": "Dev1",
+    "device_name": "PXI1Slot5",
     "analog_channels": [
-      "Dev1/ao0",
-      "Dev1/ao1"
+      "PXI1Slot5/ao0",
+      "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "Dev1/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line0",
     "ai_channels": [
-      "Dev1/ai0",
-      "Dev1/ai1"
+      "PXI1Slot5/ai0",
+      "PXI1Slot5/ai1"
     ],
     "ai_terminal_config": "DIFF",
     "sample_rate_hz": 100000.0,
-    "sync_clock": "/Dev1/ao/SampleClock",
+    "sync_clock": "/PXI1Slot5/ao/SampleClock",
     "feedback_sign_x": 1,
     "feedback_sign_y": 1,
     "feedback_offset_x_v": 0.0,

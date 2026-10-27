@@ -35,8 +35,7 @@ class GestionDatosMixin:
             self.terminal.log(tr("log_hw_sim"))
 
         #display state in com port selector
-        estado_hw = "Thorlabs GVS112/M" if conectado_fisico else "Virtual Simulation"
-        self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
+        self._refrescar_selector_hw()
 
         #dxf files
         dxfs = self.puente.list_dxf_files()

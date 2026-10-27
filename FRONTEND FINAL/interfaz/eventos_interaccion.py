@@ -12,18 +12,53 @@ from interfaz.i18n import tr
 class EventosInteraccionMixin:
     """mixin processing user interface events and callbacks"""
 
+    _OPCION_SIMULACION = "Virtual Simulation"
+    _OPCION_HARDWARE = "Thorlabs GVS112/M"
+
+    def _refrescar_selector_hw(self):
+        """fill the hardware dropdown: current state, simulation choice (if hardware is active) and scan"""
+        conectado = self.puente.is_physically_connected()
+        estado_hw = self._OPCION_HARDWARE if conectado else self._OPCION_SIMULACION
+        opciones = [estado_hw]
+        if conectado:
+            opciones.append(self._OPCION_SIMULACION)
+        self.barra_superior.set_puertos_com(opciones, seleccionado=estado_hw)
+
     def _on_com_seleccionado(self, val: str):
-        """handle hardware detection and rescan"""
-        if hasattr(self.puente, "detect_hardware"):
+        """handle hardware detection, rescan and explicit simulation choice"""
+        if val == self._OPCION_SIMULACION:
+            if hasattr(self.puente, "forzar_simulacion"):
+                self.puente.forzar_simulacion()
+        elif hasattr(self.puente, "detect_hardware"):
             self.puente.detect_hardware()
         conectado = self.puente.is_physically_connected()
         self.barra_superior.set_estado_com(conectado)
-        estado_hw = "Thorlabs GVS112/M" if conectado else "Virtual Simulation"
-        self.barra_superior.set_puertos_com([estado_hw], seleccionado=estado_hw)
+        self._refrescar_selector_hw()
         modo = "Physical Hardware" if conectado else "Virtual Simulation"
         self.terminal.log(tr("log_hw_mode", mode=modo))
+        motivo = getattr(self.puente, "motivo_simulacion", "")
+        if not conectado and motivo:
+            self.terminal.log(f"[HW] {motivo}")
         if hasattr(self, "_iniciar_feedback_ui"):
             self._iniciar_feedback_ui()
+
+    def _cb_alerta_hw(self, mensaje: str, critico: bool = False):
+        """show hardware failure in terminal and dialog, safe to call from any thread"""
+        try:
+            self.after(0, self._mostrar_alerta_hw, mensaje, critico)
+        except Exception:
+            pass  #window already closed
+
+    def _mostrar_alerta_hw(self, mensaje: str, critico: bool):
+        if getattr(self, "_cerrando", False):
+            return
+        self.terminal.log(f"[HW] {mensaje}")
+        if critico and not getattr(self, "_dialogo_alerta_hw_abierto", False):
+            self._dialogo_alerta_hw_abierto = True
+            try:
+                messagebox.showwarning("Hardware", mensaje)
+            finally:
+                self._dialogo_alerta_hw_abierto = False
 
     def _on_click_load_file(self):
         """open file browser to select dxf drawing"""

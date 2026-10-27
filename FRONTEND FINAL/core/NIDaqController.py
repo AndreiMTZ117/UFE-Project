@@ -6,7 +6,7 @@ import time
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Sequence, Type
 import numpy as np
-from core.config_loader import get_volts_per_mm, load_hardware_config
+from core.config_loader import ConfigError, get_daq_identity, get_volts_per_mm, load_hardware_config
 try:  #optional driver import
     import nidaqmx  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     from nidaqmx.constants import AcquisitionType, LineGrouping  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
@@ -135,13 +135,18 @@ class NIDaqController:
 
         daq_cfg = self.config.get("daq", {})
 
-        #fallback from configuration
-        if ao_channels is None:
-            ao_channels = tuple(daq_cfg.get("analog_channels", ("Dev1/ao0", "Dev1/ao1")))
-        if do_channel is None:
-            do_channel = str(daq_cfg.get("laser_gate_channel", "Dev1/port0/line0"))
+        #fallback from configuration (device identity must come from hardware_config.json)
+        if ao_channels is None or do_channel is None:
+            try:
+                identity = get_daq_identity(self.config)
+            except ConfigError as error:
+                raise NIDaqError(str(error)) from error
+            if ao_channels is None:
+                ao_channels = tuple(identity["analog_channels"])
+            if do_channel is None:
+                do_channel = identity["laser_gate_channel"]
         if f_s is None:
-            f_s = float(daq_cfg.get("sample_rate_hz", daq_cfg.get("f_s", 100_000.0)))
+            f_s = float(daq_cfg["sample_rate_hz"])
         if sync_clock is not None:
             self._sync_clock = sync_clock
 
@@ -256,16 +261,15 @@ class NIDaqController:
     def _feedback_cfg(self) -> Dict[str, Any]:
         """resolve feedback settings from daq config section"""
         daq_cfg = self.config.get("daq", {})
-        device = str(daq_cfg.get("device_name", "Dev1")).strip().strip("/") or "Dev1"
-        channels = daq_cfg.get("ai_channels") or [f"{device}/ai0", f"{device}/ai1"]
+        identity = get_daq_identity(self.config)
         return {
-            "device": device,
-            "channels": [str(c) for c in channels][:2],
-            "terminal": str(daq_cfg.get("ai_terminal_config", "DIFF")).strip().upper(),
-            "sign_x": -1.0 if float(daq_cfg.get("feedback_sign_x", 1)) < 0 else 1.0,
-            "sign_y": -1.0 if float(daq_cfg.get("feedback_sign_y", 1)) < 0 else 1.0,
-            "offset_x": float(daq_cfg.get("feedback_offset_x_v", 0.0)),
-            "offset_y": float(daq_cfg.get("feedback_offset_y_v", 0.0)),
+            "device": identity["device"],
+            "channels": identity["ai_channels"][:2],
+            "terminal": str(daq_cfg["ai_terminal_config"]).strip().upper(),
+            "sign_x": -1.0 if float(daq_cfg["feedback_sign_x"]) < 0 else 1.0,
+            "sign_y": -1.0 if float(daq_cfg["feedback_sign_y"]) < 0 else 1.0,
+            "offset_x": float(daq_cfg["feedback_offset_x_v"]),
+            "offset_y": float(daq_cfg["feedback_offset_y_v"]),
             "volts_per_mm": get_volts_per_mm(self.config),
         }
 
@@ -464,8 +468,11 @@ class NIDaqController:
             logger.error("Could not park analog outputs at 0 V: %s", error)
 
 
-def probe_daq_hardware() -> Dict[str, Any]:
-    """probe if physical daq hardware is present and operational"""
+def probe_daq_hardware(required_device: Optional[str] = None) -> Dict[str, Any]:
+    """probe if physical daq hardware is present and operational
+
+    if required_device is given, the configured card must be among the detected devices
+    """
     info: Dict[str, Any] = {
         "available": False,
         "driver_loaded": False,
@@ -480,7 +487,11 @@ def probe_daq_hardware() -> Dict[str, Any]:
         info["driver_loaded"] = True
         devs = [d.name for d in system.devices]
         info["devices"] = devs
-        if devs:
+        if devs and required_device and required_device not in devs:
+            info["description"] = (
+                f"Configured DAQ device '{required_device}' not found (detected: {', '.join(devs)})"
+            )
+        elif devs:
             info["available"] = True
             info["description"] = f"Physical DAQ hardware detected ({', '.join(devs)})"
         else:
@@ -504,11 +515,10 @@ def probe_feedback_hardware(config: Optional[Dict[str, Any]] = None) -> tuple:
     try:
         cfg = config if config is not None else load_hardware_config()
         daq_cfg = cfg.get("daq", {})
-        device = str(daq_cfg.get("device_name", "Dev1")).strip().strip("/") or "Dev1"
-        channels = list(daq_cfg.get("ai_channels") or [f"{device}/ai0", f"{device}/ai1"])[:2]
+        channels = get_daq_identity(cfg)["ai_channels"][:2]
         term = (
             TerminalConfiguration.RSE
-            if str(daq_cfg.get("ai_terminal_config", "DIFF")).strip().upper() == "RSE"
+            if str(daq_cfg["ai_terminal_config"]).strip().upper() == "RSE"
             else TerminalConfiguration.DIFF
         )
         with nidaqmx.Task("ProbeFeedbackAI") as task:

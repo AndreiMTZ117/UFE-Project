@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+#device identity (device_name, channels) has no default on purpose: a wrong
+#fallback could drive voltages on a different card, so it must come from the json
 DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
     "volts_per_mm": 0.200,
     "voltage_limits": {
@@ -19,14 +21,8 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "max": 10.0,
     },
     "daq": {
-        "device_name": "Dev1",
-        "analog_channels": ["Dev1/ao0", "Dev1/ao1"],
-        "laser_gate_channel": "Dev1/port0/line0",
-        "ai_channels": ["Dev1/ai0", "Dev1/ai1"],
         "ai_terminal_config": "DIFF",   #terminal configuration mode
-        "f_s": 100000.0,
         "sample_rate_hz": 100000.0,
-        "sync_clock": "/Dev1/ao/SampleClock",
         "feedback_sign_x": 1,
         "feedback_sign_y": 1,
         "feedback_offset_x_v": 0.0,
@@ -38,6 +34,32 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "rdp_tolerance": 0.0,
     },
 }
+
+REQUIRED_DAQ_KEYS = ("device_name", "analog_channels", "laser_gate_channel", "ai_channels")
+
+
+class ConfigError(ValueError):
+    """raised when a required hardware setting is missing from the config"""
+
+
+def get_daq_identity(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """return validated daq device and channel names, fail loudly if missing"""
+    cfg = config if config is not None else load_hardware_config()
+    daq_cfg = cfg.get("daq", {})
+    missing = [k for k in REQUIRED_DAQ_KEYS if not daq_cfg.get(k)]
+    if missing:
+        raise ConfigError(
+            f"hardware_config.json is missing required 'daq' keys: {', '.join(missing)} "
+            f"(file: {HARDWARE_CONFIG_PATH})"
+        )
+    device = str(daq_cfg["device_name"]).strip().strip("/")
+    return {
+        "device": device,
+        "analog_channels": [str(c) for c in daq_cfg["analog_channels"]],
+        "laser_gate_channel": str(daq_cfg["laser_gate_channel"]),
+        "ai_channels": [str(c) for c in daq_cfg["ai_channels"]],
+        "sync_clock": daq_cfg.get("sync_clock") or f"/{device}/ao/SampleClock",
+    }
 
 
 HARDWARE_CONFIG_PATH: str = os.path.abspath(
