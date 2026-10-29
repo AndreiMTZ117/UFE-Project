@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 #device identity (device_name, channels) has no default on purpose: a wrong
 #fallback could drive voltages on a different card, so it must come from the json
 DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
-    "volts_per_mm": 0.200,
+    "volts_per_mm": 0.02535,
     "voltage_limits": {
         "min": -10.0,
         "max": 10.0,
@@ -37,7 +37,7 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "pincushion_kx": 0.0,
         "pincushion_ky": 0.0,
-        "field_half_width_mm": 50.0,
+        "field_half_width_mm": 193.5,
     },
 }
 
@@ -73,17 +73,11 @@ HARDWARE_CONFIG_PATH: str = os.path.abspath(
 )
 
 
-def find_hardware_config_path(explicit_path: Optional[str] = None) -> Optional[str]:
-    """resolve path to hardware config"""
-    target = explicit_path if explicit_path else HARDWARE_CONFIG_PATH
-    return target if os.path.isfile(target) else None
-
-
 def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """load hardware config from json or fallback defaults"""
-    resolved_path = find_hardware_config_path(config_path)
+    resolved_path = config_path or HARDWARE_CONFIG_PATH
 
-    if not resolved_path:
+    if not os.path.isfile(resolved_path):
         target_name = config_path or "hardware_config.json"
         msg = f"Hardware configuration file '{target_name}' not found. Loading safe fallback defaults."
         logger.warning(msg)
@@ -118,4 +112,4 @@ def get_volts_per_mm(config: Optional[Dict[str, Any]] = None) -> float:
         return float(cfg["volts_per_mm"])
     if "galvo_dynamics" in cfg and "volts_per_mm" in cfg["galvo_dynamics"]:
         return float(cfg["galvo_dynamics"]["volts_per_mm"])
-    return 0.200
+    return 0.02535

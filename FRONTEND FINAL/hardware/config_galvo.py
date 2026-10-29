@@ -1,11 +1,20 @@
 # -*- coding: utf-8 -*-
 """thorlabs gvs112 galvo parameters"""
 
-#optical field limits in mm
-CAMPO_X_MIN_MM = -50.0
-CAMPO_X_MAX_MM =  50.0
-CAMPO_Y_MIN_MM = -50.0
-CAMPO_Y_MAX_MM =  50.0
+DISTANCIA_LENTE_BASE_CM = 56.5
+
+#physical base (work area) in cm
+#changing CAMPO_ANCHO_CM / CAMPO_ALTO_CM automatically updates the mm limits and default base
+CAMPO_ANCHO_CM = 37.7    #physical width covered by the full optical field (x)
+CAMPO_ALTO_CM  = 38.5    #physical height covered by the full optical field (y)
+BASE_ANCHO_CM_DEFAULT = CAMPO_ANCHO_CM
+BASE_ALTO_CM_DEFAULT  = CAMPO_ALTO_CM
+
+#optical field limits in mm (1 cm = 10 mm, centered at 0.0 mm = 0 V)
+CAMPO_X_MIN_MM = -(CAMPO_ANCHO_CM * 10.0) / 2.0
+CAMPO_X_MAX_MM =  (CAMPO_ANCHO_CM * 10.0) / 2.0
+CAMPO_Y_MIN_MM = -(CAMPO_ALTO_CM * 10.0) / 2.0
+CAMPO_Y_MAX_MM =  (CAMPO_ALTO_CM * 10.0) / 2.0
 
 LIMITES_GALVO = {
     'x_min': CAMPO_X_MIN_MM,

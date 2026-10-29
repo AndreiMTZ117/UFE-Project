@@ -30,6 +30,7 @@ class LogicaEjecucionMixin:
                     return
 
             #2. validate dxf file
+            self.panel_general._cb_dimensiones_cambiadas()
             if not self.puente.trazos_calibrados:
                 messagebox.showwarning(tr("dlg_missing_dxf_title"), tr("dlg_missing_dxf_msg"))
                 self._ejecutando_inicio = False
@@ -131,6 +132,7 @@ class LogicaEjecucionMixin:
         if self.puente.is_running:
             return
 
+        self.panel_general._cb_dimensiones_cambiadas()
         if not self.puente.trazos_calibrados:
             messagebox.showwarning(tr("dlg_missing_geom_title"), tr("dlg_missing_geom_msg"))
             return
@@ -231,17 +233,7 @@ class LogicaEjecucionMixin:
     #hardware feedback tracking
     def _hw_a_cm(self, x_hw: float, y_hw: float):
         """convert hardware coordinates in mm to canvas cm"""
-        cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
-        cal_ancho = cfg.get("marco_ancho_cm", 10.0)
-        cal_alto = cfg.get("marco_alto_cm", 10.0)
-        rango_x = self.puente.x_max_limit - self.puente.x_min_limit
-        rango_y = self.puente.y_max_limit - self.puente.y_min_limit
-        kx = cal_ancho / rango_x if rango_x > 0 else 1.0
-        ky = cal_alto / rango_y if rango_y > 0 else 1.0
-        return (
-            self.puente.ancho_base_cm / 2.0 + (x_hw - self.puente.centro_x) * kx,
-            self.puente.alto_base_cm / 2.0 + (y_hw - self.puente.centro_y) * ky,
-        )
+        return self.puente.hw_to_cm(x_hw, y_hw)
 
     def _iniciar_feedback_ui(self):
         """connect feedback callback and probe hardware availability"""
@@ -329,21 +321,12 @@ class LogicaEjecucionMixin:
         if getattr(self, '_cerrando', False) or not self.puente.is_running:
             return
         try:
-            cfg = HARDWARE_CONFIG.get(self.puente.hal_actual, HARDWARE_CONFIG["thorlabs_galvo"])
-            cal_ancho = cfg.get("marco_ancho_cm", 10.0)
-            cal_alto = cfg.get("marco_alto_cm", 10.0)
-            rango_x = self.puente.x_max_limit - self.puente.x_min_limit
-            rango_y = self.puente.y_max_limit - self.puente.y_min_limit
-            kx = cal_ancho / rango_x if rango_x > 0 else 1.0
-            ky = cal_alto / rango_y if rango_y > 0 else 1.0
-
             #verify pass change
             pass_en_curso = getattr(self.puente, "pass_actual", 1)
             if pass_en_curso > getattr(self, "_pass_actual", 1):
                 self._on_nueva_pasada(pass_en_curso)
 
-            cm_x_real = self.puente.ancho_base_cm / 2.0 + (x - self.puente.centro_x) * kx
-            cm_y_real = self.puente.alto_base_cm / 2.0 + (y - self.puente.centro_y) * ky
+            cm_x_real, cm_y_real = self.puente.hw_to_cm(x, y)
             cm_x = round(cm_x_real, 2)
             cm_y = round(cm_y_real, 2)
 
@@ -354,7 +337,7 @@ class LogicaEjecucionMixin:
             #update laser pointer position on canvas
             self.panel_general.actualizar_puntero(cm_x_real, cm_y_real)
 
-            trazos_cm = getattr(self.puente, 'trazos_fisicos_cm', None)
+            trazos_cm = self.puente.trazos_ejecucion_cm
             ancla = getattr(self, '_ancla_trazo', None)
             ultimo_seg = getattr(self, '_ultimo_seg_activo', None)
 
@@ -451,8 +434,9 @@ class LogicaEjecucionMixin:
                 vy = max(-10.0, min(10.0, round(volt_y, 3)))
             else:
                 scale_v = getattr(self.puente, "escala_voltaje_v_mm", None) or get_volts_per_mm()
-                vx = max(-10.0, min(10.0, round((x - self.puente.centro_x) * scale_v, 3)))
-                vy = max(-10.0, min(10.0, round((y - self.puente.centro_y) * scale_v, 3)))
+                #voltage is absolute: 0 v = hardware origin = base center
+                vx = max(-10.0, min(10.0, round(x * scale_v, 3)))
+                vy = max(-10.0, min(10.0, round(y * scale_v, 3)))
             self.panel_derecho.actualizar_voltajes(vx, vy, laser_on)
 
             #circular progress gauges
@@ -526,16 +510,13 @@ class LogicaEjecucionMixin:
             if estado in ("COMPLETADO", "COMPLETED"):
                 self.panel_derecho.dibujar_gauges(100.0, 100.0)
                 self.panel_derecho.set_estado_sistema("COMPLETED")
-                #mark all trajectories complete on successful finish
-                trazos_cm = getattr(self.puente, 'trazos_fisicos_cm', None)
-                if trazos_cm:
-                    for ruta in trazos_cm:
-                        for s in range(1, len(ruta)):
-                            p1, p2 = ruta[s - 1], ruta[s]
-                            self.panel_general.agregar_segmento_completado(p1, p2, forzar=True)
-                            self.trazos_completados.append((p1, p2))
+                self._ancla_trazo = None
+                self._ultimo_seg_activo = None
+                self.panel_derecho.ancla_vivo = None
+                trazos_ref = getattr(self.puente, 'trazos_fisicos_cm', self.puente.trazos_calibrados)
+                if trazos_ref:
                     self.panel_derecho.redibujar_trace(
-                        trazos_cm,
+                        trazos_ref,
                         self.trazos_completados,
                         self.pos_laser_actual,
                         self.trazos_pasadas_previas

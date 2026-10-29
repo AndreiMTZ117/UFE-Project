@@ -214,9 +214,12 @@ class EventosInteraccionMixin:
         if self.puente.is_running:
             return
         self.puente.set_center_cm(x, y)
-        self.pos_laser_actual = (x, y)
-        self.panel_general.set_centro(x, y)
-        self.panel_derecho.actualizar_coordenadas(x, y)
+        cx = self.puente.centro_cm_x
+        cy = self.puente.centro_cm_y
+        self.pos_laser_actual = (cx, cy)
+        self.panel_derecho.set_centro(cx, cy)
+        self.panel_general.set_centro(cx, cy)
+        self.panel_derecho.actualizar_coordenadas(cx, cy)
         if not self.puente.is_running:
             self.puente.center_galvos()
         self.terminal.log(tr("log_home_set", x=x, y=y))
@@ -228,9 +231,11 @@ class EventosInteraccionMixin:
         """update physical base dimensions and recalculate center"""
         if self.puente.is_running:
             return
-        self.puente.set_base_dimensions(ancho_cm, alto_cm)
+        ancho_cm, alto_cm = self.puente.set_base_dimensions(ancho_cm, alto_cm)
         cx = self.puente.centro_cm_x
         cy = self.puente.centro_cm_y
+        #show the applied (possibly limited) size in the entries
+        self.panel_general.actualizar_dimensiones(ancho_cm, alto_cm)
         self.pos_laser_actual = (cx, cy)
         self.panel_derecho.set_centro(cx, cy)
         self.panel_general.set_centro(cx, cy)

@@ -6,7 +6,7 @@ import time
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Sequence, Type
 import numpy as np
-from core.config_loader import ConfigError, get_daq_identity, get_volts_per_mm, load_hardware_config
+from core.config_loader import ConfigError, get_daq_identity, load_hardware_config
 try:  #optional driver import
     import nidaqmx  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     from nidaqmx.constants import AcquisitionType, LineGrouping  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
@@ -103,7 +103,6 @@ class NIDaqController:
         mode = "SIMULATION" if self.simulate else "HARDWARE"
         logger.info("NIDaqController created (%s mode).", mode)
 
-    #context
     def __enter__(self) -> "NIDaqController":
         return self
 
@@ -121,7 +120,6 @@ class NIDaqController:
         """current state of controller"""
         return self._state
 
-    #setup
     def setup_hardware(
         self,
         ao_channels: Optional[Sequence[str]] = None,
@@ -186,7 +184,6 @@ class NIDaqController:
         mode_str = "SIMULATION" if self.simulate else "HARDWARE"
         logger.info("Configured AO=%s DO=%s at %.0f Hz (%s mode).", self._ao_channels, self._do_channel, f_s, mode_str)
 
-    #buffers
     def write_buffers(self, voltage_matrix_2xn: np.ndarray, laser_gate_vector: np.ndarray) -> None:
         """validate and transfer waveforms to card buffers"""
         if self._state not in (self._STATE_CONFIGURED, self._STATE_LOADED):
@@ -218,7 +215,7 @@ class NIDaqController:
                 gate = np.pad(gate, (0, n_samples - gate.size), mode="constant", constant_values=0)
             else:
                 gate = gate[:n_samples]
-        gate_bool = (gate != 0).astype(bool)
+        gate_bool = gate != 0
 
         if self.simulate:
             self.simulated_voltages = voltages.copy()
@@ -270,10 +267,8 @@ class NIDaqController:
             "sign_y": -1.0 if float(daq_cfg["feedback_sign_y"]) < 0 else 1.0,
             "offset_x": float(daq_cfg["feedback_offset_x_v"]),
             "offset_y": float(daq_cfg["feedback_offset_y_v"]),
-            "volts_per_mm": get_volts_per_mm(self.config),
         }
 
-    #hardware feedback
     def enable_feedback(self) -> bool:
         """create optional ai task to read position monitor"""
         self.feedback_active = False
@@ -340,7 +335,6 @@ class NIDaqController:
             except BaseException:
                 pass
 
-    #emission
     def start_emission(self) -> None:
         """arm tasks and release master clock"""
         if self._state != self._STATE_LOADED:
@@ -403,7 +397,6 @@ class NIDaqController:
             self.stop_and_clear()
             raise
 
-    #shutdown
     def stop_and_clear(self) -> None:
         """safe shutdown outputs at 0v and laser off"""
         try:
@@ -419,7 +412,6 @@ class NIDaqController:
                     self._state = self._STATE_IDLE
                     logger.info("Outputs parked and DAQmx resources released.")
 
-    #internals
     def _stop_tasks(self) -> None:
         """stop running timed tasks"""
         for task in (self._do_task, self._ao_task, self._ai_task):
@@ -475,7 +467,6 @@ def probe_daq_hardware(required_device: Optional[str] = None) -> Dict[str, Any]:
     """
     info: Dict[str, Any] = {
         "available": False,
-        "driver_loaded": False,
         "devices": [],
         "description": "nidaqmx Python package not installed"
     }
@@ -484,7 +475,6 @@ def probe_daq_hardware(required_device: Optional[str] = None) -> Dict[str, Any]:
 
     try:
         system = nidaqmx.system.System.local()
-        info["driver_loaded"] = True
         devs = [d.name for d in system.devices]
         info["devices"] = devs
         if devs and required_device and required_device not in devs:
@@ -504,7 +494,6 @@ def probe_daq_hardware(required_device: Optional[str] = None) -> Dict[str, Any]:
 
     info["is_physical"] = info["available"]
     info["label"] = info["description"]
-    info["installed"] = bool(NIDAQMX_AVAILABLE and nidaqmx is not None)
     return info
 
 

@@ -34,7 +34,6 @@ class GalvoSignalGenerator:
         """initialize galvo signal generator"""
         #resolve configuration dictionary
         cfg = config if config is not None else load_hardware_config(config_path)
-        self.config: Dict[str, Any] = cfg
 
         daq_cfg = cfg.get("daq", {})
         dyn_cfg = cfg.get("galvo_dynamics", {})
@@ -75,11 +74,9 @@ class GalvoSignalGenerator:
         if pincushion_ky is None:
             pincushion_ky = float(dist_cfg.get("pincushion_ky", 0.0)) if correction_enabled else 0.0
         if field_half_width_mm is None:
-            field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 50.0))
-
+            field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 193.5))
         if field_half_width_mm <= 0:
             raise ValueError("field_half_width_mm must be positive.")
-
         if sample_rate_hz <= 0:
             raise ValueError("sample_rate_hz must be positive.")
         if scale_factor_v_per_mm <= 0:
@@ -121,17 +118,12 @@ class GalvoSignalGenerator:
     def _apply_pincushion_correction(self, positions: np.ndarray) -> np.ndarray:
         """
         Apply cross-axis geometric pre-distortion to counteract optical pincushion distortion.
-
         Mathematical model:
             X_corr = X * (1 - k_x * (Y / W)^2)
             Y_corr = Y * (1 - k_y * (X / W)^2)
-
         where W is field_half_width_mm (scan field half-width).
         """
         if self.pincushion_kx == 0.0 and self.pincushion_ky == 0.0:
-            return positions
-
-        if positions.shape[0] == 0:
             return positions
 
         w = self.field_half_width_mm
@@ -230,14 +222,7 @@ class GalvoSignalGenerator:
         #clamp voltages to safe limits
         voltages = np.clip(voltages, v_min, v_max)
 
-        #match gate length with voltage matrix
         gate_out = gate.reshape(1, -1)
-        if gate_out.shape[1] != voltages.shape[1]:
-            if gate_out.shape[1] < voltages.shape[1]:
-                diff = voltages.shape[1] - gate_out.shape[1]
-                gate_out = np.pad(gate_out, ((0, 0), (0, diff)), mode="constant", constant_values=0)
-            else:
-                gate_out = gate_out[:, :voltages.shape[1]]
 
         logger.info(
             "Generated %d samples (%.3f ms at %.0f Hz).",

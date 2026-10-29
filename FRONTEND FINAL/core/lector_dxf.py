@@ -16,8 +16,7 @@ def entidades_recursivas(entidades, profundidad=0, max_profundidad=12):
         if dxftype in ('INSERT', 'DIMENSION'):
             try:
                 sub_entidades = entidad.explode()
-                for sub in entidades_recursivas(sub_entidades, profundidad + 1, max_profundidad):
-                    yield sub
+                yield from entidades_recursivas(sub_entidades, profundidad + 1, max_profundidad)
             except Exception:
                 pass
         elif dxftype in ('VIEWPORT', 'MTEXT', 'TEXT', 'POINT', 'HATCH', 'IMAGE', 'UNDERLAY', 'WIPEOUT'):
@@ -50,9 +49,8 @@ class LectorDXF:
             return []
 
         trayectorias_laser = []
-        entidades_planas = list(entidades_recursivas(self.espacio_modelo))
 
-        for entidad in entidades_planas:
+        for entidad in entidades_recursivas(self.espacio_modelo):
             try:
                 trazo = path.make_path(entidad)
             except (TypeError, AttributeError):
@@ -67,9 +65,7 @@ class LectorDXF:
             ultimo_pt = None
 
             for v in vertices:
-                x = round(v.x, 4)
-                y = round(v.y, 4)
-                pt = (x, y)
+                pt = (round(v.x, 4), round(v.y, 4))
                 if pt != ultimo_pt:
                     coordenadas_trazo.append(pt)
                     ultimo_pt = pt
@@ -85,8 +81,5 @@ def obtener_limites_dxf(trayectorias):
     puntos = [p for ruta in trayectorias for p in ruta]
     if not puntos:
         return 0.0, 1.0, 0.0, 1.0
-    min_x = min(p[0] for p in puntos)
-    max_x = max(p[0] for p in puntos)
-    min_y = min(p[1] for p in puntos)
-    max_y = max(p[1] for p in puntos)
-    return min_x, max_x, min_y, max_y
+    xs, ys = zip(*puntos)
+    return min(xs), max(xs), min(ys), max(ys)

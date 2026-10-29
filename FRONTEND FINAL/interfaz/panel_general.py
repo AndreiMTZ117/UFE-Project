@@ -38,10 +38,10 @@ class PanelGeneral(ctk.CTkFrame):
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        self.ancho_base_cm = 28.0
-        self.alto_base_cm = 25.0
-        self.centro_home = (14.0, 12.5)
-        self.pos_puntero: Tuple[float, float] = (14.0, 12.5)
+        self.ancho_base_cm = 37.7
+        self.alto_base_cm = 38.5
+        self.centro_home = (self.ancho_base_cm / 2.0, self.alto_base_cm / 2.0)
+        self.pos_puntero: Tuple[float, float] = self.centro_home
         self.frame_box_cm: Optional[Tuple[float, float, float, float]] = None
         self._frustum_zoom_cm: Optional[Tuple[float, float, float, float]] = None
 
@@ -210,7 +210,7 @@ class PanelGeneral(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_dim_x.insert(0, "28.0")
+        self.entry_dim_x.insert(0, f"{self.ancho_base_cm:.1f}")
         self.entry_dim_x.pack(side="left", padx=2, pady=2)
         self.entry_dim_x.bind("<Return>", lambda e: self._cb_dimensiones_cambiadas())
         self.entry_dim_x.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
@@ -242,7 +242,7 @@ class PanelGeneral(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_dim_y.insert(0, "25.0")
+        self.entry_dim_y.insert(0, f"{self.alto_base_cm:.1f}")
         self.entry_dim_y.pack(side="left", padx=2, pady=2)
         self.entry_dim_y.bind("<Return>", lambda e: self._cb_dimensiones_cambiadas())
         self.entry_dim_y.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
@@ -285,6 +285,8 @@ class PanelGeneral(ctk.CTkFrame):
             ancho = float(self.entry_dim_x.get().strip())
             alto = float(self.entry_dim_y.get().strip())
             if ancho > 0 and alto > 0:
+                if abs(ancho - self.ancho_base_cm) < 1e-4 and abs(alto - self.alto_base_cm) < 1e-4:
+                    return
                 self.ocultar_frame_dxf()
                 self.ancho_base_cm = ancho
                 self.alto_base_cm = alto
@@ -374,16 +376,16 @@ class PanelGeneral(ctk.CTkFrame):
         try:
             rango_w = float(self.ancho_base_cm)
             if rango_w <= 0 or math.isnan(rango_w) or math.isinf(rango_w):
-                rango_w = 28.0
+                rango_w = 38.7
         except Exception:
-            rango_w = 28.0
+            rango_w = 38.7
 
         try:
             rango_h = float(self.alto_base_cm)
             if rango_h <= 0 or math.isnan(rango_h) or math.isinf(rango_h):
-                rango_h = 25.0
+                rango_h = 39.5
         except Exception:
-            rango_h = 25.0
+            rango_h = 39.5
 
         #strict 1 to 1 isometric scale
         self._escala_pixel = min(avail_w / rango_w, avail_h / rango_h) * 0.96

@@ -49,8 +49,6 @@ class GCodeParser:
         arc_tolerance_mm: float = 0.01,
     ) -> None:
         """initialize gcode parser"""
-        if not isinstance(file_path, (str, os.PathLike)):
-            raise TypeError("file_path must be a string or path-like object.")
         if default_feed_mm_s <= 0 or rapid_speed_mm_s <= 0 or arc_tolerance_mm <= 0:
             raise ValueError("Speeds and arc tolerance must be strictly positive.")
 
@@ -66,7 +64,6 @@ class GCodeParser:
         self._absolute: bool = True
         self._unit_scale: float = 1.0
 
-    #api
     def parse(self) -> List[TrajectoryBlock]:
         """read and parse gcode file into trajectory blocks"""
         if not os.path.isfile(self.file_path):
@@ -92,7 +89,6 @@ class GCodeParser:
         logger.info("Parsed %d trajectory blocks from %s", len(blocks), self.file_path)
         return blocks
 
-    #internals
     def _reset_state(self) -> None:
         """reset modal machine state before parsing"""
         self._x = 0.0

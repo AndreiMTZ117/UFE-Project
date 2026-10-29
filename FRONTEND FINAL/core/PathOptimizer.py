@@ -47,7 +47,6 @@ class PathOptimizer:
         self.connection_tolerance: float = connection_tolerance
         self.max_2opt_passes: int = max_2opt_passes
 
-    #rdp
     @staticmethod
     def rdp(points: np.ndarray, epsilon: float) -> np.ndarray:
         """rdp polyline simplification using numpy"""
@@ -82,7 +81,6 @@ class PathOptimizer:
                 stack.append((split, last))
         return array[keep]
 
-    #tsp
     def tsp_2opt(
         self, contours: Sequence[np.ndarray], start_point: Optional[Point] = None
     ) -> List[np.ndarray]:
@@ -166,7 +164,6 @@ class PathOptimizer:
                 break
         return order, flips
 
-    #orchestration
     def optimize(self, trajectories: Sequence[TrajectoryBlock]) -> List[TrajectoryBlock]:
         """simplify contours and reorder to minimize rapid travel"""
         for block in trajectories:
@@ -255,7 +252,6 @@ class PathOptimizer:
         return total
 
 
-#helpers
 def simplificar_trayectoria_rdp(
     puntos: Sequence[Point],
     epsilon: float = 0.01,
@@ -278,16 +274,14 @@ def fusionar_trazos_contiguos(
     fusionados: List[List[Point]] = []
     for trazo in trazos:
         trazo_list = [tuple(p) for p in trazo]
-        if fusionados and math.hypot(trazo_list[0][0] - fusionados[-1][-1][0],
-                                     trazo_list[0][1] - fusionados[-1][-1][1]) <= tol_union:
+        if fusionados and math.dist(trazo_list[0], fusionados[-1][-1]) <= tol_union:
             fusionados[-1].extend(trazo_list[1:])
         else:
             fusionados.append(trazo_list)
 
     for trazo in fusionados:
         if len(trazo) >= 3:
-            dist_cierre = math.hypot(trazo[-1][0] - trazo[0][0], trazo[-1][1] - trazo[0][1])
-            if 0.0001 < dist_cierre <= (tol_union * 1.5):
+            if 0.0001 < math.dist(trazo[-1], trazo[0]) <= (tol_union * 1.5):
                 trazo.append(trazo[0])
 
     return fusionados
@@ -303,10 +297,9 @@ def optimizar_y_unir_trazos(
     if not valid:
         return []
 
-    optimizer = PathOptimizer()
-    ordered = optimizer.tsp_2opt(valid, start_point=pos_inicial)
-    tuple_paths: List[List[Point]] = [
-        [(float(x), float(y)) for x, y in contour] for contour in ordered
-    ]
-    return fusionar_trazos_contiguos(tuple_paths, tol_union=tol_union)
+    ordered = PathOptimizer(epsilon=0.0).tsp_2opt(valid, start_point=pos_inicial)
+    return fusionar_trazos_contiguos(
+        [[(float(x), float(y)) for x, y in contour] for contour in ordered],
+        tol_union=tol_union,
+    )
 

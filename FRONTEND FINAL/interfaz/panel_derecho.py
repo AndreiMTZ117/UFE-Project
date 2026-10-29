@@ -52,18 +52,18 @@ class PanelDerecho(ctk.CTkFrame):
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self._trazos_bboxes: Optional[List[Tuple[float, float, float, float]]] = None
-        self.centro_home = (14.00, 12.50)
-        self.pos_laser_actual = (14.00, 12.50)
+        self.centro_home = (19.35, 19.75)
+        self.pos_laser_actual = (19.35, 19.75)
         self._ultimo_estado = "READY"
 
         #free navigation and tracking camera mode
         self.modo_auto_centrado = True
-        self.centro_camara_cm = (14.00, 12.50)
+        self.centro_camara_cm = (19.35, 19.75)
         self._pan_iniciado = False
         self._pan_arrastrando = False
         self._pan_start_x = 0
         self._pan_start_y = 0
-        self._pan_cam_start = (14.00, 12.50)
+        self._pan_cam_start = (19.35, 19.75)
 
         self.pct_trace = 0.0
         self.pct_total = 0.0
@@ -380,7 +380,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.lbl_coord_live = ctk.CTkLabel(
             self.coord_badge,
-            text="x = 14.00 cm  |  y = 12.50 cm",
+            text="x = 19.35 cm  |  y = 19.75 cm",
             font=self.f_bold,
             text_color=COLOR_TEXT,
             padx=10,
@@ -420,7 +420,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_x.insert(0, "14.00")
+        self.entry_home_x.insert(0, "19.35")
         self.entry_home_x.pack(side="left", padx=4)
         ctk.CTkLabel(row_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
@@ -439,7 +439,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_y.insert(0, "12.50")
+        self.entry_home_y.insert(0, "19.75")
         self.entry_home_y.pack(side="left", padx=4)
         ctk.CTkLabel(row_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
@@ -887,7 +887,7 @@ class PanelDerecho(ctk.CTkFrame):
                     self._trazos_bboxes = bboxes
 
                 #rapid jump g0 lines
-                hx, hy = getattr(self, "centro_home", (14.0, 12.5))
+                hx, hy = getattr(self, "centro_home", (19.35, 19.75))
                 pos_salto = (hx, hy)
                 viajes = []
                 for ruta in self.trazos_actuales:

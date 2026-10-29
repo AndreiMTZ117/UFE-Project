@@ -47,7 +47,7 @@ def _run():
     if not edges:
         raise RuntimeError("No geometry found in DXF file: " + dxf_path)
 
-    wires = [w for w in Part.sortEdges(edges)]
+    wires = Part.sortEdges(edges)
     commands = []
     cursor = None
     for edge_list in wires:
@@ -116,7 +116,6 @@ class CADConverter:
     ) -> None:
         """initialize cad converter options"""
         cfg = config if config is not None else load_hardware_config(config_path)
-        self.config: Dict[str, Any] = cfg
         cad_cam_cfg = cfg.get("cad_cam", {})
 
         if freecad_cmd is None:
@@ -136,7 +135,7 @@ class CADConverter:
         if not dxf_path or not os.path.isfile(dxf_path) or os.path.getsize(dxf_path) == 0:
             raise FileNotFoundError(f"DXF file not found or empty: {dxf_path!r}")
 
-        if output_gcode_path is None or not str(output_gcode_path).strip():
+        if not (output_gcode_path or "").strip():
             raise ValueError("output_gcode_path must be explicitly specified.")
 
         if not output_gcode_path.lower().endswith(_ALLOWED_EXTENSIONS):
@@ -159,9 +158,7 @@ class CADConverter:
 
         dxf_abs = os.path.abspath(dxf_path)
         out_abs = os.path.abspath(output_gcode_path)
-        out_dir = os.path.dirname(out_abs)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(out_abs), exist_ok=True)
 
         #remove stale output
         if os.path.isfile(out_abs):
@@ -178,7 +175,7 @@ class CADConverter:
         })
 
         try:
-            result: Optional[subprocess.CompletedProcess] = subprocess.run(
+            result = subprocess.run(
                 [executable, "-c", _FREECAD_SCRIPT],
                 capture_output=True,
                 text=True,

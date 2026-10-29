@@ -1,14 +1,14 @@
 {
-  "volts_per_mm": 0.200,
+  "volts_per_mm": 0.02535,
   "voltage_limits": {
     "min": -10.0,
     "max": 10.0
   },
   "distortion_correction": {
     "enabled": true,
-    "pincushion_kx": 0.035,
-    "pincushion_ky": 0.035,
-    "field_half_width_mm": 50.0
+    "pincushion_kx": -0.05,
+    "pincushion_ky": -0.05,
+    "field_half_width_mm": 188.5
   },
   "daq": {
     "device_name": "PXI1Slot5",

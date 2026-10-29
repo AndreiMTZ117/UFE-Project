@@ -112,10 +112,14 @@ def load_hardware_profile() -> Dict[str, Any]:
             CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
             CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
             ESCALA_DIBUJO, ROTAR_90_GRADOS,
-            VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S
+            VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
+            CAMPO_ANCHO_CM, CAMPO_ALTO_CM,
+            BASE_ANCHO_CM_DEFAULT, BASE_ALTO_CM_DEFAULT
         )
-        field_w_cm = round((CAMPO_X_MAX_MM - CAMPO_X_MIN_MM) / 10.0, 2)
-        field_h_cm = round((CAMPO_Y_MAX_MM - CAMPO_Y_MIN_MM) / 10.0, 2)
+        field_w_cm = float(CAMPO_ANCHO_CM)
+        field_h_cm = float(CAMPO_ALTO_CM)
+        base_w_cm = min(float(BASE_ANCHO_CM_DEFAULT), field_w_cm)
+        base_h_cm = min(float(BASE_ALTO_CM_DEFAULT), field_h_cm)
         return {
             "clave": "thorlabs_galvo",
             "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
@@ -125,8 +129,8 @@ def load_hardware_profile() -> Dict[str, Any]:
             "y_max": CAMPO_Y_MAX_MM,
             "centro_x": 0.0,
             "centro_y": 0.0,
-            "ancho_base_cm": field_w_cm,
-            "alto_base_cm": field_h_cm,
+            "ancho_base_cm": base_w_cm,
+            "alto_base_cm": base_h_cm,
             "marco_ancho_cm": field_w_cm,
             "marco_alto_cm": field_h_cm,
             "escala_dibujo": ESCALA_DIBUJO,
@@ -139,11 +143,11 @@ def load_hardware_profile() -> Dict[str, Any]:
         return {
             "clave": "thorlabs_galvo",
             "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
-            "x_min": -50.0, "x_max": 50.0,
-            "y_min": -50.0, "y_max": 50.0,
+            "x_min": -193.5, "x_max": 193.5,
+            "y_min": -197.5, "y_max": 197.5,
             "centro_x": 0.0, "centro_y": 0.0,
-            "ancho_base_cm": 10.0, "alto_base_cm": 10.0,
-            "marco_ancho_cm": 10.0, "marco_alto_cm": 10.0,
+            "ancho_base_cm": 38.7, "alto_base_cm": 39.5,
+            "marco_ancho_cm": 38.7, "marco_alto_cm": 39.5,
             "escala_dibujo": 0.90, "rotar_90_grados": False,
             "velocidad_trazado": 500.0, "velocidad_viaje": 2000.0,
         }
@@ -251,6 +255,7 @@ class PuenteLaser:
         self.trazos_originales: List[List[Tuple[float, float]]] = []
         self.trazos_calibrados: List[List[Tuple[float, float]]] = []
         self.trazos_fisicos_cm: List[List[Tuple[float, float]]] = []
+        self.trazos_ejecucion_cm: List[List[Tuple[float, float]]] = []
         self.bloques_gcode_crudos: List[TrajectoryBlock] = []
         self.bloques_gcode_optimizados: List[TrajectoryBlock] = []
         self.daq_controller: Optional[NIDaqController] = None
@@ -331,39 +336,83 @@ class PuenteLaser:
         self._enable_simulator(razon="selected manually")
         return True
 
-    def set_base_dimensions(self, ancho_cm: float, alto_cm: float):
-        """set physical base dimensions and recalculate center"""
-        self.ancho_base_cm = float(ancho_cm)
-        self.alto_base_cm = float(alto_cm)
+    #base geometry and cm <-> hardware mapping
+    #the hardware origin (cfg centro_x/centro_y, 0 mm = 0 v) is ALWAYS the center of the base:
+    #    x_cm = ancho_base_cm / 2 + (x_hw - origen_x) * kx
+    #the origin never moves when the base size changes, only the perimeter around it does.
+    def _escala_cm_por_mm(self) -> Tuple[float, float]:
+        """cm per hardware mm for each axis (full optical field calibration)"""
+        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
+        range_x = self.x_max_limit - self.x_min_limit
+        range_y = self.y_max_limit - self.y_min_limit
+        kx = cfg.get("marco_ancho_cm", 38.7) / range_x if range_x > 0 else 1.0
+        ky = cfg.get("marco_alto_cm", 39.5) / range_y if range_y > 0 else 1.0
+        return kx, ky
+
+    def get_hw_origin(self) -> Tuple[float, float]:
+        """hardware coordinates (mm) of the base center, laser aim at 0 v"""
+        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
+        return float(cfg["centro_x"]), float(cfg["centro_y"])
+
+    def hw_to_cm(self, x_hw: float, y_hw: float) -> Tuple[float, float]:
+        """convert hardware coordinates in mm to base coordinates in cm"""
+        kx, ky = self._escala_cm_por_mm()
+        ox, oy = self.get_hw_origin()
+        return (
+            self.ancho_base_cm / 2.0 + (float(x_hw) - ox) * kx,
+            self.alto_base_cm / 2.0 + (float(y_hw) - oy) * ky,
+        )
+
+    def cm_to_hw(self, x_cm: float, y_cm: float) -> Tuple[float, float]:
+        """convert base coordinates in cm to hardware coordinates in mm"""
+        kx, ky = self._escala_cm_por_mm()
+        ox, oy = self.get_hw_origin()
+        return (
+            ox + (float(x_cm) - self.ancho_base_cm / 2.0) / kx,
+            oy + (float(y_cm) - self.alto_base_cm / 2.0) / ky,
+        )
+
+    def get_base_limits_hw(self) -> Tuple[float, float, float, float]:
+        """base perimeter in hardware mm (x_min, x_max, y_min, y_max), always around the origin"""
+        kx, ky = self._escala_cm_por_mm()
+        ox, oy = self.get_hw_origin()
+        half_x = (self.ancho_base_cm / 2.0) / kx
+        half_y = (self.alto_base_cm / 2.0) / ky
+        return (
+            max(self.x_min_limit, ox - half_x), min(self.x_max_limit, ox + half_x),
+            max(self.y_min_limit, oy - half_y), min(self.y_max_limit, oy + half_y),
+        )
+
+    def set_base_dimensions(self, ancho_cm: float, alto_cm: float) -> Tuple[float, float]:
+        """set physical base dimensions; the center stays fixed at the hardware origin.
+
+        sizes are limited to the optical field. returns the applied (width, height) in cm.
+        """
+        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
+        max_w = float(cfg.get("marco_ancho_cm", 38.7))
+        max_h = float(cfg.get("marco_alto_cm", 39.5))
+        self.ancho_base_cm = max(0.1, min(max_w, float(ancho_cm)))
+        self.alto_base_cm = max(0.1, min(max_h, float(alto_cm)))
         self.centro_cm_x = round(self.ancho_base_cm / 2.0, 2)
         self.centro_cm_y = round(self.alto_base_cm / 2.0, 2)
-        self.centro_x = HARDWARE_CONFIG["thorlabs_galvo"]["centro_x"]
-        self.centro_y = HARDWARE_CONFIG["thorlabs_galvo"]["centro_y"]
+        self.centro_x, self.centro_y = self.get_hw_origin()
         print(f"[PuenteLaser] Dimensiones base: {self.ancho_base_cm:.1f} x {self.alto_base_cm:.1f} cm")
+        return self.ancho_base_cm, self.alto_base_cm
 
     def set_center_cm(self, x_cm: float, y_cm: float):
         """set center in cm for manual user adjustment"""
-        self.centro_cm_x = float(x_cm)
-        self.centro_cm_y = float(y_cm)
+        #the home point must stay inside the base perimeter
+        x_cm = max(0.0, min(self.ancho_base_cm, float(x_cm)))
+        y_cm = max(0.0, min(self.alto_base_cm, float(y_cm)))
 
-        cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        cal_width = cfg.get("marco_ancho_cm", 10.0)
-        cal_height = cfg.get("marco_alto_cm", 10.0)
-        range_x = self.x_max_limit - self.x_min_limit
-        range_y = self.y_max_limit - self.y_min_limit
-        kx = cal_width / range_x if range_x > 0 else 1.0
-        ky = cal_height / range_y if range_y > 0 else 1.0
+        hw_x, hw_y = self.cm_to_hw(x_cm, y_cm)
+        self.centro_x = round(max(self.x_min_limit, min(self.x_max_limit, hw_x)), 3)
+        self.centro_y = round(max(self.y_min_limit, min(self.y_max_limit, hw_y)), 3)
 
-        dx_cm = self.centro_cm_x - (self.ancho_base_cm / 2.0)
-        dy_cm = self.centro_cm_y - (self.alto_base_cm / 2.0)
-
-        hw_cx = cfg["centro_x"]
-        hw_cy = cfg["centro_y"]
-        self.centro_x = round(hw_cx + (dx_cm / kx), 3)
-        self.centro_y = round(hw_cy + (dy_cm / ky), 3)
-
-        self.centro_x = max(self.x_min_limit, min(self.x_max_limit, self.centro_x))
-        self.centro_y = max(self.y_min_limit, min(self.y_max_limit, self.centro_y))
+        #cm values derived from the clamped hardware point so gui and laser always agree
+        cm_x, cm_y = self.hw_to_cm(self.centro_x, self.centro_y)
+        self.centro_cm_x = round(cm_x, 2)
+        self.centro_cm_y = round(cm_y, 2)
         print(f"[PuenteLaser] Centro manual: ({self.centro_cm_x:.2f}, {self.centro_cm_y:.2f}) cm -> HW: ({self.centro_x:.2f}, {self.centro_y:.2f})")
 
     #recipes db
@@ -447,21 +496,25 @@ class PuenteLaser:
                 print(f"[PuenteLaser] Error apagando laser: {e}")
 
     def center_galvos(self):
-        """park mirrors at home position"""
+        """park mirrors at home position (base center = hardware origin, 0 v, unless moved manually)"""
+        origin = self.get_hw_origin()
+        home_is_origin = (abs(self.centro_x - origin[0]) < 1e-9 and abs(self.centro_y - origin[1]) < 1e-9)
         if hasattr(self, "daq_controller") and self.daq_controller and not self.daq_controller.simulate:
             if getattr(self.daq_controller, "_ao_task", None) is not None:
                 return
             try:
                 self.daq_controller._park_outputs()
+                if not home_is_origin and self.controlador_hardware and hasattr(self.controlador_hardware, "ir_a_posicion"):
+                    self.controlador_hardware.ir_a_posicion(self.centro_x, self.centro_y)
                 return
             except Exception:
                 pass
         if self.controlador_hardware:
             try:
-                if hasattr(self.controlador_hardware, "center"):
+                if hasattr(self.controlador_hardware, "ir_a_posicion"):
+                    self.controlador_hardware.ir_a_posicion(self.centro_x, self.centro_y)
+                elif hasattr(self.controlador_hardware, "center"):
                     self.controlador_hardware.center()
-                elif hasattr(self.controlador_hardware, "ir_a_posicion"):
-                    self.controlador_hardware.ir_a_posicion(0.0, 0.0)
             except Exception as e:
                 print(f"[PuenteLaser] Error centrando galvos: {e}")
 
@@ -625,8 +678,9 @@ class PuenteLaser:
         min_len = float(params_receta.get("longitud_min_trazo", 0.01))
 
         cfg = HARDWARE_CONFIG["thorlabs_galvo"]
-        cal_width = cfg.get("marco_ancho_cm", 10.0)
-        cal_height = cfg.get("marco_alto_cm", 10.0)
+        cal_width = cfg.get("marco_ancho_cm", 38.7)
+        cal_height = cfg.get("marco_alto_cm", 39.5)
+        area_x_min, area_x_max, area_y_min, area_y_max = self.get_base_limits_hw()
 
         self.trazos_calibrados = transform_and_scale_dxf(
             self.trazos_originales,
@@ -646,7 +700,9 @@ class PuenteLaser:
             longitud_min_trazo=min_len,
             optimizar_recorrido=True,
             centro_x=self.centro_x,
-            centro_y=self.centro_y
+            centro_y=self.centro_y,
+            area_x_min=area_x_min, area_x_max=area_x_max,
+            area_y_min=area_y_min, area_y_max=area_y_max
         )
 
         #invert and swap axes
@@ -664,21 +720,13 @@ class PuenteLaser:
 
         #paths in cm for canvas
         self.trazos_fisicos_cm = []
-        range_x = self.x_max_limit - self.x_min_limit
-        range_y = self.y_max_limit - self.y_min_limit
-        kx = cal_width / range_x if range_x > 0 else 1.0
-        ky = cal_height / range_y if range_y > 0 else 1.0
-
-        base_cx = self.ancho_base_cm / 2.0
-        base_cy = self.alto_base_cm / 2.0
-
         for route in self.trazos_calibrados:
             route_cm = []
             for xs, ys in route:
-                x_cm = base_cx + (xs - self.centro_x) * kx
-                y_cm = base_cy + (ys - self.centro_y) * ky
+                x_cm, y_cm = self.hw_to_cm(xs, ys)
                 route_cm.append((round(x_cm, 3), round(y_cm, 3)))
             self.trazos_fisicos_cm.append(route_cm)
+        self.trazos_ejecucion_cm = self.trazos_fisicos_cm
 
         min_x, max_x, min_y, max_y = obtener_limites_dxf(self.trazos_calibrados)
         total_points = sum(len(t) for t in self.trazos_calibrados)
@@ -830,6 +878,8 @@ class PuenteLaser:
                 on_log(tr("log_framing_speed", speed=v_jump))
 
             try:
+                self.hardware_cfg = load_hardware_config()
+                self.escala_voltaje_v_mm = get_volts_per_mm(self.hardware_cfg)
                 fs = 5000.0
                 generator = GalvoSignalGenerator(
                     blocks,
@@ -954,6 +1004,9 @@ class PuenteLaser:
             on_finished("ERROR", "No calculated paths to execute", 0)
             return
 
+        self.hardware_cfg = load_hardware_config()
+        self.escala_voltaje_v_mm = get_volts_per_mm(self.hardware_cfg)
+
         v_mark = float(params.get("velocidad_trazado", 500.0))
         v_jump = float(params.get("velocidad_viaje", 2000.0))
         min_dur_seg = int(params.get("duracion_min_segmento_ms", 10))
@@ -1058,6 +1111,11 @@ class PuenteLaser:
                 config=self.hardware_cfg,
             )
             voltages, gate = generator.generate_signals()
+            self.trazos_ejecucion_cm = [
+                [self.hw_to_cm(float(x), float(y)) for x, y in generator._apply_pincushion_correction(np.asarray(r, dtype=np.float64))]
+                if r else []
+                for r in paths
+            ]
             n_samples = int(voltages.shape[1])
             k_last = n_samples - 1
             if generator.pincushion_kx != 0.0 or generator.pincushion_ky != 0.0:
