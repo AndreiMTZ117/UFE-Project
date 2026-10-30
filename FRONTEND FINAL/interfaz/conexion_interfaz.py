@@ -270,7 +270,6 @@ class PuenteLaser:
 
         #feedback tracking, off by default
         self.feedback_habilitado = False
-        self.on_feedback_cb: Optional[Callable] = None  #callback(xy points list)
         #callback(msg, critico) for hardware write failures; may be called from worker threads
         self.on_alerta_hw_cb: Optional[Callable[[str, bool], None]] = None
         self.ultimo_tracking_rms_um: Optional[float] = None
@@ -1151,13 +1150,6 @@ class PuenteLaser:
                         fb["chunks_meas"].append(meas)
                         fb["chunks_cmd"].append(cmd)
                         fb["idx"] = i1
-                        if self.on_feedback_cb is not None:
-                            step = max(1, (i1 - i0) // 10)
-                            sub = meas[:, ::step] / scale_v
-                            try:
-                                self.on_feedback_cb(list(zip(sub[0].tolist(), sub[1].tolist())))
-                            except Exception:
-                                pass
                     if not final or fb["idx"] >= n_samples:
                         return
 

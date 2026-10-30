@@ -161,7 +161,7 @@ class BarraSuperior(ctk.CTkFrame):
             command=self._cb_feedback,
             font=self.f_bold,
             text_color=COLOR_TEXT,
-            progress_color="#D946EF",
+            progress_color=COLOR_GREEN,
             switch_width=34,
             switch_height=16
         )

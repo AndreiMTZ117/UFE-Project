@@ -38,16 +38,12 @@ class PanelGeneral(ctk.CTkFrame):
         self.trazos_actuales: List[List[Tuple[float, float]]] = []
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
-        self.ancho_base_cm = 37.7
-        self.alto_base_cm = 38.5
+        self.ancho_base_cm = 37.5
+        self.alto_base_cm = 38.3
         self.centro_home = (self.ancho_base_cm / 2.0, self.alto_base_cm / 2.0)
         self.pos_puntero: Tuple[float, float] = self.centro_home
         self.frame_box_cm: Optional[Tuple[float, float, float, float]] = None
         self._frustum_zoom_cm: Optional[Tuple[float, float, float, float]] = None
-
-        #hardware feedback tracking measured trajectory in cm
-        self._fb_pts_cm: List[Tuple[float, float]] = []
-        self._fb_visible = False
 
         #responsive legend state
         self._modo_compacto_leyenda = False
@@ -139,15 +135,6 @@ class PanelGeneral(ctk.CTkFrame):
         c_pointer.create_oval(4, 3, 12, 11, fill="#22C55E", outline="#15803D", width=1.0)
         self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=tr("legend_pointer"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_pointer.pack(side="left", padx=(3, 2))
-
-        #feedback measured trajectory
-        self.sep_legend_fb = ctk.CTkFrame(self.legend_frame, width=1, height=14, fg_color="#CBD5E1")
-        self.box_legend_fb = ctk.CTkFrame(self.legend_frame, fg_color="transparent")
-        c_fb = tk.Canvas(self.box_legend_fb, width=20, height=14, bg=COLOR_CARD, highlightthickness=0)
-        c_fb.pack(side="left")
-        c_fb.create_line(2, 7, 18, 7, fill="#D946EF", width=3.0, capstyle="round")
-        self.lbl_legend_fb = ctk.CTkLabel(self.box_legend_fb, text=tr("legend_measured"), font=f_leg, text_color=COLOR_TEXT)
-        self.lbl_legend_fb.pack(side="left", padx=(3, 8))
 
         agregar_tooltip(
             self.legend_frame,
@@ -527,10 +514,6 @@ class PanelGeneral(ctk.CTkFrame):
         if getattr(self, "_frustum_zoom_cm", None) is not None:
             self._dibujar_frustum_zoom(c)
 
-        #redraw feedback measured trajectory
-        if self._fb_pts_cm:
-            self._redibujar_feedback_completo(c)
-
     def actualizar_puntero(self, x_cm: float, y_cm: float):
         """update laser beam pointer visual position on 1 to 1 canvas"""
         try:
@@ -673,89 +656,9 @@ class PanelGeneral(ctk.CTkFrame):
         """clear all completed segments from canvas and memory"""
         self.trazos_completados = []
         self.trazos_pasadas_previas = []
-        self.limpiar_feedback()
         try:
             self.canvas.delete("completado")
             self.canvas.delete("pasada_previa")
-        except Exception:
-            pass
-
-    #hardware feedback tracking layer
-    def set_feedback_visible(self, visible: bool):
-        """toggle visibility of measured feedback layer in legend"""
-        self._fb_visible = bool(visible)
-        try:
-            if visible:
-                if not self.sep_legend_fb.winfo_ismapped():
-                    self.sep_legend_fb.pack(side="left", padx=3, pady=4)
-                    self.box_legend_fb.pack(side="left", padx=(4, 4), pady=2)
-                if hasattr(self, "row_pop_fb") and not self.row_pop_fb.winfo_ismapped():
-                    self.row_pop_fb.pack(fill="x", padx=8, pady=(3, 6))
-            else:
-                self.sep_legend_fb.pack_forget()
-                self.box_legend_fb.pack_forget()
-                if hasattr(self, "row_pop_fb"):
-                    self.row_pop_fb.pack_forget()
-                self.limpiar_feedback()
-        except Exception:
-            pass
-
-    def limpiar_feedback(self):
-        """clear measured feedback trajectory from canvas and memory"""
-        self._fb_pts_cm = []
-        try:
-            self.canvas.delete("fb_trace")
-        except Exception:
-            pass
-
-    def agregar_puntos_feedback(self, puntos_cm: List[Tuple[float, float]]):
-        """append measured feedback points and draw incremental segments"""
-        c = self.canvas
-        if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
-            return
-
-        def to_px(x_cm, y_cm):
-            return (self._base_x0 + float(x_cm) * self._escala_pixel,
-                    (self._base_y0 + self._base_h_px) - (float(y_cm) * self._escala_pixel))
-
-        try:
-            for p in puntos_cm:
-                if not self._fb_pts_cm:
-                    self._fb_pts_cm.append(p)
-                    continue
-                px1, py1 = to_px(*self._fb_pts_cm[-1])
-                px2, py2 = to_px(*p)
-                if (px2 - px1) ** 2 + (py2 - py1) ** 2 < 1.0:
-                    continue  #decimate to at least 1px
-                c.create_line(px1, py1, px2, py2, fill="#D946EF", width=2.0,
-                              capstyle="round", tags="fb_trace")
-                self._fb_pts_cm.append(p)
-            if len(self._fb_pts_cm) > 200000:
-                del self._fb_pts_cm[: len(self._fb_pts_cm) - 200000]
-            c.tag_raise("fb_trace")
-            if getattr(self, "pos_puntero", None) is not None:
-                c.tag_raise("puntero_laser")
-        except Exception:
-            pass
-
-    def _redibujar_feedback_completo(self, c: tk.Canvas):
-        """redraw full measured feedback layer after canvas resize"""
-        if not hasattr(self, '_escala_pixel') or self._escala_pixel is None:
-            return
-        try:
-            c.delete("fb_trace")
-            coords = []
-            for x_cm, y_cm in self._fb_pts_cm:
-                coords.extend([
-                    self._base_x0 + float(x_cm) * self._escala_pixel,
-                    (self._base_y0 + self._base_h_px) - (float(y_cm) * self._escala_pixel),
-                ])
-            if len(coords) >= 4:
-                c.create_line(coords, fill="#D946EF", width=2.0, capstyle="round",
-                              joinstyle="round", tags="fb_trace")
-                c.tag_raise("fb_trace")
-                if getattr(self, "pos_puntero", None) is not None:
-                    c.tag_raise("puntero_laser")
         except Exception:
             pass
 
@@ -979,18 +882,6 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_pop_pointer_desc = ctk.CTkLabel(t4, text=tr("legend_pointer_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
         self.lbl_pop_pointer_desc.pack(anchor="w")
 
-        #measured feedback trajectory
-        self.row_pop_fb = ctk.CTkFrame(self.legend_popup, fg_color="transparent")
-        c5 = tk.Canvas(self.row_pop_fb, width=22, height=18, bg=COLOR_CARD, highlightthickness=0)
-        c5.pack(side="left", padx=(0, 6))
-        c5.create_line(2, 9, 20, 9, fill="#D946EF", width=3.0, capstyle="round")
-        t5 = ctk.CTkFrame(self.row_pop_fb, fg_color="transparent")
-        t5.pack(side="left", fill="x", expand=True)
-        self.lbl_pop_fb = ctk.CTkLabel(t5, text=tr("legend_measured"), font=self.f_leg, text_color=COLOR_TEXT, anchor="w")
-        self.lbl_pop_fb.pack(anchor="w")
-        self.lbl_pop_fb_desc = ctk.CTkLabel(t5, text=tr("legend_measured_desc"), font=self.f_sub_leg, text_color=COLOR_MUTED, anchor="w")
-        self.lbl_pop_fb_desc.pack(anchor="w")
-
     def _toggle_popup_leyenda(self):
         """toggle floating toolpath guide popup"""
         if getattr(self, "_popup_abierto", False):
@@ -1077,12 +968,6 @@ class PanelGeneral(ctk.CTkFrame):
             self.lbl_pop_pointer.configure(text=tr("legend_pointer"))
         if hasattr(self, "lbl_pop_pointer_desc"):
             self.lbl_pop_pointer_desc.configure(text=tr("legend_pointer_desc"))
-        if hasattr(self, "lbl_legend_fb"):
-            self.lbl_legend_fb.configure(text=tr("legend_measured"))
-        if hasattr(self, "lbl_pop_fb"):
-            self.lbl_pop_fb.configure(text=tr("legend_measured"))
-        if hasattr(self, "lbl_pop_fb_desc"):
-            self.lbl_pop_fb_desc.configure(text=tr("legend_measured_desc"))
 
         if hasattr(self, "lbl_area"):
             self.lbl_area.configure(text=f"{tr('base_dim_title')}:")

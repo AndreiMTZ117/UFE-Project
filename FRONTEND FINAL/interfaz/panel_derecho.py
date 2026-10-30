@@ -74,9 +74,6 @@ class PanelDerecho(ctk.CTkFrame):
         self.escala_referencia_px_cm = 20.0
         self.ancla_vivo: Optional[Tuple[float, float]] = None
 
-        #hardware feedback tracking measured trajectory layer
-        self._fb_pts_cm: List[Tuple[float, float]] = []
-
         self._crear_widgets()
         registrar_observador(self.actualizar_idioma)
 
@@ -795,29 +792,11 @@ class PanelDerecho(ctk.CTkFrame):
         self.trazos_completados = []
         self.trazos_pasadas_previas = []
         self.ancla_vivo = None
-        self.limpiar_feedback()
         self.pct_trace = 0.0
         self.pct_total = 0.0
         self.actualizar_voltajes(0.0, 0.0, False)
         self.dibujar_gauges(0.0, 0.0)
         self.centrar_en_laser()
-
-    #hardware feedback tracking layer
-    def limpiar_feedback(self):
-        """clear accumulated measured trajectory"""
-        self._fb_pts_cm = []
-
-    def agregar_puntos_feedback(self, puntos_cm: List[Tuple[float, float]]):
-        """add measured points in cm with spatial decimation"""
-        pts = self._fb_pts_cm
-        for p in puntos_cm:
-            if not pts:
-                pts.append(p)
-                continue
-            if abs(p[0] - pts[-1][0]) >= 0.05 or abs(p[1] - pts[-1][1]) >= 0.05:
-                pts.append(p)
-        if len(pts) > 60000:
-            del pts[: len(pts) - 60000]
 
     #trace point canvas rendering
     def redibujar_trace(
@@ -980,20 +959,6 @@ class PanelDerecho(ctk.CTkFrame):
                     c.create_line(cx + (ax - cam_x) * zoom_factor, cy - (ay - cam_y) * zoom_factor,
                                   cx + (lx - cam_x) * zoom_factor, cy - (ly - cam_y) * zoom_factor,
                                   fill=COLOR_BLUE, width=4.5, capstyle="round")
-
-            #hardware feedback measured trajectory
-            if len(self._fb_pts_cm) >= 2:
-                coords_fb = []
-                for fx, fy in self._fb_pts_cm:
-                    if min_x <= fx <= max_x and min_y <= fy <= max_y:
-                        coords_fb.extend([cx + (fx - cam_x) * zoom_factor, cy - (fy - cam_y) * zoom_factor])
-                    elif len(coords_fb) >= 4:
-                        c.create_line(coords_fb, fill="#D946EF", width=2.5, capstyle="round", joinstyle="round")
-                        coords_fb = []
-                    else:
-                        coords_fb = []
-                if len(coords_fb) >= 4:
-                    c.create_line(coords_fb, fill="#D946EF", width=2.5, capstyle="round", joinstyle="round")
 
             #laser spot pointer
             lx, ly = self.pos_laser_actual

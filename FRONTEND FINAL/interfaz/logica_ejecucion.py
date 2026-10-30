@@ -3,7 +3,6 @@
 
 import time
 import threading
-from collections import deque
 from tkinter import messagebox
 from .conexion_interfaz import HARDWARE_CONFIG
 from core.config_loader import get_volts_per_mm
@@ -231,15 +230,8 @@ class LogicaEjecucionMixin:
         )
 
     #hardware feedback tracking
-    def _hw_a_cm(self, x_hw: float, y_hw: float):
-        """convert hardware coordinates in mm to canvas cm"""
-        return self.puente.hw_to_cm(x_hw, y_hw)
-
     def _iniciar_feedback_ui(self):
-        """connect feedback callback and probe hardware availability"""
-        self._fb_cola = deque()
-        self._fb_programado = False
-        self.puente.on_feedback_cb = self._cb_feedback
+        """probe hardware availability for feedback switch"""
         if self.puente.es_simulacion:
             self._aplicar_disponibilidad_feedback(False, "simulation")
             return
@@ -258,7 +250,6 @@ class LogicaEjecucionMixin:
         self.barra_superior.set_feedback_disponible(disponible, clave)
         if not disponible:
             self.puente.set_feedback(False)
-            self.panel_general.set_feedback_visible(False)
 
     def _on_feedback_toggle(self, activo: bool):
         """toggle feedback tracking from top bar selector"""
@@ -268,42 +259,7 @@ class LogicaEjecucionMixin:
         estado = self.puente.set_feedback(activo)
         if activo and not estado:
             self.barra_superior.set_feedback_disponible(False, "simulation")
-        self.panel_general.set_feedback_visible(estado)
-        if not estado:
-            self.panel_derecho.limpiar_feedback()
         self.terminal.log(tr("log_feedback_on") if estado else tr("log_feedback_off"))
-
-    def _cb_feedback(self, puntos_xy_mm):
-        """queue measured points and schedule gui dispatch"""
-        if getattr(self, '_cerrando', False):
-            return
-        self._fb_cola.append(puntos_xy_mm)
-        if not self._fb_programado:
-            self._fb_programado = True
-            try:
-                self.after(33, self._despachar_feedback_gui)
-            except Exception:
-                self._fb_programado = False
-
-    def _despachar_feedback_gui(self):
-        """flush accumulated measured points to canvas"""
-        self._fb_programado = False
-        if getattr(self, '_cerrando', False):
-            self._fb_cola.clear()
-            return
-        if not self.puente.is_running or not self.puente.feedback_habilitado:
-            self._fb_cola.clear()
-            return
-        pts_cm = []
-        try:
-            while self._fb_cola:
-                for x_hw, y_hw in self._fb_cola.popleft():
-                    pts_cm.append(self._hw_a_cm(x_hw, y_hw))
-            if pts_cm:
-                self.panel_general.agregar_puntos_feedback(pts_cm)
-                self.panel_derecho.agregar_puntos_feedback(pts_cm)
-        except Exception:
-            pass
 
     def _actualizar_progreso_gui(
         self,

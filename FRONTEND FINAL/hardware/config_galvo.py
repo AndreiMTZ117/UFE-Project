@@ -5,8 +5,8 @@ DISTANCIA_LENTE_BASE_CM = 56.5
 
 #physical base (work area) in cm
 #changing CAMPO_ANCHO_CM / CAMPO_ALTO_CM automatically updates the mm limits and default base
-CAMPO_ANCHO_CM = 37.7    #physical width covered by the full optical field (x)
-CAMPO_ALTO_CM  = 38.5    #physical height covered by the full optical field (y)
+CAMPO_ANCHO_CM = 37.5    #physical width covered by the full optical field (x)
+CAMPO_ALTO_CM  = 38.3    #physical height covered by the full optical field (y)
 BASE_ANCHO_CM_DEFAULT = CAMPO_ANCHO_CM
 BASE_ALTO_CM_DEFAULT  = CAMPO_ALTO_CM
 
