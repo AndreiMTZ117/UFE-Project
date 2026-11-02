@@ -153,7 +153,7 @@ Each GVS112/M driver board is factory-tuned for its matched galvo rotor. Ensure 
 - **Power Supply:** Connect a linear DC power supply providing ±15.0 VDC at ≥ 3.0 A per channel. Ensure ripple voltage does not exceed 10 mV RMS.
 - **Heatsinking:** Both driver boards must remain firmly bolted to the enclosure's aluminum heatsink. The internal thermal protection trips if the heatsink temperature exceeds 70 °C.
 
-### 3.3 Analog Input (AI) Pinout Allocation in Technical Manual (Annex D)
+### 3.3 Analog Input (AI) Pinout Allocation
 
 While the technical manual previously detailed the primary command channels—namely the analog outputs (`Dev1/ao0`, `Dev1/ao1` or `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) for dual-axis mirror steering and the digital output (`Dev1/port0/line0` or `PXI1Slot5/port0/line0`) for laser trigger modulation—complete closed-loop telemetry and tracking verification require differential analog inputs (AI) wired to the position sensors.
 
