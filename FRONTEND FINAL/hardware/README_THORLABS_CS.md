@@ -153,6 +153,33 @@ Každá deska ovladače GVS112/M je z výroby přesně naladěna pro příslušn
 - **Napájecí zdroj:** Použijte lineární regulovaný stejnosměrný zdroj ±15.0 V schopný dodat proud ≥ 3.0 A na kanál. Zkontrolujte, že zvlnění nepřesahuje 10 mV RMS.
 - **Chlazení:** Obě desky ovladačů musí být pevně přišroubovány k hliníkovému chladiči. Při překročení teploty chladiče 70 °C zareaguje tepelná ochrana a odpojí pohon.
 
+### 3.3 Přiřazení pinů analogových vstupů (AI) v technickém manuálu (Příloha D)
+
+Zatímco technický manuál dříve detailně popsal primární řídicí kanály – konkrétně analogové výstupy (`Dev1/ao0`, `Dev1/ao1` nebo `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) pro řízení zrcadel v obou osách a digitální výstup (`Dev1/port0/line0` nebo `PXI1Slot5/port0/line0`) pro hradlování laserového paprsku – kompletní telemetrie uzavřené smyčky a ověřování sledování trajektorie vyžadují diferenciální analogové vstupy (AI) připojené k polohovým snímačům.
+
+Konkrétní přiřazení svorek na svorkovnici **NI SCB-68 / SCB-68A** pro diferenciální zpětnou vazbu polohových snímačů je uvedeno níže:
+
+#### Tabulka přiřazení svorek pro diferenciální zpětnou vazbu polohy (NI SCB-68 / SCB-68A)
+
+| Zpětná vazba osy | Pin svorkovnice SCB-68 | Kanál NI PXI-6229 | Polarita signálu | Deska ovladače Thorlabs (Konektor J4) | Funkce signálu |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Zpětná vazba osy X** | **Pin 68** | `ai0` | Signál (+) | Ovladač X, konektor J4 Pin 3 (`Position Output +`) | Okamžité napětí mechanické polohy zrcadla X |
+| **Zpětná vazba osy X** | **Pin 34** | `ai8` (`ai0-`) | Návrat (-) | Ovladač X, konektor J4 Pin 4 (`Position Output -`) | Diferenciální referenční návrat polohy X |
+| **Zpětná vazba osy Y** | **Pin 33** | `ai1` | Signál (+) | Ovladač Y, konektor J4 Pin 3 (`Position Output +`) | Okamžité napětí mechanické polohy zrcadla Y |
+| **Zpětná vazba osy Y** | **Pin 66** | `ai9` (`ai1-`) | Návrat (-) | Ovladač Y, konektor J4 Pin 4 (`Position Output -`) | Diferenciální referenční návrat polohy Y |
+
+#### Diferenciální architektura a zpracování signálu:
+1. **Párování diferenciálních kanálů (režim `DIFF`):**
+   - Na kartě NI PXI-6229 (architektura řady M, 68 pinů) je každý diferenciální AI kanál tvořen svorkou `ai(i)` a svorkou `ai(i+8)`:
+     * **Kanál `ai0` (DIFF):** Neinvertující vstup na **Pinu 68 (`ai0+`)**, invertující vstup na **Pinu 34 (`ai8 / ai0-`)**.
+     * **Kanál `ai1` (DIFF):** Neinvertující vstup na **Pinu 33 (`ai1+`)**, invertující vstup na **Pinu 66 (`ai9 / ai1-`)**.
+2. **Potlačení soufázového rušení (CMRR):**
+   - Polohové výstupy z řídicích desek Thorlabs GVS112/M poskytují proporcionální diferenciální napětí (nominální koeficient: 0,5 V/° mechanické výchylky v celém rozsahu ±10,0 V).
+   - Diferenciální měření přes párované vstupy účinně eliminuje vysokofrekvenční elektromagnetické rušení (EMI) ze spínaných zdrojů vláknového laseru a spínacích proudů PWM servozesilovačů.
+3. **Softwarový sběr dat v DAQ:**
+   - Podle konfigurace v `core/NIDaqController.py` a `hardware_config.json` vzorkuje úloha DAQ kanály `PXI1Slot5/ai0` a `PXI1Slot5/ai1` v režimu `TerminalConfiguration.DIFF` synchronně se vzorkovacími hodinami `/PXI1Slot5/ao/SampleClock` při 100 kS/s.
+   - Zaznamenaný průběh zpětné vazby se v modulu `interfaz/conexion_interfaz.py` porovnává s požadovanou trajektorií pro výpočet efektivní chyby sledování (`tracking_rms_um`), maximální odchylky (`tracking_max_um`) a fázového zpoždění (`tracking_lag_ms`), jež se ukládají do tabulky `historial_produccion`.
+
 ---
 
 ## 4. Optická kalibrace a konfigurace (`hardware_config.json`)
@@ -306,3 +333,20 @@ python iniciar_interfaz.py
 - **Oddělení:** Oddělení vláknových laserů a nelineární optiky.
 - **Adresa pracoviště:** Chaberská 1014/57, 182 00 Praha 8, Česká republika.
 - **Referenční dokumentace:** Schémata systémové architektury, migrace databáze a diagramy jsou popsány v systémové dokumentaci a sadách jednotkových testů.
+
+---
+
+## Příloha D: Referenční zapojení diferenciálních vstupů AI na svorkovnici NI SCB-68 / SCB-68A
+
+Tato příloha slouží jako rychlá laboratorní reference pro techniky při zapojování diferenciálních kanálů zpětné vazby polohy mezi deskami ovladačů Thorlabs GVS112/M a svorkovnicí National Instruments SCB-68 / SCB-68A:
+
+| Pin svorkovnice | Označení kanálu DAQ | Polarita | Funkce signálu | Cílové připojení Thorlabs |
+| :---: | :---: | :---: | :--- | :--- |
+| **Pin 68** | `Dev1/ai0` (nebo `PXI1Slot5/ai0`) | Neinvertující (+) | Výstup polohového snímače X (+) | Ovladač Thorlabs X (Deska 1) — J4 Pin 3 |
+| **Pin 34** | `Dev1/ai8` (nebo `PXI1Slot5/ai8`) | Invertující (-) | Návrat polohového snímače X (-) | Ovladač Thorlabs X (Deska 1) — J4 Pin 4 |
+| **Pin 33** | `Dev1/ai1` (nebo `PXI1Slot5/ai1`) | Neinvertující (+) | Výstup polohového snímače Y (+) | Ovladač Thorlabs Y (Deska 2) — J4 Pin 3 |
+| **Pin 66** | `Dev1/ai9` (nebo `PXI1Slot5/ai9`) | Invertující (-) | Návrat polohového snímače Y (-) | Ovladač Thorlabs Y (Deska 2) — J4 Pin 4 |
+
+> [!IMPORTANT]
+> - Ujistěte se, že softwarová konfigurace svorek v souboru `hardware_config.json` je nastavena na `"ai_terminal_config": "DIFF"`.
+> - **Nikdy nepřipojujte Pin 34 (`ai8`) ani Pin 66 (`ai9`) ke kostře šasi nebo svorce `AO GND`.** Tím by se diferenciální vstup změnil na nesymetrický (single-ended), což by zrušilo potlačení soufázového rušení a vneslo do telemetrie polohy výrazné chyby způsobené zemními smyčkami.

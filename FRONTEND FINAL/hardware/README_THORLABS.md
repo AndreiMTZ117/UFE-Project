@@ -153,6 +153,33 @@ Each GVS112/M driver board is factory-tuned for its matched galvo rotor. Ensure 
 - **Power Supply:** Connect a linear DC power supply providing ±15.0 VDC at ≥ 3.0 A per channel. Ensure ripple voltage does not exceed 10 mV RMS.
 - **Heatsinking:** Both driver boards must remain firmly bolted to the enclosure's aluminum heatsink. The internal thermal protection trips if the heatsink temperature exceeds 70 °C.
 
+### 3.3 Analog Input (AI) Pinout Allocation in Technical Manual (Annex D)
+
+While the technical manual previously detailed the primary command channels—namely the analog outputs (`Dev1/ao0`, `Dev1/ao1` or `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) for dual-axis mirror steering and the digital output (`Dev1/port0/line0` or `PXI1Slot5/port0/line0`) for laser trigger modulation—complete closed-loop telemetry and tracking verification require differential analog inputs (AI) wired to the position sensors.
+
+The specific pin assignments on the **NI SCB-68 / SCB-68A** connector block for differential position sensor feedback are detailed below:
+
+#### Differential Position Feedback Terminal Assignment (NI SCB-68 / SCB-68A)
+
+| Mirror Axis Feedback | NI SCB-68 Pin | NI PXI-6229 Channel | Polarity / Signal | Thorlabs Driver Board (J4 Connector) | Signal Function |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **X-Axis Feedback** | **Pin 68** | `ai0` | Signal (+) | Driver X, J4 Pin 3 (`Position Output +`) | Instantaneous mechanical position voltage of X mirror |
+| **X-Axis Feedback** | **Pin 34** | `ai8` (`ai0-`) | Return (-) | Driver X, J4 Pin 4 (`Position Output -`) | Differential reference return for X position |
+| **Y-Axis Feedback** | **Pin 33** | `ai1` | Signal (+) | Driver Y, J4 Pin 3 (`Position Output +`) | Instantaneous mechanical position voltage of Y mirror |
+| **Y-Axis Feedback** | **Pin 66** | `ai9` (`ai1-`) | Return (-) | Driver Y, J4 Pin 4 (`Position Output -`) | Differential reference return for Y position |
+
+#### Differential Architecture & Signal Processing Notes:
+1. **Differential Channel Pairing (`DIFF` Mode):**
+   - On the NI PXI-6229 (M-Series 68-pin architecture), each differential AI channel pairs terminal `ai(i)` with terminal `ai(i+8)`:
+     * **Channel `ai0` (DIFF):** Non-inverting input on **Pin 68 (`ai0+`)**, inverting input on **Pin 34 (`ai8 / ai0-`)**.
+     * **Channel `ai1` (DIFF):** Non-inverting input on **Pin 33 (`ai1+`)**, inverting input on **Pin 66 (`ai9 / ai1-`)**.
+2. **Common-Mode Noise Rejection (CMRR):**
+   - The position outputs of the Thorlabs GVS112/M drivers deliver a differential proportional voltage (nominal scale factor: 0.5 V/° mechanical deflection, spanning ±10.0 V full scale across travel).
+   - Differential measurement through paired inputs cancels high-frequency common-mode electrical noise originating from the fiber laser switching supplies and servo amplifier PWM switching currents.
+3. **Software DAQ Acquisition:**
+   - As configured in `core/NIDaqController.py` and `hardware_config.json`, the DAQ task samples `PXI1Slot5/ai0` and `PXI1Slot5/ai1` using `TerminalConfiguration.DIFF` synchronized with `/PXI1Slot5/ao/SampleClock` at 100 kS/s.
+   - The acquired feedback waveform is processed in `interfaz/conexion_interfaz.py` to calculate root-mean-square tracking error (`tracking_rms_um`), maximum dynamic lag (`tracking_max_um`), and phase lag (`tracking_lag_ms`) logged into `historial_produccion`.
+
 ---
 
 ## 4. Optical Calibration & Configuration (`hardware_config.json`)
@@ -306,3 +333,20 @@ python iniciar_interfaz.py
 - **Department:** Department of Optical Fiber Lasers and Non-Linear Optics (*Oddělení vláknových laserů a nelineární optiky*).
 - **Address:** Chaberská 1014/57, 182 00 Praha 8, Czech Republic.
 - **Reference Documentation:** System architecture, database migrations, and UML schemas are available in project documentation and unit test suites.
+
+---
+
+## Annex D: NI SCB-68 / SCB-68A Differential AI Acquisition Pinout Reference
+
+This annex provides an expedited reference for laboratory technicians wiring the differential position feedback channels between the Thorlabs GVS112/M dual driver boards and the National Instruments SCB-68 / SCB-68A connector block:
+
+| Terminal Block Pin | DAQ Channel Designation | Polarity | Signal Function | Target Thorlabs Connection |
+| :---: | :---: | :---: | :--- | :--- |
+| **Pin 68** | `Dev1/ai0` (or `PXI1Slot5/ai0`) | Non-Inverting (+) | Galvo X Position Sensor Output (+) | Driver X (Board 1) — J4 Pin 3 |
+| **Pin 34** | `Dev1/ai8` (or `PXI1Slot5/ai8`) | Inverting (-) | Galvo X Position Sensor Return (-) | Driver X (Board 1) — J4 Pin 4 |
+| **Pin 33** | `Dev1/ai1` (or `PXI1Slot5/ai1`) | Non-Inverting (+) | Galvo Y Position Sensor Output (+) | Driver Y (Board 2) — J4 Pin 3 |
+| **Pin 66** | `Dev1/ai9` (or `PXI1Slot5/ai9`) | Inverting (-) | Galvo Y Position Sensor Return (-) | Driver Y (Board 2) — J4 Pin 4 |
+
+> [!IMPORTANT]
+> - Ensure the software terminal configuration in `hardware_config.json` is set to `"ai_terminal_config": "DIFF"`.
+> - **Never connect Pin 34 (`ai8`) or Pin 66 (`ai9`) to chassis ground or `AO GND`.** Doing so converts the differential receiver to single-ended, defeating common-mode rejection and generating severe ground-loop offsets in the optical tracking telemetry.
