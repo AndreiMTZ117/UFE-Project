@@ -21,7 +21,7 @@
       "PXI1Slot5/ao0",
       "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "PXI1Slot5/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line7",
     "ai_channels": [
       "PXI1Slot5/ai0",
       "PXI1Slot5/ai1"
