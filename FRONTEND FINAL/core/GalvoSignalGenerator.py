@@ -145,15 +145,16 @@ class GalvoSignalGenerator:
 
     def view_positions(self, positions: np.ndarray, through_lens: bool) -> np.ndarray:
         """canvas coordinates of nominal positions, optionally seen through the lens model"""
+        if not through_lens:
+            return positions
+
         commanded = self._apply_pincushion_correction(positions)
-        if through_lens:
-            pts = self._invert_pincushion(commanded, self.lens_kx, self.lens_ky, self.lens_w)
-            if self.lens_skew_mm != 0.0:
-                progreso_y = np.clip((pts[:, 1] + self.lens_h) / (2.0 * self.lens_h), 0.0, 1.0)
-                peso_x = np.clip(pts[:, 0] / self.lens_w, 0.0, 1.0)
-                pts[:, 0] += self.lens_skew_mm * peso_x * progreso_y
-            return pts
-        return commanded
+        pts = self._invert_pincushion(commanded, self.lens_kx, self.lens_ky, self.lens_w)
+        if self.lens_skew_mm != 0.0:
+            progreso_y = np.clip((pts[:, 1] + self.lens_h) / (2.0 * self.lens_h), 0.0, 1.0)
+            peso_x = np.clip(pts[:, 0] / self.lens_w, 0.0, 1.0)
+            pts[:, 0] += self.lens_skew_mm * peso_x * progreso_y
+        return pts
 
     def generate_signals(self) -> Tuple[np.ndarray, np.ndarray]:
         """build synchronized analog and digital output arrays"""
