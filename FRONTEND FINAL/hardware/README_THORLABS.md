@@ -121,7 +121,7 @@ The system utilizes an **NI PXI-6229** Multifunction I/O module housed within an
          |--> Pin 21 (PXI1Slot5/ao1) --------> Thorlabs Driver Y: Command Input (+) [Pin 1]
          |--> Pin 54 (AO GND) ----------> Thorlabs Driver Y: Command Input (-) [Pin 2]
          |
-         |--> Pin 52 (PXI1Slot5/port0/line0) -> High-Speed Gate Buffer / Optocoupler (+)
+         |--> Pin 48 (PXI1Slot5/port0/line7) -> High-Speed Gate Buffer / Optocoupler (+)
          |--> Pin 53 (DGND) ------------> Laser Modulation Common Return (-)
          |
          | [Optional Closed-Loop Hardware Feedback Tracking via Differential AI]
@@ -139,7 +139,7 @@ The system utilizes an **NI PXI-6229** Multifunction I/O module housed within an
 | **Pin 55** | `AO GND` | Analog Ground (Reference for AO0) | Driver X, J4 Pin 2: Command Input (-) |
 | **Pin 21** | `PXI1Slot5/ao1` | Analog Output 1 (Y-Axis deflection command) | Driver Y, J4 Pin 1: Command Input (+) |
 | **Pin 54** | `AO GND` | Analog Ground (Reference for AO1) | Driver Y, J4 Pin 2: Command Input (-) |
-| **Pin 52** | `PXI1Slot5/port0/line0` | Digital Output (Hardware-timed Laser Gate) | Laser Gate Driver Input (TTL 5V = ON, 0V = OFF) |
+| **Pin 48** | `PXI1Slot5/port0/line7` | Digital Output (Hardware-timed Laser Gate) | Laser Gate Driver Input (TTL 5V = ON, 0V = OFF) |
 | **Pin 53** | `DGND` | Digital Ground | Laser Modulation Common Return (-) |
 | **Pin 68** | `PXI1Slot5/ai0` (+) | Analog Input 0 Positive (X Position Monitor) | Driver X, J4 Pin 3: Position Output (+) |
 | **Pin 34** | `PXI1Slot5/ai8` / `ai0` (-) | Analog Input 0 Negative (Differential return) | Driver X, J4 Pin 4: Position Output (-) |
@@ -155,7 +155,7 @@ Each GVS112/M driver board is factory-tuned for its matched galvo rotor. Ensure 
 
 ### 3.3 Analog Input (AI) Pinout Allocation
 
-While the technical manual previously detailed the primary command channels—namely the analog outputs (`Dev1/ao0`, `Dev1/ao1` or `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) for dual-axis mirror steering and the digital output (`Dev1/port0/line0` or `PXI1Slot5/port0/line0`) for laser trigger modulation—complete closed-loop telemetry and tracking verification require differential analog inputs (AI) wired to the position sensors.
+While the technical manual previously detailed the primary command channels—namely the analog outputs (`Dev1/ao0`, `Dev1/ao1` or `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) for dual-axis mirror steering and the digital output (`Dev1/port0/line7` or `PXI1Slot5/port0/line7`) for laser trigger modulation—complete closed-loop telemetry and tracking verification require differential analog inputs (AI) wired to the position sensors.
 
 The specific pin assignments on the **NI SCB-68 / SCB-68A** connector block for differential position sensor feedback are detailed below:
 
@@ -219,7 +219,7 @@ Because optical reflection doubles the angular deflection of the incident beam (
       "PXI1Slot5/ao0",
       "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "PXI1Slot5/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line7",
     "ai_channels": [
       "PXI1Slot5/ai0",
       "PXI1Slot5/ai1"
@@ -293,7 +293,7 @@ STATUS: ALL SYSTEM CRITICAL MODULES OPERATIONAL AND HARDENED.
 4. Gently touch the galvo motor housings; no high-frequency vibration, audible hum, or excessive heating should be present.
 
 ### Step 4: Full Pipeline Execution with Oscilloscope
-Connect oscilloscope probes to `PXI1Slot5/ao0` (Channel 1), `PXI1Slot5/ao1` (Channel 2), and `PXI1Slot5/port0/line0` (Channel 3) on the SCB-68A block. Run a diagnostic test cycle or comparative preview:
+Connect oscilloscope probes to `PXI1Slot5/ao0` (Channel 1), `PXI1Slot5/ao1` (Channel 2), and `PXI1Slot5/port0/line7` (Channel 3) on the SCB-68A block. Run a diagnostic test cycle or comparative preview:
 
 ```powershell
 python test_system_full.py
@@ -302,7 +302,7 @@ python test_system_full.py
 **Verification Criteria:**
 - Sample period Δt = 10.0 µs (100 kS/s).
 - Clean corner transitions with zero ringing or overshoot.
-- Digital laser modulation (`PXI1Slot5/port0/line0`) drops to 0.0 V (TTL LOW) during all rapid transit jumps (G0).
+- Digital laser modulation (`PXI1Slot5/port0/line7`) drops to 0.0 V (TTL LOW) during all rapid transit jumps (G0).
 
 ### Step 5: Low-Power Pilot Laser Beam Alignment
 1. Engage the red pilot diode (635 nm).

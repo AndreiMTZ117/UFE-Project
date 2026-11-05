@@ -121,7 +121,7 @@ Systém využívá multifunkční I/O kartu **NI PXI-6229** umístěnou v šasi 
          |--> Pin 21 (PXI1Slot5/ao1) --------> Ovladač Thorlabs Y: Řídicí vstup (+) [Pin 1]
          |--> Pin 54 (AO GND) ----------> Ovladač Thorlabs Y: Řídicí vstup (-) [Pin 2]
          |
-         |--> Pin 52 (PXI1Slot5/port0/line0) -> Hradlový oddělovač / optočlen laseru (+)
+         |--> Pin 48 (PXI1Slot5/port0/line7) -> Hradlový oddělovač / optočlen laseru (+)
          |--> Pin 53 (DGND) ------------> Zpětný vodič modulace laseru (-)
          |
          | [Volitelná zpětná vazba polohy zrcadel přes diferenciální AI]
@@ -139,7 +139,7 @@ Systém využívá multifunkční I/O kartu **NI PXI-6229** umístěnou v šasi 
 | **Pin 55** | `AO GND` | Analogová zem (reference pro AO0) | Ovladač X, konektor J4 Pin 2: Řídicí vstup (-) |
 | **Pin 21** | `PXI1Slot5/ao1` | Analogový výstup 1 (výchylka osy Y) | Ovladač Y, konektor J4 Pin 1: Řídicí vstup (+) |
 | **Pin 54** | `AO GND` | Analogová zem (reference pro AO1) | Ovladač Y, konektor J4 Pin 2: Řídicí vstup (-) |
-| **Pin 52** | `PXI1Slot5/port0/line0` | Digitální výstup (řízené hradlování laseru) | Vstup modulace laseru (TTL 5V = ZAP, 0V = VYP) |
+| **Pin 48** | `PXI1Slot5/port0/line7` | Digitální výstup (řízené hradlování laseru) | Vstup modulace laseru (TTL 5V = ZAP, 0V = VYP) |
 | **Pin 53** | `DGND` | Digitální zem | Společná signálová zem modulace laseru (-) |
 | **Pin 68** | `PXI1Slot5/ai0` (+) | Analogový vstup 0 kladný (monitor polohy X) | Ovladač X, konektor J4 Pin 3: Výstup polohy (+) |
 | **Pin 34** | `PXI1Slot5/ai8` / `ai0` (-) | Analogový vstup 0 záporný (diferenciální návrat) | Ovladač X, konektor J4 Pin 4: Výstup polohy (-) |
@@ -155,7 +155,7 @@ Každá deska ovladače GVS112/M je z výroby přesně naladěna pro příslušn
 
 ### 3.3 Přiřazení pinů analogových vstupů (AI) v technickém manuálu (Příloha D)
 
-Zatímco technický manuál dříve detailně popsal primární řídicí kanály – konkrétně analogové výstupy (`Dev1/ao0`, `Dev1/ao1` nebo `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) pro řízení zrcadel v obou osách a digitální výstup (`Dev1/port0/line0` nebo `PXI1Slot5/port0/line0`) pro hradlování laserového paprsku – kompletní telemetrie uzavřené smyčky a ověřování sledování trajektorie vyžadují diferenciální analogové vstupy (AI) připojené k polohovým snímačům.
+Zatímco technický manuál dříve detailně popsal primární řídicí kanály – konkrétně analogové výstupy (`Dev1/ao0`, `Dev1/ao1` nebo `PXI1Slot5/ao0`, `PXI1Slot5/ao1`) pro řízení zrcadel v obou osách a digitální výstup (`Dev1/port0/line7` nebo `PXI1Slot5/port0/line7`) pro hradlování laserového paprsku – kompletní telemetrie uzavřené smyčky a ověřování sledování trajektorie vyžadují diferenciální analogové vstupy (AI) připojené k polohovým snímačům.
 
 Konkrétní přiřazení svorek na svorkovnici **NI SCB-68 / SCB-68A** pro diferenciální zpětnou vazbu polohových snímačů je uvedeno níže:
 
@@ -219,7 +219,7 @@ Jelikož optický odraz zdvojnásobuje úhlovou výchylku dopadajícího svazku 
       "PXI1Slot5/ao0",
       "PXI1Slot5/ao1"
     ],
-    "laser_gate_channel": "PXI1Slot5/port0/line0",
+    "laser_gate_channel": "PXI1Slot5/port0/line7",
     "ai_channels": [
       "PXI1Slot5/ai0",
       "PXI1Slot5/ai1"
@@ -293,7 +293,7 @@ STATUS: ALL SYSTEM CRITICAL MODULES OPERATIONAL AND HARDENED.
 4. Lehce se dotkněte těl motorů galva; nesmí vykazovat žádné vysokofrekvenční oscilace, bzučení ani nadměrné zahřívání.
 
 ### Krok 4: Testování trajektorie s osciloskopem
-Připojte sondy osciloskopu ke svorkám `PXI1Slot5/ao0` (kanál 1), `PXI1Slot5/ao1` (kanál 2) a `PXI1Slot5/port0/line0` (kanál 3) na bloku SCB-68A. Spusťte testovací cyklus:
+Připojte sondy osciloskopu ke svorkám `PXI1Slot5/ao0` (kanál 1), `PXI1Slot5/ao1` (kanál 2) a `PXI1Slot5/port0/line7` (kanál 3) na bloku SCB-68A. Spusťte testovací cyklus:
 
 ```powershell
 python test_system_full.py
@@ -302,7 +302,7 @@ python test_system_full.py
 **Kritéria ověření:**
 - Vzorkovací perioda signálu odpovídá Δt = 10.0 µs (100 kS/s).
 - Přechody v rozích jsou čisté bez překmitů (overshoot) a zvonění.
-- Signál modulace laseru (`PXI1Slot5/port0/line0`) spolehlivě padá na 0.0 V (úroveň TTL LOW) během všech přejezdů naprázdno (G0).
+- Signál modulace laseru (`PXI1Slot5/port0/line7`) spolehlivě padá na 0.0 V (úroveň TTL LOW) během všech přejezdů naprázdno (G0).
 
 ### Krok 5: Seřízení polohy pomocí červeného zaměřovacího laseru
 1. Zapněte červenou zaměřovací diodu (635 nm).

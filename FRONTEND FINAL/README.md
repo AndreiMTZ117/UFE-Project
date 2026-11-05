@@ -73,7 +73,7 @@ It integrates a modular architecture that cleanly decouples human-machine intera
 3. **Hardware-Timed Waveform Discretization (`core/GalvoSignalGenerator.py`):**
    - High-throughput spatial-to-voltage conversion (0.200 V/mm across ±50 mm working field).
    - Strict electrical clamping to [-10.0 V, +10.0 V] analog safety envelopes.
-   - Sample rate: 100 kS/s (Δt = 10.0 µs) synchronized across analog command channels (AO0/AO1) and digital laser gate line (Port0/Line0).
+   - Sample rate: 100 kS/s (Δt = 10.0 µs) synchronized across analog command channels (AO0/AO1) and digital laser gate line (Port0/Line7).
    - Dedicated galvo kinematic settling compensation (`jump_delay`, `mark_delay`, `laser_on_delay`, `laser_off_delay`).
 
 4. **Hardware Abstraction Layer & Simulation (`core/NIDaqController.py`):**

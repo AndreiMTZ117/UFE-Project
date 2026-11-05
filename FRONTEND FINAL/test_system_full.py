@@ -425,7 +425,7 @@ def phase_5_daq_controller_estop() -> None:
     #setup hardware
     controller.setup_hardware(
         ao_channels=("PXI1Slot5/ao0", "PXI1Slot5/ao1"),
-        do_channel="PXI1Slot5/port0/line0",
+        do_channel="PXI1Slot5/port0/line7",
         f_s=100_000.0,
     )
     assert controller.state == "configured", f"Expected state 'configured', got '{controller.state}'"
