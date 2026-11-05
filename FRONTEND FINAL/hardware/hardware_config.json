@@ -10,6 +10,11 @@
     "pincushion_ky": 0.01,
     "field_half_width_mm": 187.5
   },
+  "lens_model": {
+    "pincushion_kx": -0.05,
+    "pincushion_ky": 0.01,
+    "field_half_width_mm": 187.5
+  },
   "daq": {
     "device_name": "PXI1Slot5",
     "analog_channels": [

@@ -336,11 +336,8 @@ class PuenteLaser:
         return True
 
     #base geometry and cm <-> hardware mapping
-    #the hardware origin (cfg centro_x/centro_y, 0 mm = 0 v) is ALWAYS the center of the base:
-    #    x_cm = ancho_base_cm / 2 + (x_hw - origen_x) * kx
-    #the origin never moves when the base size changes, only the perimeter around it does.
     def _escala_cm_por_mm(self) -> Tuple[float, float]:
-        """cm per hardware mm for each axis (full optical field calibration)"""
+        """cm per hardware mm for each axis"""
         cfg = HARDWARE_CONFIG["thorlabs_galvo"]
         range_x = self.x_max_limit - self.x_min_limit
         range_y = self.y_max_limit - self.y_min_limit
@@ -349,7 +346,7 @@ class PuenteLaser:
         return kx, ky
 
     def get_hw_origin(self) -> Tuple[float, float]:
-        """hardware coordinates (mm) of the base center, laser aim at 0 v"""
+        """hardware coordinates in mm of base center"""
         cfg = HARDWARE_CONFIG["thorlabs_galvo"]
         return float(cfg["centro_x"]), float(cfg["centro_y"])
 
@@ -372,7 +369,7 @@ class PuenteLaser:
         )
 
     def get_base_limits_hw(self) -> Tuple[float, float, float, float]:
-        """base perimeter in hardware mm (x_min, x_max, y_min, y_max), always around the origin"""
+        """base perimeter in hardware mm around the origin"""
         kx, ky = self._escala_cm_por_mm()
         ox, oy = self.get_hw_origin()
         half_x = (self.ancho_base_cm / 2.0) / kx
@@ -383,10 +380,7 @@ class PuenteLaser:
         )
 
     def set_base_dimensions(self, ancho_cm: float, alto_cm: float) -> Tuple[float, float]:
-        """set physical base dimensions; the center stays fixed at the hardware origin.
-
-        sizes are limited to the optical field. returns the applied (width, height) in cm.
-        """
+        """set physical base dimensions centered at the hardware origin"""
         cfg = HARDWARE_CONFIG["thorlabs_galvo"]
         max_w = float(cfg.get("marco_ancho_cm", 38.7))
         max_h = float(cfg.get("marco_alto_cm", 39.5))
@@ -928,10 +922,11 @@ class PuenteLaser:
                     pct = min(100.0, (k / float(max(1, n_samples - 1))) * 100.0)
 
                     if on_progress:
+                        x_view_mm, y_view_mm = generator.view_positions(generator.positions[k:k + 1], self.feedback_habilitado)[0]
                         on_progress(
                             0, 1,
                             k, n_samples,
-                            vx / self.escala_voltaje_v_mm, vy / self.escala_voltaje_v_mm,
+                            x_view_mm, y_view_mm,
                             round(pct, 1), round(pct, 1),
                             False,  #laser off
                             vx, vy
@@ -1111,7 +1106,7 @@ class PuenteLaser:
             )
             voltages, gate = generator.generate_signals()
             self.trazos_ejecucion_cm = [
-                [self.hw_to_cm(float(x), float(y)) for x, y in generator._apply_pincushion_correction(np.asarray(r, dtype=np.float64))]
+                [self.hw_to_cm(float(x), float(y)) for x, y in generator.view_positions(np.asarray(r, dtype=np.float64), self.feedback_habilitado)]
                 if r else []
                 for r in paths
             ]
@@ -1267,10 +1262,11 @@ class PuenteLaser:
                     pct_pass_fraction = acc / float(total_marking)
                     pct_total = ((pass_idx - 1) + pct_pass_fraction) / float(num_passes) * 100.0
 
+                    x_view_mm, y_view_mm = generator.view_positions(generator.positions[k:k + 1], self.feedback_habilitado)[0]
                     on_progress(
                         path_id, total_paths,
                         int(b_point[block_i]), int(b_points_total[block_i]),
-                        vx / scale_v, vy / scale_v,
+                        x_view_mm, y_view_mm,
                         round(min(100.0, max(0.0, pct_path)), 1),
                         round(min(100.0, max(0.0, pct_total)), 1),
                         laser_active,

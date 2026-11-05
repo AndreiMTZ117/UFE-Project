@@ -32,21 +32,15 @@ class GalvoSignalGenerator:
         config_path: Optional[str] = None,
     ) -> None:
         """initialize galvo signal generator"""
-        #resolve configuration dictionary
         cfg = config if config is not None else load_hardware_config(config_path)
-
         daq_cfg = cfg.get("daq", {})
         dyn_cfg = cfg.get("galvo_dynamics", {})
 
-        #resolve sample rate
         if sample_rate_hz is None:
             sample_rate_hz = float(daq_cfg.get("sample_rate_hz", daq_cfg.get("f_s", 100_000.0)))
-
-        #resolve spatial to voltage scale
         if scale_factor_v_per_mm is None:
             scale_factor_v_per_mm = get_volts_per_mm(cfg)
 
-        #resolve voltage limits
         if voltage_limits is None:
             raw_v_limits = cfg.get("voltage_limits", dyn_cfg.get("voltage_limits", {}))
             if isinstance(raw_v_limits, dict):
@@ -56,7 +50,6 @@ class GalvoSignalGenerator:
             else:
                 voltage_limits = (-10.0, 10.0)
 
-        #resolve dynamic delays
         if jump_delay_us is None:
             jump_delay_us = float(dyn_cfg.get("jump_delay_us", 150.0))
         if mark_delay_us is None:
@@ -66,7 +59,6 @@ class GalvoSignalGenerator:
         if laser_off_delay_us is None:
             laser_off_delay_us = float(dyn_cfg.get("laser_off_delay_us", 20.0))
 
-        #resolve optical pincushion distortion correction
         dist_cfg = cfg.get("distortion_correction", {})
         correction_enabled = bool(dist_cfg.get("enabled", True))
         if pincushion_kx is None:
@@ -75,26 +67,6 @@ class GalvoSignalGenerator:
             pincushion_ky = float(dist_cfg.get("pincushion_ky", 0.0)) if correction_enabled else 0.0
         if field_half_width_mm is None:
             field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 193.5))
-        if field_half_width_mm <= 0:
-            raise ValueError("field_half_width_mm must be positive.")
-        if sample_rate_hz <= 0:
-            raise ValueError("sample_rate_hz must be positive.")
-        if scale_factor_v_per_mm <= 0:
-            raise ValueError("scale_factor_v_per_mm must be positive.")
-        if len(voltage_limits) != 2 or voltage_limits[0] >= voltage_limits[1]:
-            raise ValueError("voltage_limits must be (v_min, v_max) with v_min < v_max.")
-        delays = (jump_delay_us, mark_delay_us, laser_on_delay_us, laser_off_delay_us)
-        if any(delay < 0 for delay in delays):
-            raise ValueError("Delays must be non-negative.")
-        if connection_tolerance_mm < 0:
-            raise ValueError("connection_tolerance_mm must be non-negative.")
-        for block in trajectories:
-            if not isinstance(block, TrajectoryBlock):
-                raise TypeError("trajectories must contain TrajectoryBlock instances.")
-            if block.motion_type not in ("G0", "G1"):
-                raise ValueError(f"Unsupported motion type: {block.motion_type}")
-            if block.velocity <= 0:
-                raise ValueError("Block velocity must be strictly positive.")
 
         self.trajectories: Sequence[TrajectoryBlock] = trajectories
         self.sample_rate_hz: float = float(sample_rate_hz)
@@ -105,7 +77,12 @@ class GalvoSignalGenerator:
         self.pincushion_ky: float = float(pincushion_ky)
         self.field_half_width_mm: float = float(field_half_width_mm)
 
-        #convert delays from microseconds to sample counts
+        lens_cfg = cfg["lens_model"]
+        self.lens_kx: float = float(lens_cfg["pincushion_kx"])
+        self.lens_ky: float = float(lens_cfg["pincushion_ky"])
+        self.lens_w: float = float(lens_cfg["field_half_width_mm"])
+        self.positions: np.ndarray = np.zeros((0, 2), dtype=np.float64)
+
         self.n_jump: int = self._us_to_samples(jump_delay_us)
         self.n_mark: int = self._us_to_samples(mark_delay_us)
         self.n_laser_on: int = self._us_to_samples(laser_on_delay_us)
@@ -116,13 +93,7 @@ class GalvoSignalGenerator:
         return int(round(delay_us / MICROSECONDS_PER_SECOND * self.sample_rate_hz))
 
     def _apply_pincushion_correction(self, positions: np.ndarray) -> np.ndarray:
-        """
-        Apply cross-axis geometric pre-distortion to counteract optical pincushion distortion.
-        Mathematical model:
-            X_corr = X * (1 - k_x * (Y / W)^2)
-            Y_corr = Y * (1 - k_y * (X / W)^2)
-        where W is field_half_width_mm (scan field half-width).
-        """
+        """apply cross-axis pincushion pre-distortion"""
         if self.pincushion_kx == 0.0 and self.pincushion_ky == 0.0:
             return positions
 
@@ -130,13 +101,36 @@ class GalvoSignalGenerator:
         x = positions[:, 0]
         y = positions[:, 1]
 
-        y_norm_sq = (y / w) ** 2
-        x_norm_sq = (x / w) ** 2
-
-        x_corr = x * (1.0 - self.pincushion_kx * y_norm_sq)
-        y_corr = y * (1.0 - self.pincushion_ky * x_norm_sq)
-
+        x_corr = x * (1.0 - self.pincushion_kx * (y / w) ** 2)
+        y_corr = y * (1.0 - self.pincushion_ky * (x / w) ** 2)
         return np.column_stack((x_corr, y_corr))
+
+    @staticmethod
+    def _invert_pincushion(positions: np.ndarray, kx: float, ky: float, w: float) -> np.ndarray:
+        """invert pincushion model by fixed-point iteration"""
+        pts = np.asarray(positions, dtype=np.float64)
+        if (kx == 0.0 and ky == 0.0) or pts.size == 0:
+            return pts
+
+        xc, yc = pts[:, 0], pts[:, 1]
+        x, y = xc.copy(), yc.copy()
+        inv_w2 = 1.0 / (w * w)
+        for _ in range(25):
+            x_new = xc / (1.0 - kx * y * y * inv_w2)
+            y_new = yc / (1.0 - ky * x * x * inv_w2)
+            if np.max(np.abs(x_new - x)) < 1e-9 and np.max(np.abs(y_new - y)) < 1e-9:
+                x, y = x_new, y_new
+                break
+            x, y = x_new, y_new
+
+        return np.column_stack((x, y))
+
+    def view_positions(self, positions: np.ndarray, through_lens: bool) -> np.ndarray:
+        """canvas coordinates of nominal positions, optionally seen through the lens model"""
+        commanded = self._apply_pincushion_correction(positions)
+        if through_lens:
+            return self._invert_pincushion(commanded, self.lens_kx, self.lens_ky, self.lens_w)
+        return commanded
 
     def generate_signals(self) -> Tuple[np.ndarray, np.ndarray]:
         """build synchronized analog and digital output arrays"""
@@ -205,6 +199,7 @@ class GalvoSignalGenerator:
         gate = (np.cumsum(gate_delta[:-1]) > 0).astype(np.uint8)
 
         #apply optical pincushion distortion correction
+        self.positions = positions
         positions_corr = self._apply_pincushion_correction(positions)
 
         #spatial to voltage mapping with saturation

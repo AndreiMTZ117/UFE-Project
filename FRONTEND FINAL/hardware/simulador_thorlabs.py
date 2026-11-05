@@ -123,14 +123,10 @@ class SimuladorThorlabsGVS:
 
     def _limitar_punto(self, p):
         """clamp coordinates to voltage limits"""
-        vx, vy = p[0] * self.volts_per_mm, p[1] * self.volts_per_mm
-        cx = min(self.v_max, max(self.v_min, vx))
-        cy = min(self.v_max, max(self.v_min, vy))
-        if (cx != vx or cy != vy) and not self._clamp_warned:
-            self._clamp_warned = True
-            print(f"[SimThorlabs] AVISO: comando fuera de +/-{self.v_max} V; saturado.")
         if self.volts_per_mm == 0:
             return p
+        cx = min(self.v_max, max(self.v_min, p[0] * self.volts_per_mm))
+        cy = min(self.v_max, max(self.v_min, p[1] * self.volts_per_mm))
         return (cx / self.volts_per_mm, cy / self.volts_per_mm)
 
     def _esperar(self, segundos: float, check_cancel=None, granularidad: float = 0.05):

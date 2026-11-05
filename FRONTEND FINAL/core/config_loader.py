@@ -12,8 +12,7 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-#device identity (device_name, channels) has no default on purpose: a wrong
-#fallback could drive voltages on a different card, so it must come from the json
+#device identity must come from hardware_config.json
 DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
     "volts_per_mm": 0.02535,
     "voltage_limits": {
@@ -21,7 +20,7 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "max": 10.0,
     },
     "daq": {
-        "ai_terminal_config": "DIFF",   #terminal configuration mode
+        "ai_terminal_config": "DIFF",
         "sample_rate_hz": 100000.0,
         "feedback_sign_x": 1,
         "feedback_sign_y": 1,
@@ -35,6 +34,11 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
     },
     "distortion_correction": {
         "enabled": True,
+        "pincushion_kx": 0.0,
+        "pincushion_ky": 0.0,
+        "field_half_width_mm": 193.5,
+    },
+    "lens_model": {
         "pincushion_kx": 0.0,
         "pincushion_ky": 0.0,
         "field_half_width_mm": 193.5,
@@ -87,8 +91,6 @@ def load_hardware_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     try:
         with open(resolved_path, "r", encoding="utf-8") as f:
             user_config = json.load(f)
-        if not isinstance(user_config, dict):
-            raise ValueError(f"Root of configuration file '{resolved_path}' must be a JSON object.")
         #deep merge with defaults
         merged_config = copy.deepcopy(DEFAULT_HARDWARE_CONFIG)
         for section, values in user_config.items():

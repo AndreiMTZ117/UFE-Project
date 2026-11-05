@@ -306,12 +306,12 @@ def phase_4_signal_generation() -> Dict[str, Any]:
         TrajectoryBlock("G1", (10.0, 10.0), (30.0, 10.0), 20.0),
         TrajectoryBlock("G1", (30.0, 10.0), (30.0, 30.0), 20.0),
         #out of bound excursion to test voltage clamping
-        TrajectoryBlock("G0", (30.0, 30.0), (-65.0, -65.0), 200.0),
-        TrajectoryBlock("G1", (-65.0, -65.0), (-65.0, -55.0), 10.0),
+        TrajectoryBlock("G0", (30.0, 30.0), (-450.0, -450.0), 200.0),
+        TrajectoryBlock("G1", (-450.0, -450.0), (-450.0, -440.0), 10.0),
     ]
 
     fs = 100_000.0  #100 khz sampling
-    v_per_mm = get_volts_per_mm()  #scale factor 0.200 v per mm
+    v_per_mm = get_volts_per_mm()
     v_limits = (-10.0, 10.0)
 
     jump_delay_us = 150.0   #15 samples
