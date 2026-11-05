@@ -27,6 +27,8 @@ class GalvoSignalGenerator:
         pincushion_kx: Optional[float] = None,
         pincushion_ky: Optional[float] = None,
         field_half_width_mm: Optional[float] = None,
+        field_half_height_mm: Optional[float] = None,
+        right_edge_skew_mm: Optional[float] = None,
         connection_tolerance_mm: float = 1e-6,
         config: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
@@ -66,7 +68,11 @@ class GalvoSignalGenerator:
         if pincushion_ky is None:
             pincushion_ky = float(dist_cfg.get("pincushion_ky", 0.0)) if correction_enabled else 0.0
         if field_half_width_mm is None:
-            field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 193.5))
+            field_half_width_mm = float(dist_cfg.get("field_half_width_mm", 187.5))
+        if field_half_height_mm is None:
+            field_half_height_mm = float(dist_cfg.get("field_half_height_mm", 191.5))
+        if right_edge_skew_mm is None:
+            right_edge_skew_mm = float(dist_cfg.get("right_edge_skew_mm", 0.0)) if correction_enabled else 0.0
 
         self.trajectories: Sequence[TrajectoryBlock] = trajectories
         self.sample_rate_hz: float = float(sample_rate_hz)
@@ -76,11 +82,15 @@ class GalvoSignalGenerator:
         self.pincushion_kx: float = float(pincushion_kx)
         self.pincushion_ky: float = float(pincushion_ky)
         self.field_half_width_mm: float = float(field_half_width_mm)
+        self.field_half_height_mm: float = float(field_half_height_mm)
+        self.right_edge_skew_mm: float = float(right_edge_skew_mm)
 
-        lens_cfg = cfg["lens_model"]
-        self.lens_kx: float = float(lens_cfg["pincushion_kx"])
-        self.lens_ky: float = float(lens_cfg["pincushion_ky"])
-        self.lens_w: float = float(lens_cfg["field_half_width_mm"])
+        lens_cfg = cfg.get("lens_model", {})
+        self.lens_kx: float = float(lens_cfg.get("pincushion_kx", 0.0))
+        self.lens_ky: float = float(lens_cfg.get("pincushion_ky", 0.0))
+        self.lens_w: float = float(lens_cfg.get("field_half_width_mm", self.field_half_width_mm))
+        self.lens_h: float = float(lens_cfg.get("field_half_height_mm", self.field_half_height_mm))
+        self.lens_skew_mm: float = float(lens_cfg.get("right_edge_skew_mm", 0.0))
         self.positions: np.ndarray = np.zeros((0, 2), dtype=np.float64)
 
         self.n_jump: int = self._us_to_samples(jump_delay_us)
@@ -93,16 +103,24 @@ class GalvoSignalGenerator:
         return int(round(delay_us / MICROSECONDS_PER_SECOND * self.sample_rate_hz))
 
     def _apply_pincushion_correction(self, positions: np.ndarray) -> np.ndarray:
-        """apply cross-axis pincushion pre-distortion"""
-        if self.pincushion_kx == 0.0 and self.pincushion_ky == 0.0:
+        """apply cross-axis pincushion pre-distortion and right-edge skew compensation"""
+        if len(positions) == 0:
             return positions
 
         w = self.field_half_width_mm
+        h = self.field_half_height_mm
         x = positions[:, 0]
         y = positions[:, 1]
 
         x_corr = x * (1.0 - self.pincushion_kx * (y / w) ** 2)
         y_corr = y * (1.0 - self.pincushion_ky * (x / w) ** 2)
+
+        # PARCHE: compensar inclinación diagonal en borde derecho (X > 0)
+        if self.right_edge_skew_mm != 0.0:
+            progreso_y = np.clip((y + h) / (2.0 * h), 0.0, 1.0)
+            peso_x = np.clip(x / w, 0.0, 1.0)
+            x_corr = x_corr - (self.right_edge_skew_mm * peso_x * progreso_y)
+
         return np.column_stack((x_corr, y_corr))
 
     @staticmethod
@@ -129,7 +147,12 @@ class GalvoSignalGenerator:
         """canvas coordinates of nominal positions, optionally seen through the lens model"""
         commanded = self._apply_pincushion_correction(positions)
         if through_lens:
-            return self._invert_pincushion(commanded, self.lens_kx, self.lens_ky, self.lens_w)
+            pts = self._invert_pincushion(commanded, self.lens_kx, self.lens_ky, self.lens_w)
+            if self.lens_skew_mm != 0.0:
+                progreso_y = np.clip((pts[:, 1] + self.lens_h) / (2.0 * self.lens_h), 0.0, 1.0)
+                peso_x = np.clip(pts[:, 0] / self.lens_w, 0.0, 1.0)
+                pts[:, 0] += self.lens_skew_mm * peso_x * progreso_y
+            return pts
         return commanded
 
     def generate_signals(self) -> Tuple[np.ndarray, np.ndarray]:

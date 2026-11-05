@@ -242,6 +242,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         #scrollable parameter form with 6 sections
         self.scroll_params = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_params.pack(side="top", fill="both", expand=True, padx=2, pady=2)
+        self.scroll_params._parent_canvas.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
 
         #a kinematics
         self._crear_divisor(self.scroll_params, "sec_kinematics", es_primero=True)
@@ -456,6 +457,13 @@ class PanelConfiguracion(ctk.CTkFrame):
         )
         self.btn_frame_stop.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
         agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))
+
+    def _on_mousewheel(self, event):
+        # Sensibilidad de la rueda del mouse (píxeles por muesca)
+        sensibilidad_px = 36
+        if self.winfo_rootx() <= event.x_root <= self.winfo_rootx() + self.winfo_width() and \
+           self.winfo_rooty() <= event.y_root <= self.winfo_rooty() + self.winfo_height():
+            self.scroll_params._parent_canvas.yview("scroll", -int((event.delta / 120.0) * sensibilidad_px), "units")
 
     #widget creation helpers
     def _crear_divisor(self, parent, div_key: str, es_primero: bool = False):
