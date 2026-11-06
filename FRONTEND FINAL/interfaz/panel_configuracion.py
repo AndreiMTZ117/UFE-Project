@@ -531,6 +531,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         agregar_tooltip(p_card, ayuda)
 
         #interactive visual validation
+        entry.bind("<KeyRelease>", lambda e, k=key: self._validar_campo(k))
         entry.bind("<FocusOut>", lambda e, k=key: self._validar_campo(k))
         entry.bind("<Return>", lambda e, k=key: self._validar_campo(k))
         return p_card
@@ -788,12 +789,17 @@ class PanelConfiguracion(ctk.CTkFrame):
             try:
                 val = float(val_txt)
                 if val < cfg["min"] or val > cfg["hard_max"]:
-                    errores.append(f"{param_nombre}: {val} {cfg['unit']} (Max: {cfg['hard_max']})")
+                    self.inputs[key].configure(border_color=COLOR_RED, border_width=2)
+                    errores.append(
+                        f"Field to modify: [{param_nombre}]\n"
+                        f"   Current value: {val} {cfg['unit']}\n"
+                        f"   Allowed physical range: {cfg['min']} to {cfg['hard_max']} {cfg['unit']}"
+                    )
                 elif val > cfg["rec_max"]:
                     warn_msg = tr(cfg["warn_key"]) if cfg.get("warn_key") else ""
                     advertencias.append({
                         "param": key,
-                        "label": param_nombre,
+                        "label": f"[{param_nombre}]",
                         "val": val,
                         "unit": cfg["unit"],
                         "rec_max": cfg["rec_max"],
@@ -801,7 +807,11 @@ class PanelConfiguracion(ctk.CTkFrame):
                         "warn_msg": warn_msg
                     })
             except ValueError:
-                errores.append(f"{param_nombre}: '{val_txt}'")
+                self.inputs[key].configure(border_color=COLOR_RED, border_width=2)
+                errores.append(
+                    f"Field to modify: [{param_nombre}]\n"
+                    f"   Invalid non-numeric input: '{val_txt}'"
+                )
 
         #check physical parameter combinations
         errs_comb, warns_comb = self._verificar_combinaciones_parametros()
@@ -820,138 +830,107 @@ class PanelConfiguracion(ctk.CTkFrame):
             v_mark = float(datos.get("velocidad_trazado", 0))
             v_jump = float(datos.get("velocidad_viaje", 0))
             dur_min = float(datos.get("duracion_min_segmento_ms", 0))
-            potencia = float(datos.get("potencia_laser", 0))
-            freq = float(datos.get("frecuencia_khz", 0))
-            jump_delay = float(datos.get("jump_delay_us", 0))
-            mark_delay = float(datos.get("mark_delay_us", 0))
-            laser_on_delay = float(datos.get("laser_on_delay_us", 0))
+            dur_jump = float(datos.get("duracion_min_viaje_ms", 0))
+            jump_delay = float(datos.get("jump_delay_ms", 0))
+            mark_delay = float(datos.get("mark_delay_ms", 0))
+            laser_on_delay = float(datos.get("laser_on_delay_ms", 0))
             cooling_delay = float(datos.get("cooling_delay_s", 0))
             num_passes = int(datos.get("num_pasadas", 1))
             rdp = float(datos.get("tolerancia_rdp", 0))
         except (ValueError, TypeError):
             return errores, advertencias
 
-        # 1. Velocidad de marcado alta con duracion de segmento nula o critica
+        #field labels from active language (english default)
+        lbl_vmark = tr("param_velocidad_trazado")          # "Mark Speed"
+        lbl_vjump = tr("param_velocidad_viaje")            # "Travel Speed"
+        lbl_durmark = tr("param_duracion_min_segmento_ms") # "Min Mark Dwell"
+        lbl_durjump = tr("param_duracion_min_viaje_ms")    # "Min Jump Dwell"
+        lbl_jdelay = tr("param_jump_delay_ms")             # "Jump Settling Delay"
+        lbl_mdelay = tr("param_mark_delay_ms")             # "Mark Settling Delay"
+        lbl_ondelay = tr("param_laser_on_delay_ms")        # "Laser ON Delay"
+        lbl_passes = tr("param_num_pasadas")               # "Passes"
+        lbl_cooling = tr("param_cooling_delay_s")          # "Cooling Delay"
+        lbl_rdp = tr("param_tolerancia_rdp")               # "RDP Tolerance"
+
+        #1. High Mark Speed with zero or critical dwell
         if v_mark >= 600.0 and dur_min < 5.0:
+            if "velocidad_trazado" in self.inputs:
+                self.inputs["velocidad_trazado"].configure(border_color=COLOR_RED, border_width=2)
+            if "duracion_min_segmento_ms" in self.inputs:
+                self.inputs["duracion_min_segmento_ms"].configure(border_color=COLOR_RED, border_width=2)
             errores.append(
-                f"Marcado a {v_mark:.0f} mm/s con duración mínima de {dur_min:.1f} ms. "
-                "Causará vibración destructiva y sobrecalentamiento en espejos de 10 mm (requiere duración >= 5 ms)."
+                f"Fields to modify: [{lbl_vmark}] or [{lbl_durmark}]\n"
+                f"   Current: {lbl_vmark} = {v_mark:.0f} mm/s, {lbl_durmark} = {dur_min:.1f} ms.\n"
+                f"   Requirement: Increase [{lbl_durmark}] to >= 5.0 ms (recommended: 15-25 ms) or decrease [{lbl_vmark}] below 600 mm/s to prevent violent 10 mm mirror chatter and driver trip."
             )
         elif v_mark > 300.0 and dur_min == 0.0:
             advertencias.append({
                 "param": "duracion_min_segmento_ms",
-                "label": "Marcado rápido con duración 0 ms",
+                "label": f"[{lbl_durmark}] with rapid [{lbl_vmark}]",
                 "val": dur_min,
                 "unit": "ms",
                 "rec_max": 25.0,
                 "hard_max": 100.0,
-                "warn_msg": "Pérdida de fidelidad geométrica y esquinas redondeadas por inercia de los espejos."
+                "warn_msg": f"[{lbl_vmark}] is {v_mark:.0f} mm/s with [{lbl_durmark}] at 0 ms. Micro-vectors will cause corner rounding due to 10 mm mirror inertia. Set to >= 10 ms."
             })
 
-        # 2. Velocidad de viaje extrema con retardo de salto insuficiente
-        if v_jump >= 2000.0 and jump_delay < 200.0:
+        #2. Extreme Travel Speed with insufficient Jump Settling Delay
+        #Note: Thorlabs GVS112 mirror settling time is 0.4 ms (small step) to 1.5-2.0 ms (full scale).
+        if v_jump >= 2000.0 and jump_delay < 2.0:
+            if "velocidad_viaje" in self.inputs:
+                self.inputs["velocidad_viaje"].configure(border_color=COLOR_RED, border_width=2)
+            if "jump_delay_ms" in self.inputs:
+                self.inputs["jump_delay_ms"].configure(border_color=COLOR_RED, border_width=2)
             errores.append(
-                f"Viaje a {v_jump:.0f} mm/s con retardo de salto de {jump_delay:.0f} µs. "
-                "Los espejos no frenarán a tiempo antes de activar el láser (requiere retardo >= 200 µs)."
+                f"Fields to modify: [{lbl_vjump}] or [{lbl_jdelay}]\n"
+                f"   Current: {lbl_vjump} = {v_jump:.0f} mm/s, {lbl_jdelay} = {jump_delay:.1f} ms.\n"
+                f"   Requirement: Increase [{lbl_jdelay}] to >= 2.0 ms (recommended: 10-50 ms) or decrease [{lbl_vjump}] below 2000 mm/s. The 10 mm mirrors require settling time before firing the laser."
             )
-        elif v_jump > 1200.0 and jump_delay < 150.0:
+        elif v_jump > 1200.0 and jump_delay < 1.0:
             advertencias.append({
-                "param": "jump_delay_us",
-                "label": "Viaje rápido con bajo retardo de salto",
+                "param": "jump_delay_ms",
+                "label": f"[{lbl_jdelay}] with rapid [{lbl_vjump}]",
                 "val": jump_delay,
-                "unit": "µs",
-                "rec_max": 500.0,
-                "hard_max": 2000.0,
-                "warn_msg": "Riesgo de ganchos o estelas quemadas al inicio de cada trazo."
+                "unit": "ms",
+                "rec_max": 200.0,
+                "hard_max": 500.0,
+                "warn_msg": f"Rapid jump ({v_jump:.0f} mm/s) with low settling delay ({jump_delay:.1f} ms). Risk of start hooks or tailing marks."
             })
 
-        # 3. Potencia extrema a velocidad ultralenta (Riesgo de fuego / combustion en polimeros)
-        if potencia >= 80.0 and v_mark < 2.0:
-            errores.append(
-                f"Potencia al {potencia:.0f}% con velocidad de marcado de {v_mark:.1f} mm/s. "
-                "Riesgo severo de ignición o combustión directa del polímero."
-            )
-        elif potencia >= 60.0 and v_mark < 5.0:
-            advertencias.append({
-                "param": "potencia_laser",
-                "label": "Densidad térmica extrema",
-                "val": potencia,
-                "unit": "%",
-                "rec_max": 90.0,
-                "hard_max": 100.0,
-                "warn_msg": "Alta concentración de calor que quemará o carbonizará los bordes de la pieza."
-            })
-
-        # 4. Velocidad alta con potencia insignificante
-        if v_mark >= 500.0 and potencia <= 10.0:
-            advertencias.append({
-                "param": "velocidad_trazado",
-                "label": "Velocidad alta con potencia mínima",
-                "val": v_mark,
-                "unit": "mm/s",
-                "rec_max": 500.0,
-                "hard_max": 1200.0,
-                "warn_msg": "La energía suministrada es casi nula; el láser no marcará el material."
-            })
-
-        # 5. Muchas pasadas continuas sin enfriamiento
-        if num_passes >= 10 and cooling_delay == 0.0:
-            advertencias.append({
-                "param": "cooling_delay_s",
-                "label": "10+ pasadas continuas sin enfriamiento",
-                "val": cooling_delay,
-                "unit": "s",
-                "rec_max": 15.0,
-                "hard_max": 45.0,
-                "warn_msg": "Deformación térmica acumulada en la zona afectada por el calor (HAZ)."
-            })
-
-        # 6. Velocidad de viaje menor que la de marcado
+        #3. Travel Speed slower than Mark Speed (Inversion)
         if v_jump < v_mark:
             advertencias.append({
                 "param": "velocidad_viaje",
-                "label": "Velocidad de viaje menor que velocidad de marcado",
+                "label": f"[{lbl_vjump}] vs [{lbl_vmark}]",
                 "val": v_jump,
                 "unit": "mm/s",
                 "rec_max": 2000.0,
                 "hard_max": 3000.0,
-                "warn_msg": "Los saltos en vacío serán más lentos que el corte, alargando el tiempo de proceso."
+                "warn_msg": f"[{lbl_vjump}] ({v_jump:.0f} mm/s) is slower than [{lbl_vmark}] ({v_mark:.0f} mm/s). Unpowered rapid jumps will unnecessarily slow down total cycle time."
             })
 
-        # 7. Retardo de encendido del laser mayor que retardo de marcado
-        if laser_on_delay > mark_delay and mark_delay > 0:
+        #4. Multi-Pass Cutting with zero Cooling Delay
+        if num_passes >= 10 and cooling_delay == 0.0:
             advertencias.append({
-                "param": "laser_on_delay_us",
-                "label": "Retardo encendido láser mayor que retardo de marcado",
-                "val": laser_on_delay,
-                "unit": "µs",
-                "rec_max": 200.0,
-                "hard_max": 1000.0,
-                "warn_msg": "El láser disparará después de que los espejos hayan empezado a moverse, omitiendo el inicio."
+                "param": "cooling_delay_s",
+                "label": f"[{lbl_cooling}] with high [{lbl_passes}]",
+                "val": cooling_delay,
+                "unit": "s",
+                "rec_max": 15.0,
+                "hard_max": 45.0,
+                "warn_msg": f"Continuous cutting with {num_passes} [{lbl_passes}] and 0s [{lbl_cooling}] accumulates heat in the Heat Affected Zone (HAZ), warping polymer edges."
             })
 
-        # 8. Frecuencia y potencia maximas simultaneas (saturacion de fuente RF)
-        if freq >= 45.0 and potencia >= 90.0:
-            advertencias.append({
-                "param": "frecuencia_khz",
-                "label": "Frecuencia y potencia máximas simultáneas",
-                "val": freq,
-                "unit": "kHz",
-                "rec_max": 40.0,
-                "hard_max": 50.0,
-                "warn_msg": "Ciclo de trabajo al límite de saturación de la fuente de alimentación RF del láser."
-            })
-
-        # 9. Tolerancia RDP excesiva en geometría detallada
-        if rdp > 1.0:
+        #5. Excessive RDP Geometric Tolerance
+        if rdp > 0.05:
             advertencias.append({
                 "param": "tolerancia_rdp",
-                "label": "Tolerancia RDP excesiva",
+                "label": f"[{lbl_rdp}]",
                 "val": rdp,
                 "unit": "mm",
-                "rec_max": 0.5,
-                "hard_max": 2.0,
-                "warn_msg": "Simplificación geométrica muy agresiva; deformará y aplanará curvas finas."
+                "rec_max": 0.02,
+                "hard_max": 0.10,
+                "warn_msg": f"[{lbl_rdp}] at {rdp:.3f} mm is aggressive. Curves and fine details will be noticeably flattened."
             })
 
         return errores, advertencias

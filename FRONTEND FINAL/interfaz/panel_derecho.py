@@ -419,6 +419,7 @@ class PanelDerecho(ctk.CTkFrame):
         )
         self.entry_home_x.insert(0, "19.35")
         self.entry_home_x.pack(side="left", padx=4)
+        self.entry_home_x.bind("<Return>", lambda e: self._cb_aplicar_centro())
         ctk.CTkLabel(row_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
         #y row
@@ -438,6 +439,7 @@ class PanelDerecho(ctk.CTkFrame):
         )
         self.entry_home_y.insert(0, "19.75")
         self.entry_home_y.pack(side="left", padx=4)
+        self.entry_home_y.bind("<Return>", lambda e: self._cb_aplicar_centro())
         ctk.CTkLabel(row_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
 
         #apply button
@@ -584,6 +586,8 @@ class PanelDerecho(ctk.CTkFrame):
         try:
             x = float(self.entry_home_x.get().strip())
             y = float(self.entry_home_y.get().strip())
+            self.entry_home_x.configure(border_color=COLOR_BORDER)
+            self.entry_home_y.configure(border_color=COLOR_BORDER)
             self.centro_home = (x, y)
             self.pos_laser_actual = (x, y)
             self.actualizar_coordenadas(x, y)
@@ -592,7 +596,8 @@ class PanelDerecho(ctk.CTkFrame):
             self.toggle_home_card()
             self.redibujar_trace()
         except ValueError:
-            pass
+            self.entry_home_x.configure(border_color=COLOR_RED)
+            self.entry_home_y.configure(border_color=COLOR_RED)
 
     def set_centro(self, x: float, y: float):
         """update center inputs in popup"""

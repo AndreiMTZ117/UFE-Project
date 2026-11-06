@@ -39,14 +39,14 @@ class LogicaEjecucionMixin:
             if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
                 tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
                 if tiene_err:
-                    msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n• ".join(errs)
+                    msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
                     messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
                     self._ejecutando_inicio = False
                     return
 
                 if warns:
                     lineas_warn = [
-                        f"• {w['label']}: {w['val']} {w['unit']} (Rec: {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
+                        f"• {w['label']}: {w['val']} {w['unit']} (Recommended: <= {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
                         for w in warns
                     ]
                     msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
@@ -103,7 +103,7 @@ class LogicaEjecucionMixin:
         if is_paused:
             self.tiempo_ultima_pausa = time.time()
             if not self.puente.es_simulacion and getattr(self, "_pass_actual", 1) < getattr(self, "_num_passes_total", 1):
-                self.terminal.log("[HW] Pausa solicitada: La pasada actual terminará limpiamente y el sistema esperará en reposo seguro.")
+                self.terminal.log("[HW] Pause requested: Current pass will finish cleanly and galvos will rest at safe home.")
             else:
                 self.terminal.log(tr("log_pause"))
         else:
@@ -160,13 +160,13 @@ class LogicaEjecucionMixin:
         if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
             tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
             if tiene_err:
-                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n• ".join(errs)
+                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
                 messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
                 return
 
             if warns:
                 lineas_warn = [
-                    f"• {w['label']}: {w['val']} {w['unit']} (Rec: {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
+                    f"• {w['label']}: {w['val']} {w['unit']} (Recommended: <= {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
                     for w in warns
                 ]
                 msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"

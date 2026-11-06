@@ -272,6 +272,8 @@ class PanelGeneral(ctk.CTkFrame):
             ancho = float(self.entry_dim_x.get().strip())
             alto = float(self.entry_dim_y.get().strip())
             if ancho > 0 and alto > 0:
+                self.entry_dim_x.configure(border_color="#CBD5E1")
+                self.entry_dim_y.configure(border_color="#CBD5E1")
                 if abs(ancho - self.ancho_base_cm) < 1e-4 and abs(alto - self.alto_base_cm) < 1e-4:
                     return
                 self.ocultar_frame_dxf()
@@ -280,8 +282,14 @@ class PanelGeneral(ctk.CTkFrame):
                 self.redibujar()
                 if self.on_dimensiones_cambiadas:
                     self.on_dimensiones_cambiadas(ancho, alto)
+            else:
+                if ancho <= 0:
+                    self.entry_dim_x.configure(border_color=COLOR_RED)
+                if alto <= 0:
+                    self.entry_dim_y.configure(border_color=COLOR_RED)
         except ValueError:
-            pass
+            self.entry_dim_x.configure(border_color=COLOR_RED)
+            self.entry_dim_y.configure(border_color=COLOR_RED)
 
     def actualizar_dimensiones(self, ancho_cm: float, alto_cm: float):
         """update base dimension numeric entry fields"""

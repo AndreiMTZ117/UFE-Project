@@ -39,9 +39,9 @@ class GestorRecetas:
     def crear_receta(self, datos: dict) -> int:
         """insert recipe into db"""
         if not datos.get("nombre", "").strip():
-            raise ValueError("El campo 'nombre' es obligatorio y no puede estar vacío.")
+            raise ValueError("Field 'nombre' (Recipe Name) is required and cannot be empty.")
         if not datos.get("polimero", "").strip():
-            raise ValueError("El campo 'polimero' es obligatorio.")
+            raise ValueError("Field 'polimero' (Polymer Material) is required.")
 
         self._validar_rangos(datos)
 
@@ -200,7 +200,7 @@ class GestorRecetas:
                 val = datos[campo]
                 if not (minv <= float(val) <= maxv):
                     raise ValueError(
-                        f"El campo '{campo}' tiene valor {val}, fuera del rango permitido [{minv}, {maxv}]."
+                        f"Field '{campo}' value {val} is outside allowed physical range [{minv}, {maxv}]."
                     )
         if "modo_proceso" in datos and datos["modo_proceso"] is not None:
             m_str = str(datos["modo_proceso"]).strip()
@@ -210,8 +210,8 @@ class GestorRecetas:
             else:
                 permitidos = sorted(list(MODOS_PROCESO_VALIDOS))
                 raise ValueError(
-                    f"Modo de proceso no válido: '{datos['modo_proceso']}'. "
-                    f"Valores permitidos: {permitidos}."
+                    f"Invalid process mode / Modo de proceso no válido: '{datos['modo_proceso']}'. "
+                    f"Allowed modes: {permitidos}."
                 )
 
     def _aplicar_defaults(self, datos: dict) -> dict:

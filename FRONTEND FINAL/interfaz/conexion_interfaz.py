@@ -296,7 +296,7 @@ class PuenteLaser:
                 self.controlador_hardware.on_alerta = self._emitir_alerta_hw
                 self.es_simulacion = False
                 self.motivo_simulacion = ""
-                print(f"[PuenteLaser] Thorlabs GVS112/M físico activo ({daq_probe['description']}).")
+                print(f"[PuenteLaser] Physical Thorlabs GVS112/M active ({daq_probe['description']}).")
             else:
                 self._enable_simulator(razon=daq_probe["description"])
         except Exception as e:
@@ -315,9 +315,9 @@ class PuenteLaser:
             self.controlador_hardware = SimuladorThorlabsGVS()
             self.es_simulacion = True
             msg = f" ({razon})" if razon else ""
-            print(f"[PuenteLaser] Modo SIMULACIÓN activo - Hardware físico no conectado{msg}.")
+            print(f"[PuenteLaser] Virtual SIMULATION mode active - Physical hardware not detected{msg}.")
         except Exception as e:
-            print(f"[PuenteLaser] Error activando simulador: {e}")
+            print(f"[PuenteLaser] Error initializing simulator: {e}")
             self.controlador_hardware = None
             self.es_simulacion = True
 
@@ -1113,9 +1113,9 @@ class PuenteLaser:
             n_samples = int(voltages.shape[1])
             k_last = n_samples - 1
             if generator.pincushion_kx != 0.0 or generator.pincushion_ky != 0.0:
-                on_log(f"[Óptica] Corrección geométrica activa: kx={generator.pincushion_kx:.4f}, ky={generator.pincushion_ky:.4f} (W={generator.field_half_width_mm:.1f} mm)")
+                on_log(f"[Optics] Geometric pre-distortion active: kx={generator.pincushion_kx:.4f}, ky={generator.pincushion_ky:.4f} (W={generator.field_half_width_mm:.1f} mm)")
             if generator.right_edge_skew_mm != 0.0:
-                on_log(f"[Óptica] Parche borde derecho activo: compensación de {generator.right_edge_skew_mm:.2f} mm en esquina superior.")
+                on_log(f"[Optics] Right edge skew compensation active: {generator.right_edge_skew_mm:.2f} mm at top corner.")
             on_log(f"Signal timeline: {n_samples} samples @ {fs:.0f} Hz "
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
 
@@ -1299,9 +1299,9 @@ class PuenteLaser:
                 if not self._evento_pausa.is_set() and pass_idx < num_passes:
                     if on_log:
                         on_log(
-                            f"[Pausa] Pasada {pass_idx}/{num_passes} completada limpiamente. "
-                            f"Sistema en reposo seguro (Láser apagado a 0V, espejos centrados). "
-                            f"Presione Reanudar para continuar con la pasada {pass_idx + 1}/{num_passes}."
+                            f"[Pause] Pass {pass_idx}/{num_passes} completed cleanly. "
+                            f"System resting safely (Laser OFF at 0V, mirrors centered). "
+                            f"Press Resume to continue with pass {pass_idx + 1}/{num_passes}."
                         )
                     while not self._evento_pausa.is_set():
                         if self._evento_detener.is_set():
@@ -1314,7 +1314,7 @@ class PuenteLaser:
                         break
 
                     if on_log:
-                        on_log(f"[Reanudación] Reanudando ejecución para pasada {pass_idx + 1}/{num_passes}...")
+                        on_log(f"[Resume] Resuming execution for pass {pass_idx + 1}/{num_passes}...")
 
                 #cooling between passes
                 if pass_idx < num_passes and cooling_delay_s > 0:

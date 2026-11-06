@@ -138,6 +138,13 @@ class EventosInteraccionMixin:
         if self.puente.is_running or not self.receta_activa:
             return
 
+        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
+            tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
+            if tiene_err:
+                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
+                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+                return
+
         nombre_receta = self.receta_activa.get("nombre", "Recipe")
         confirma = messagebox.askyesno(
             tr("dlg_save_recipe_title"),
@@ -159,6 +166,14 @@ class EventosInteraccionMixin:
         """prompt for name and create new recipe in database"""
         if self.puente.is_running:
             return
+
+        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
+            tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
+            if tiene_err:
+                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
+                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+                return
+
         dialog = ctk.CTkInputDialog(text=tr("dlg_new_recipe_prompt"), title=tr("dlg_new_recipe_title"))
         nombre = dialog.get_input()
         if not nombre or not nombre.strip():
