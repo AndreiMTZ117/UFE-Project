@@ -234,6 +234,7 @@ class LogicaEjecucionMixin:
         self.trazos_completados.clear()
         self._ancla_trazo = None
         self._ultimo_seg_activo = None
+        self._max_trazo_completado = -1
 
     def _cb_progreso(
         self, trazo_idx, total_trazos, wp_idx, total_wp, x, y, trace_pct, total_pct, laser_on=True,
@@ -360,6 +361,17 @@ class LogicaEjecucionMixin:
                     ruta_actual = trazos_cm[trazo_idx]
                     v_ini = ruta_actual[pt_idx - 1]
 
+                    #complete any contours skipped entirely between telemetry frames
+                    max_t = getattr(self, '_max_trazo_completado', -1)
+                    if trazo_idx > max_t + 1:
+                        for skipped_t in range(max_t + 1, trazo_idx):
+                            if 0 <= skipped_t < len(trazos_cm):
+                                r_skip = trazos_cm[skipped_t]
+                                for s in range(1, len(r_skip)):
+                                    if self.panel_general.agregar_segmento_completado(r_skip[s - 1], r_skip[s], forzar=True):
+                                        self.trazos_completados.append((r_skip[s - 1], r_skip[s]))
+                        self._max_trazo_completado = trazo_idx - 1
+
                     if ultimo_seg is None:
                         #start new contour segment
                         for s in range(1, pt_idx):
@@ -390,6 +402,7 @@ class LogicaEjecucionMixin:
                                     origen = ancla if s == prev_pt and ancla is not None else s_ini
                                     if self.panel_general.agregar_segmento_completado(origen, s_fin, forzar=True):
                                         self.trazos_completados.append((origen, s_fin))
+                                self._max_trazo_completado = max(getattr(self, '_max_trazo_completado', -1), prev_t)
                             #ensure initial segments of new contour
                             for s in range(1, pt_idx):
                                 s_ini = ruta_actual[s - 1]
@@ -507,9 +520,14 @@ class LogicaEjecucionMixin:
                 self.panel_derecho.set_estado_sistema("COMPLETED")
                 self._ancla_trazo = None
                 self._ultimo_seg_activo = None
+                self._max_trazo_completado = -1
                 self.panel_derecho.ancla_vivo = None
                 trazos_ref = getattr(self.puente, 'trazos_fisicos_cm', self.puente.trazos_calibrados)
                 if trazos_ref:
+                    for r in trazos_ref:
+                        for s in range(1, len(r)):
+                            if self.panel_general.agregar_segmento_completado(r[s - 1], r[s], forzar=True):
+                                self.trazos_completados.append((r[s - 1], r[s]))
                     self.panel_derecho.redibujar_trace(
                         trazos_ref,
                         self.trazos_completados,
