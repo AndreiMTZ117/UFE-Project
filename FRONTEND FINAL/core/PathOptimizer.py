@@ -128,12 +128,12 @@ class PathOptimizer:
             flips.append(flipped)
             position = firsts[chosen] if flipped else lasts[chosen]
 
-        #heuristic pruning bypass 2-opt if count > 100
-        if count > 100:
-            logger.info("Contour count N=%d > 100: utilizing Greedy Nearest-Neighbor (skipping 2-Opt).", count)
+        #heuristic pruning bypass 2-opt if count > 500
+        if count > 500:
+            logger.info("Contour count N=%d > 500: utilizing Greedy Nearest-Neighbor (skipping 2-Opt).", count)
             return order, flips
 
-        max_passes = min(self.max_2opt_passes, 20 if count > 50 else 30)
+        max_passes = min(self.max_2opt_passes, 15 if count > 100 else (20 if count > 50 else 30))
 
         #2-opt with contour reversal
         def entry(pos: int) -> np.ndarray:
@@ -267,22 +267,46 @@ def fusionar_trazos_contiguos(
     trazos: Sequence[Sequence[Point]],
     tol_union: float = 0.02,
 ) -> List[List[Point]]:
-    """merge contiguous strokes and close near loops"""
+    """stitch contiguous strokes regardless of input order and close near loops"""
     if not trazos:
         return []
 
+    pool = [list(t) for t in trazos if len(t) >= 2]
     fusionados: List[List[Point]] = []
-    for trazo in trazos:
-        trazo_list = [tuple(p) for p in trazo]
-        if fusionados and math.dist(trazo_list[0], fusionados[-1][-1]) <= tol_union:
-            fusionados[-1].extend(trazo_list[1:])
-        else:
-            fusionados.append(trazo_list)
 
-    for trazo in fusionados:
-        if len(trazo) >= 3:
-            if 0.0001 < math.dist(trazo[-1], trazo[0]) <= (tol_union * 1.5):
-                trazo.append(trazo[0])
+    while pool:
+        current = pool.pop(0)
+        extended = True
+        while extended:
+            extended = False
+            p_start, p_end = current[0], current[-1]
+            if len(current) >= 3 and math.dist(p_start, p_end) <= tol_union:
+                current.append(p_start)
+                break
+            for i in range(len(pool)):
+                other = pool[i]
+                o_start, o_end = other[0], other[-1]
+                if math.dist(p_end, o_start) <= tol_union:
+                    current.extend(other[1:])
+                    pool.pop(i)
+                    extended = True
+                    break
+                elif math.dist(p_end, o_end) <= tol_union:
+                    current.extend(other[::-1][1:])
+                    pool.pop(i)
+                    extended = True
+                    break
+                elif math.dist(p_start, o_end) <= tol_union:
+                    current = other[:-1] + current
+                    pool.pop(i)
+                    extended = True
+                    break
+                elif math.dist(p_start, o_start) <= tol_union:
+                    current = other[::-1][:-1] + current
+                    pool.pop(i)
+                    extended = True
+                    break
+        fusionados.append(current)
 
     return fusionados
 
@@ -292,14 +316,12 @@ def optimizar_y_unir_trazos(
     tol_union: float = 0.02,
     pos_inicial: Point = (0.0, 0.0),
 ) -> List[List[Point]]:
-    """optimize stroke order using tsp and merge contiguous segments"""
-    valid = [np.asarray(r, dtype=float) for r in trayectorias if len(r) >= 2]
+    """stitch contiguous segments first, then optimize stroke order using tsp"""
+    unidos = fusionar_trazos_contiguos(trayectorias, tol_union=tol_union)
+    valid = [np.asarray(r, dtype=float) for r in unidos if len(r) >= 2]
     if not valid:
         return []
 
     ordered = PathOptimizer(epsilon=0.0).tsp_2opt(valid, start_point=pos_inicial)
-    return fusionar_trazos_contiguos(
-        [[(float(x), float(y)) for x, y in contour] for contour in ordered],
-        tol_union=tol_union,
-    )
+    return [[(float(x), float(y)) for x, y in contour] for contour in ordered]
 
