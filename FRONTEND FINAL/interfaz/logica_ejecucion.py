@@ -39,6 +39,8 @@ class LogicaEjecucionMixin:
             if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
                 tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
                 if tiene_err:
+                    for err in errs:
+                        self.terminal.log(f"[ERROR PARAM] {err}", "ERROR")
                     msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
                     messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
                     self._ejecutando_inicio = False
@@ -160,6 +162,8 @@ class LogicaEjecucionMixin:
         if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
             tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
             if tiene_err:
+                for err in errs:
+                    self.terminal.log(f"[ERROR PARAM] {err}", "ERROR")
                 msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
                 messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
                 return
@@ -546,6 +550,7 @@ class LogicaEjecucionMixin:
                 self._ultimo_seg_activo = None
                 self._progreso_pendiente = None
             elif estado in ("ERROR", "FAILED"):
+                self.terminal.log(f"[ERROR] Execution failed: {error_msg}", "ERROR")
                 self.panel_derecho.set_estado_sistema("STOPPED")
                 self.panel_general.ocultar_frame_dxf()
                 self.panel_general.limpiar_completados()

@@ -508,6 +508,30 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "⬇ CSV",
         "CS": "⬇ CSV",
     },
+    "term_clear": {
+        "EN": "🗑 Clear",
+        "CS": "🗑 Smazat",
+    },
+    "term_copy": {
+        "EN": "📋 Copy",
+        "CS": "📋 Kopírovat",
+    },
+    "filter_all": {
+        "EN": "ALL",
+        "CS": "VŠE",
+    },
+    "filter_errors": {
+        "EN": "ERRORS",
+        "CS": "CHYBY",
+    },
+    "filter_hw": {
+        "EN": "HARDWARE",
+        "CS": "HARDWARE",
+    },
+    "filter_telemetry": {
+        "EN": "TELEMETRY",
+        "CS": "TELEMETRIE",
+    },
     "col_num": {
         "EN": "#",
         "CS": "#",

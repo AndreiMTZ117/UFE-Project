@@ -1118,6 +1118,15 @@ class PuenteLaser:
                 on_log(f"[Optics] Right edge skew compensation active: {generator.right_edge_skew_mm:.2f} mm at top corner.")
             on_log(f"Signal timeline: {n_samples} samples @ {fs:.0f} Hz "
                    f"-> {n_samples / fs:.2f} s per pass (physical delays included)")
+            vx_min, vx_max = float(np.min(voltages[0])), float(np.max(voltages[0]))
+            vy_min, vy_max = float(np.min(voltages[1])), float(np.max(voltages[1]))
+            gate_duty = float(np.mean(gate)) * 100.0
+            is_clamped = bool(np.any(np.abs(voltages) >= 9.999))
+            clamp_status = "⚠️ CLAMPED TO ±10V" if is_clamped else "OK (Within ±10V)"
+            on_log(
+                f"[TELEMETRY] Electrical Bounds: Vx=[{vx_min:.2f}V, {vx_max:.2f}V], "
+                f"Vy=[{vy_min:.2f}V, {vy_max:.2f}V] | Laser Gate Duty: {gate_duty:.1f}% | Safety: {clamp_status}"
+            )
 
             def _drain_feedback(final: bool = False) -> None:
                 """read new ai samples accumulate tracking error and emit measured points"""

@@ -193,8 +193,40 @@ class AppLaserCTk(
         self.terminal = TerminalFlotante(
             self,
             on_cerrar=lambda: self.barra_superior.set_terminal_activo(False),
+            on_abrir=lambda: self.barra_superior.set_terminal_activo(True),
             obtener_historial=lambda: self.puente.gestor_trazabilidad.listar_historial(limite=50)
         )
+        self._instalar_manejador_excepciones()
+
+    def _instalar_manejador_excepciones(self):
+        """catches unhandled exceptions across main and worker threads and displays them in terminal"""
+        import threading
+        import traceback
+
+        def _hook(exc_type, exc_value, exc_traceback):
+            if issubclass(exc_type, (KeyboardInterrupt, SystemExit)):
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                return
+            err_line = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback)).strip()
+            msg = f"[CRITICAL UNHANDLED] {exc_type.__name__}: {exc_value}\n{err_line}"
+            if hasattr(self, "terminal") and not getattr(self, "_cerrando", False):
+                self.after(0, self.terminal.log, msg, "ERROR")
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+        sys.excepthook = _hook
+
+        if hasattr(threading, "excepthook"):
+            def _thread_hook(args):
+                if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+                    return
+                err_line = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)).strip()
+                tname = args.thread.name if args.thread else "Worker"
+                msg = f"[CRITICAL THREAD ERROR ({tname})] {args.exc_type.__name__}: {args.exc_value}\n{err_line}"
+                if hasattr(self, "terminal") and not getattr(self, "_cerrando", False):
+                    self.after(0, self.terminal.log, msg, "ERROR")
+                threading.__excepthook__(args)
+
+            threading.excepthook = _thread_hook
 
     def _on_viewport_zoom_cambiado(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
         """synchronize zoom camera frame on main canvas"""
