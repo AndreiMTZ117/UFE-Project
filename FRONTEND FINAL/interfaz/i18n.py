@@ -834,6 +834,88 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "Recipe '{name}' deleted.",
         "CS": "Receptura '{name}' byla smazána.",
     },
+
+    #hardware limits validation and warning messages
+    "label_range_recommended": {
+        "EN": "Recommended range",
+        "CS": "Doporučený rozsah",
+    },
+    "label_max_operable": {
+        "EN": "Max operable",
+        "CS": "Max. provozní",
+    },
+    "dlg_hw_limits_warn_title": {
+        "EN": "Hardware Limits Warning",
+        "CS": "Upozornění na limity hardwaru",
+    },
+    "dlg_hw_limits_warn_intro": {
+        "EN": "The following parameters exceed recommended values but remain in operable range:",
+        "CS": "Následující parametry překračují doporučené hodnoty, ale zůstávají v provozním rozsahu:",
+    },
+    "dlg_hw_limits_warn_prompt": {
+        "EN": "Do you wish to proceed with execution using these parameters?",
+        "CS": "Přejete si přesto pokračovat ve spuštění s těmito parametry?",
+    },
+    "dlg_hw_limits_error_title": {
+        "EN": "Parameter Limits Exceeded",
+        "CS": "Překročeny limity parametrů",
+    },
+    "dlg_hw_limits_error_intro": {
+        "EN": "The following parameters exceed absolute physical limits and must be corrected:",
+        "CS": "Následující parametry překračují absolutní fyzické limity a musí být opraveny:",
+    },
+    "warn_velocidad_trazado": {
+        "EN": "10 mm mirror inertia may cause corner overshoot and low optical energy density.",
+        "CS": "Setrvačnost 10mm zrcadel může způsobit překmit v rozích a nízkou hustotu energie.",
+    },
+    "warn_velocidad_viaje": {
+        "EN": "High peak currents in Thorlabs servo drivers (risk of thermal trip if sustained).",
+        "CS": "Vysoké proudové špičky v servozesilovačích Thorlabs (riziko tepelné ochrany při trvalém zatížení).",
+    },
+    "warn_duracion_min_segmento_ms": {
+        "EN": "Will artificially slow down curved or detailed contours.",
+        "CS": "Uměle zpomalí zakřivené nebo detailní kontury.",
+    },
+    "warn_duracion_min_viaje_ms": {
+        "EN": "Will increase total idle cycle time.",
+        "CS": "Zvýší celkovou dobu cyklu naprázdno.",
+    },
+    "warn_laser_on_delay_ms": {
+        "EN": "Extended delay: will cause craters or burn spots at vector start.",
+        "CS": "Dlouhé zpoždění: způsobí propaly nebo krátery na začátku každého vektoru.",
+    },
+    "warn_laser_off_delay_ms": {
+        "EN": "Extended delay: laser continues emitting with mirrors stopped.",
+        "CS": "Dlouhé zpoždění: laser vyzařuje i při zastavených zrcadlech.",
+    },
+    "warn_mark_delay_ms": {
+        "EN": "High corner dwell: accumulates heat in sharp corners.",
+        "CS": "Vysoké zpoždění v rozích: akumuluje teplo v ostrých rozích.",
+    },
+    "warn_jump_delay_ms": {
+        "EN": "Extended wait time after each jump, increasing idle cycle time.",
+        "CS": "Dlouhá čekací doba po každém skoku, zvyšuje prostoje.",
+    },
+    "warn_num_pasadas": {
+        "EN": "Severe thermal accumulation in polymer heat-affected zone.",
+        "CS": "Silná akumulace tepla v tepelně ovlivněné zóně polymeru.",
+    },
+    "warn_cooling_delay_s": {
+        "EN": "Extended cooling pauses dramatically increase total cycle time.",
+        "CS": "Dlouhé chladicí pauzy výrazně prodlužují dobu cyklu.",
+    },
+    "warn_tolerancia_rdp": {
+        "EN": "Visible geometric simplification: will distort fine details and curves.",
+        "CS": "Viditelné geometrické zjednodušení: zkreslí jemné detaily a křivky.",
+    },
+    "warn_tolerancia_union": {
+        "EN": "Wide tolerance: may merge independent contours.",
+        "CS": "Široká tolerance: může sloučit nezávislé kontury.",
+    },
+    "warn_escala_dibujo": {
+        "EN": "Scale very close to physical optical aperture limit of F-Theta lens.",
+        "CS": "Měřítko velmi blízko fyzickému limitu optické apertury objektivu F-Théta.",
+    },
 }
 
 

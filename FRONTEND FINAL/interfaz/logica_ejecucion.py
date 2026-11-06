@@ -35,7 +35,27 @@ class LogicaEjecucionMixin:
                 self._ejecutando_inicio = False
                 return
 
-            #3. validate kinematic parameters
+            #3. validate kinematic parameters and hardware limits
+            if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
+                tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
+                if tiene_err:
+                    msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n• ".join(errs)
+                    messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+                    self._ejecutando_inicio = False
+                    return
+
+                if warns:
+                    lineas_warn = [
+                        f"• {w['label']}: {w['val']} {w['unit']} (Rec: {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
+                        for w in warns
+                    ]
+                    msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
+                    if not messagebox.askyesno(tr("dlg_hw_limits_warn_title"), msg_warn):
+                        self._ejecutando_inicio = False
+                        return
+                    for w in warns:
+                        self.terminal.log(f"[WARN HW] {w['label']} = {w['val']} {w['unit']} > Rec {w['rec_max']}: {w['warn_msg']}")
+
             params = self.panel_config.obtener_datos_formulario()
             if params.get("velocidad_trazado", 0) <= 0 or params.get("velocidad_viaje", 0) <= 0:
                 messagebox.showwarning(tr("dlg_invalid_params_title"), tr("dlg_invalid_params_msg"))
@@ -135,6 +155,25 @@ class LogicaEjecucionMixin:
         if not self.puente.trazos_calibrados:
             messagebox.showwarning(tr("dlg_missing_geom_title"), tr("dlg_missing_geom_msg"))
             return
+
+        #validate hardware limits
+        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
+            tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
+            if tiene_err:
+                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n• ".join(errs)
+                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+                return
+
+            if warns:
+                lineas_warn = [
+                    f"• {w['label']}: {w['val']} {w['unit']} (Rec: {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
+                    for w in warns
+                ]
+                msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
+                if not messagebox.askyesno(tr("dlg_hw_limits_warn_title"), msg_warn):
+                    return
+                for w in warns:
+                    self.terminal.log(f"[WARN HW] {w['label']} = {w['val']} {w['unit']} > Rec {w['rec_max']}: {w['warn_msg']}")
 
         #1. show dashed framing box on canvas
         self.panel_general.mostrar_frame_dxf()

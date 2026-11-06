@@ -69,23 +69,24 @@ _AYUDAS = {
         "Swap XY: interchanges X and Y coordinates ((x, y) -> (y, x))."),
 }
 
-#physical validation ranges for parameters
-_RANGOS_VALIDOS = {
-    "velocidad_trazado":         (0.01, 50000.0),
-    "velocidad_viaje":           (0.01, 50000.0),
-    "duracion_min_segmento_ms":  (0, 10000),
-    "duracion_min_viaje_ms":     (0, 10000),
-    "laser_on_delay_ms":         (0, 10000),
-    "laser_off_delay_ms":        (0, 10000),
-    "mark_delay_ms":             (0, 10000),
-    "jump_delay_ms":             (0, 10000),
-    "num_pasadas":               (1, 50),
-    "cooling_delay_s":           (0.0, 30.0),
-    "tolerancia_rdp":            (0.0, 10.0),
-    "tolerancia_union":          (0.0, 10.0),
-    "escala_dibujo":             (0.01, 1.0),
-    "rotacion_grados":           (0.0, 360.0),
+#multi-tier physical limits: recommended range vs physical hard limit
+_LIMITES_PARAMETROS = {
+    "velocidad_trazado":        {"min": 0.01, "rec_max": 500.0,  "hard_max": 1200.0, "unit": "mm/s", "warn_key": "warn_velocidad_trazado"},
+    "velocidad_viaje":          {"min": 0.01, "rec_max": 2000.0, "hard_max": 3000.0, "unit": "mm/s", "warn_key": "warn_velocidad_viaje"},
+    "duracion_min_segmento_ms": {"min": 0,    "rec_max": 100,    "hard_max": 300,    "unit": "ms",   "warn_key": "warn_duracion_min_segmento_ms"},
+    "duracion_min_viaje_ms":    {"min": 0,    "rec_max": 300,    "hard_max": 1000,   "unit": "ms",   "warn_key": "warn_duracion_min_viaje_ms"},
+    "laser_on_delay_ms":        {"min": 0,    "rec_max": 100,    "hard_max": 300,    "unit": "ms",   "warn_key": "warn_laser_on_delay_ms"},
+    "laser_off_delay_ms":       {"min": 0,    "rec_max": 100,    "hard_max": 300,    "unit": "ms",   "warn_key": "warn_laser_off_delay_ms"},
+    "mark_delay_ms":            {"min": 0,    "rec_max": 50,     "hard_max": 150,    "unit": "ms",   "warn_key": "warn_mark_delay_ms"},
+    "jump_delay_ms":            {"min": 0,    "rec_max": 200,    "hard_max": 500,    "unit": "ms",   "warn_key": "warn_jump_delay_ms"},
+    "num_pasadas":              {"min": 1,    "rec_max": 15,     "hard_max": 40,     "unit": "passes","warn_key": "warn_num_pasadas"},
+    "cooling_delay_s":          {"min": 0.0,  "rec_max": 15.0,   "hard_max": 45.0,   "unit": "s",    "warn_key": "warn_cooling_delay_s"},
+    "tolerancia_rdp":           {"min": 0.0,  "rec_max": 0.02,   "hard_max": 0.10,   "unit": "mm",   "warn_key": "warn_tolerancia_rdp"},
+    "tolerancia_union":         {"min": 0.0,  "rec_max": 0.20,   "hard_max": 1.0,    "unit": "mm",   "warn_key": "warn_tolerancia_union"},
+    "escala_dibujo":            {"min": 0.01, "rec_max": 0.92,   "hard_max": 1.0,    "unit": "ratio","warn_key": "warn_escala_dibujo"},
+    "rotacion_grados":          {"min": 0.0,  "rec_max": 360.0,  "hard_max": 360.0,  "unit": "°",    "warn_key": None},
 }
+_RANGOS_VALIDOS = {k: (v["min"], v["hard_max"]) for k, v in _LIMITES_PARAMETROS.items()}
 
 
 class PanelConfiguracion(ctk.CTkFrame):
@@ -521,9 +522,12 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.inputs[key] = entry
 
         ayuda = tr(f"help_{key}")
-        rango = _RANGOS_VALIDOS.get(key)
-        if rango:
-            ayuda += f"\nRange: {rango[0]} to {rango[1]} {unit}."
+        cfg = _LIMITES_PARAMETROS.get(key)
+        if cfg:
+            ayuda += (
+                f"\n{tr('label_range_recommended')}: {cfg['min']} - {cfg['rec_max']} {unit}"
+                f" ({tr('label_max_operable')}: {cfg['hard_max']} {unit})."
+            )
         agregar_tooltip(p_card, ayuda)
 
         #interactive visual validation
@@ -533,38 +537,44 @@ class PanelConfiguracion(ctk.CTkFrame):
 
     #parameter visual validation
     def _validar_campo(self, key: str):
-        """validate field value against range and update border color"""
+        """validate field value against physical limits and apply visual border states"""
         if getattr(self, "bloqueado_ejecucion", False):
             return
         if key not in self.inputs:
             return
         entry = self.inputs[key]
         val_txt = entry.get().strip()
-        rango = _RANGOS_VALIDOS.get(key)
+        cfg = _LIMITES_PARAMETROS.get(key)
 
-        if rango:
+        if cfg:
             try:
                 val = float(val_txt)
-                if rango[0] <= val <= rango[1]:
-                    entry.configure(border_color="#CBD5E1")
+                if val < cfg["min"] or val > cfg["hard_max"]:
+                    entry.configure(border_color=COLOR_RED, border_width=2)
+                elif val > cfg["rec_max"]:
+                    entry.configure(border_color=COLOR_YELLOW, border_width=2)
                     if self.on_parametro_cambiado:
                         self.on_parametro_cambiado(key, val)
                     if key == "rotacion_grados" and self.on_rotacion_cambiada:
                         self.on_rotacion_cambiada(val)
                 else:
-                    entry.configure(border_color=COLOR_RED)
+                    entry.configure(border_color="#CBD5E1", border_width=1)
+                    if self.on_parametro_cambiado:
+                        self.on_parametro_cambiado(key, val)
+                    if key == "rotacion_grados" and self.on_rotacion_cambiada:
+                        self.on_rotacion_cambiada(val)
             except ValueError:
-                entry.configure(border_color=COLOR_RED)
+                entry.configure(border_color=COLOR_RED, border_width=2)
         else:
             try:
                 val = float(val_txt)
-                entry.configure(border_color="#CBD5E1")
+                entry.configure(border_color="#CBD5E1", border_width=1)
                 if self.on_parametro_cambiado:
                     self.on_parametro_cambiado(key, val)
                 if key == "rotacion_grados" and self.on_rotacion_cambiada:
                     self.on_rotacion_cambiada(val)
             except ValueError:
-                entry.configure(border_color=COLOR_RED)
+                entry.configure(border_color=COLOR_RED, border_width=2)
 
     #internal callbacks
     def _cb_receta_seleccionada(self, val: str):
@@ -670,7 +680,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             if key in receta:
                 entry.delete(0, "end")
                 entry.insert(0, str(receta[key]))
-                entry.configure(border_color="#CBD5E1")
+                self._validar_campo(key)
 
         #process mode
         if hasattr(self, "opt_modo_proceso"):
@@ -698,7 +708,7 @@ class PanelConfiguracion(ctk.CTkFrame):
                 ang_val = "0"
             self.inputs["rotacion_grados"].delete(0, "end")
             self.inputs["rotacion_grados"].insert(0, ang_val)
-            self.inputs["rotacion_grados"].configure(border_color="#CBD5E1")
+            self._validar_campo("rotacion_grados")
 
     def obtener_datos_formulario(self) -> Dict:
         """read and cast form values to numerical and boolean types"""
@@ -716,7 +726,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         #strict types and safe ranges
         if "num_pasadas" in datos:
             try:
-                datos["num_pasadas"] = max(1, min(50, int(datos["num_pasadas"])))
+                datos["num_pasadas"] = max(1, min(40, int(datos["num_pasadas"])))
             except (ValueError, TypeError):
                 datos["num_pasadas"] = 1
         else:
@@ -724,7 +734,7 @@ class PanelConfiguracion(ctk.CTkFrame):
 
         if "cooling_delay_s" in datos:
             try:
-                datos["cooling_delay_s"] = max(0.0, min(30.0, float(datos["cooling_delay_s"])))
+                datos["cooling_delay_s"] = max(0.0, min(45.0, float(datos["cooling_delay_s"])))
             except (ValueError, TypeError):
                 datos["cooling_delay_s"] = 0.0
         else:
@@ -766,6 +776,35 @@ class PanelConfiguracion(ctk.CTkFrame):
         datos["rotar_90_grados"] = 1 if datos["rotacion_grados"] == 90.0 else 0
         return datos
 
+    def obtener_diagnostico_formulario(self):
+        """inspect all inputs and return (tiene_errores, lista_errores, lista_advertencias)"""
+        errores = []
+        advertencias = []
+        for key, cfg in _LIMITES_PARAMETROS.items():
+            if key not in self.inputs:
+                continue
+            val_txt = self.inputs[key].get().strip()
+            param_nombre = tr(f"param_{key}")
+            try:
+                val = float(val_txt)
+                if val < cfg["min"] or val > cfg["hard_max"]:
+                    errores.append(f"{param_nombre}: {val} {cfg['unit']} (Max: {cfg['hard_max']})")
+                elif val > cfg["rec_max"]:
+                    warn_msg = tr(cfg["warn_key"]) if cfg.get("warn_key") else ""
+                    advertencias.append({
+                        "param": key,
+                        "label": param_nombre,
+                        "val": val,
+                        "unit": cfg["unit"],
+                        "rec_max": cfg["rec_max"],
+                        "hard_max": cfg["hard_max"],
+                        "warn_msg": warn_msg
+                    })
+            except ValueError:
+                errores.append(f"{param_nombre}: '{val_txt}'")
+
+        return (len(errores) > 0, errores, advertencias)
+
     def actualizar_idioma(self):
         """update all labels dividers buttons and tooltips on language change"""
         if hasattr(self, "lbl_sec"):
@@ -783,9 +822,12 @@ class PanelConfiguracion(ctk.CTkFrame):
         for key, (lbl_name, lbl_unit, unit, p_card) in self._entry_labels.items():
             lbl_name.configure(text=tr(f"param_{key}"))
             ayuda = tr(f"help_{key}")
-            rango = _RANGOS_VALIDOS.get(key)
-            if rango:
-                ayuda += f"\nRange: {rango[0]} to {rango[1]} {unit}."
+            cfg = _LIMITES_PARAMETROS.get(key)
+            if cfg:
+                ayuda += (
+                    f"\n{tr('label_range_recommended')}: {cfg['min']} - {cfg['rec_max']} {unit}"
+                    f" ({tr('label_max_operable')}: {cfg['hard_max']} {unit})."
+                )
             agregar_tooltip(p_card, ayuda)
 
         #process mode
