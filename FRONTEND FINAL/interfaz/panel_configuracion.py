@@ -87,6 +87,12 @@ _LIMITES_PARAMETROS = {
     "rotacion_grados":          {"min": 0.0,  "rec_max": 360.0,  "hard_max": 360.0,  "unit": "°",    "warn_key": None},
 }
 _RANGOS_VALIDOS = {k: (v["min"], v["hard_max"]) for k, v in _LIMITES_PARAMETROS.items()}
+_PAREJAS_COMBINADAS = {
+    "velocidad_trazado": "duracion_min_segmento_ms",
+    "duracion_min_segmento_ms": "velocidad_trazado",
+    "velocidad_viaje": "jump_delay_ms",
+    "jump_delay_ms": "velocidad_viaje",
+}
 
 
 class PanelConfiguracion(ctk.CTkFrame):
@@ -125,6 +131,8 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.f_div = ctk.CTkFont(family=FONT_TEACHERS, size=10, weight="bold")
 
         self.inputs: Dict[str, ctk.CTkEntry] = {}
+        self._tooltips: Dict[str, Any] = {}
+        self._ayudas_base: Dict[str, str] = {}
         self._div_labels: Dict[str, ctk.CTkLabel] = {}
         self._entry_labels: Dict[str, Any] = {}
         self.bloqueado_ejecucion = False
@@ -528,7 +536,8 @@ class PanelConfiguracion(ctk.CTkFrame):
                 f"\n{tr('label_range_recommended')}: {cfg['min']} - {cfg['rec_max']} {unit}"
                 f" ({tr('label_max_operable')}: {cfg['hard_max']} {unit})."
             )
-        agregar_tooltip(p_card, ayuda)
+        self._ayudas_base[key] = ayuda
+        self._tooltips[key] = agregar_tooltip(p_card, ayuda)
 
         #interactive visual validation
         entry.bind("<KeyRelease>", lambda e, k=key: self._validar_campo(k))
@@ -537,7 +546,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         return p_card
 
     #parameter visual validation
-    def _validar_campo(self, key: str):
+    def _validar_campo(self, key: str, revalidar_pareja: bool = True):
         """validate field value against physical limits and apply visual border states"""
         if getattr(self, "bloqueado_ejecucion", False):
             return
@@ -576,6 +585,12 @@ class PanelConfiguracion(ctk.CTkFrame):
                     self.on_rotacion_cambiada(val)
             except ValueError:
                 entry.configure(border_color=COLOR_RED, border_width=2)
+
+        if revalidar_pareja:
+            pareja = _PAREJAS_COMBINADAS.get(key)
+            if pareja:
+                self._validar_campo(pareja, revalidar_pareja=False)
+            self._verificar_combinaciones_parametros()
 
     #internal callbacks
     def _cb_receta_seleccionada(self, val: str):
@@ -796,6 +811,7 @@ class PanelConfiguracion(ctk.CTkFrame):
                         f"   Allowed physical range: {cfg['min']} to {cfg['hard_max']} {cfg['unit']}"
                     )
                 elif val > cfg["rec_max"]:
+                    self.inputs[key].configure(border_color=COLOR_YELLOW, border_width=2)
                     warn_msg = tr(cfg["warn_key"]) if cfg.get("warn_key") else ""
                     advertencias.append({
                         "param": key,
@@ -806,6 +822,8 @@ class PanelConfiguracion(ctk.CTkFrame):
                         "hard_max": cfg["hard_max"],
                         "warn_msg": warn_msg
                     })
+                else:
+                    self.inputs[key].configure(border_color="#CBD5E1", border_width=1)
             except ValueError:
                 self.inputs[key].configure(border_color=COLOR_RED, border_width=2)
                 errores.append(
@@ -858,12 +876,20 @@ class PanelConfiguracion(ctk.CTkFrame):
                 self.inputs["velocidad_trazado"].configure(border_color=COLOR_RED, border_width=2)
             if "duracion_min_segmento_ms" in self.inputs:
                 self.inputs["duracion_min_segmento_ms"].configure(border_color=COLOR_RED, border_width=2)
+            msg1 = f"⚠️ [CONFLICT]: Mark Speed ({v_mark:.0f} mm/s) requires [{lbl_durmark}] >= 5.0 ms (current: {dur_min:.1f} ms).\n\n"
+            for k in ("velocidad_trazado", "duracion_min_segmento_ms"):
+                if k in self._tooltips:
+                    self._tooltips[k].texto = msg1 + self._ayudas_base.get(k, "")
             errores.append(
                 f"Fields to modify: [{lbl_vmark}] or [{lbl_durmark}]\n"
                 f"   Current: {lbl_vmark} = {v_mark:.0f} mm/s, {lbl_durmark} = {dur_min:.1f} ms.\n"
                 f"   Requirement: Increase [{lbl_durmark}] to >= 5.0 ms (recommended: 15-25 ms) or decrease [{lbl_vmark}] below 600 mm/s to prevent violent 10 mm mirror chatter and driver trip."
             )
-        elif v_mark > 300.0 and dur_min == 0.0:
+        else:
+            for k in ("velocidad_trazado", "duracion_min_segmento_ms"):
+                if k in self._tooltips:
+                    self._tooltips[k].texto = self._ayudas_base.get(k, "")
+        if v_mark > 300.0 and dur_min == 0.0 and v_mark < 600.0:
             advertencias.append({
                 "param": "duracion_min_segmento_ms",
                 "label": f"[{lbl_durmark}] with rapid [{lbl_vmark}]",
@@ -881,12 +907,20 @@ class PanelConfiguracion(ctk.CTkFrame):
                 self.inputs["velocidad_viaje"].configure(border_color=COLOR_RED, border_width=2)
             if "jump_delay_ms" in self.inputs:
                 self.inputs["jump_delay_ms"].configure(border_color=COLOR_RED, border_width=2)
+            msg2 = f"⚠️ [CONFLICT]: Travel Speed ({v_jump:.0f} mm/s) requires [{lbl_jdelay}] >= 2.0 ms (current: {jump_delay:.1f} ms).\n\n"
+            for k in ("velocidad_viaje", "jump_delay_ms"):
+                if k in self._tooltips:
+                    self._tooltips[k].texto = msg2 + self._ayudas_base.get(k, "")
             errores.append(
                 f"Fields to modify: [{lbl_vjump}] or [{lbl_jdelay}]\n"
                 f"   Current: {lbl_vjump} = {v_jump:.0f} mm/s, {lbl_jdelay} = {jump_delay:.1f} ms.\n"
                 f"   Requirement: Increase [{lbl_jdelay}] to >= 2.0 ms (recommended: 10-50 ms) or decrease [{lbl_vjump}] below 2000 mm/s. The 10 mm mirrors require settling time before firing the laser."
             )
-        elif v_jump > 1200.0 and jump_delay < 1.0:
+        else:
+            for k in ("velocidad_viaje", "jump_delay_ms"):
+                if k in self._tooltips:
+                    self._tooltips[k].texto = self._ayudas_base.get(k, "")
+        if v_jump > 1200.0 and jump_delay < 1.0 and v_jump < 2000.0:
             advertencias.append({
                 "param": "jump_delay_ms",
                 "label": f"[{lbl_jdelay}] with rapid [{lbl_vjump}]",
@@ -958,7 +992,11 @@ class PanelConfiguracion(ctk.CTkFrame):
                     f"\n{tr('label_range_recommended')}: {cfg['min']} - {cfg['rec_max']} {unit}"
                     f" ({tr('label_max_operable')}: {cfg['hard_max']} {unit})."
                 )
-            agregar_tooltip(p_card, ayuda)
+            self._ayudas_base[key] = ayuda
+            if key in self._tooltips:
+                self._tooltips[key].texto = ayuda
+            else:
+                self._tooltips[key] = agregar_tooltip(p_card, ayuda)
 
         #process mode
         if hasattr(self, "lbl_proc_title"):
