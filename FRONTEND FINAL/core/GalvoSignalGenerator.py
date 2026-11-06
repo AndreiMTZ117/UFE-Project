@@ -1,4 +1,4 @@
-"""temporal discretization and dynamic compensation for galvo mirrors"""
+"""6. temporal discretization and dynamic compensation for galvo mirrors"""
 from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple

@@ -1,4 +1,4 @@
-"""parse gcode files into discrete trajectory blocks"""
+"""4. parse gcode files into discrete trajectory blocks"""
 
 from __future__ import annotations
 

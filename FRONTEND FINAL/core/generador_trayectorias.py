@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""dxf vector scaling and geometric mapping"""
+"""9. dxf vector scaling and geometric mapping"""
 
 import math
 from .lector_dxf import obtener_limites_dxf

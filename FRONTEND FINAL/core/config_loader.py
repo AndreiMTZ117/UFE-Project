@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""load hardware config from json with safe defaults"""
+"""8. load hardware config from json with safe defaults"""
 
 from __future__ import annotations
 

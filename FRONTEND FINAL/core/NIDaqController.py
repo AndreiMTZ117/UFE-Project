@@ -1,4 +1,4 @@
-"""deterministic ni-daqmx controller for galvo laser scanning"""
+"""7. deterministic ni-daqmx controller for galvo laser scanning"""
 
 from __future__ import annotations
 import logging
