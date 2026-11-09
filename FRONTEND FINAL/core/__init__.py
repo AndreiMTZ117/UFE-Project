@@ -12,8 +12,8 @@ from .PathOptimizer import (
 )
 from .GalvoSignalGenerator import GalvoSignalGenerator
 from .NIDaqController import NIDaqController, NIDaqError, probe_daq_hardware, probe_feedback_hardware
-from .lector_dxf import LectorDXF, obtener_limites_dxf
-from .generador_trayectorias import transform_and_scale_dxf
+from .dxf_reader import LectorDXF, obtener_limites_dxf
+from .trajectory_generator import transform_and_scale_dxf
 
 __all__ = [
     "load_hardware_config",

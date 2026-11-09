@@ -5,8 +5,8 @@ import os
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
-from .constantes import RECETAS_PREDETERMINADAS
-from interfaz.i18n import tr
+from .constants import RECETAS_PREDETERMINADAS
+from ui.i18n import tr
 
 
 class EventosInteraccionMixin:

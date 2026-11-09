@@ -9,7 +9,7 @@ directorio_raiz = os.path.dirname(os.path.abspath(__file__))
 if directorio_raiz not in sys.path:
     sys.path.insert(0, directorio_raiz)
 
-from interfaz.interfaz_app import AppLaserCTk
+from ui.app_interface import AppLaserCTk
 
 
 def iniciar():

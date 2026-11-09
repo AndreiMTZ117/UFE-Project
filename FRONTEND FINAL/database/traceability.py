@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """production cycle traceability logging"""
 
-from .gestor_db import GestorDB, gestor_global
-from .recetas import MODOS_PROCESO_VALIDOS
+from .db_manager import GestorDB, gestor_global
+from .recipes import MODOS_PROCESO_VALIDOS
 
 
 class GestorTrazabilidad:

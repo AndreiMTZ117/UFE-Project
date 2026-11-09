@@ -13,7 +13,7 @@ if _DIR_RAIZ not in sys.path:
     sys.path.insert(0, _DIR_RAIZ)
 
 #design constants
-from interfaz.constantes import (
+from ui.constants import (
     COLOR_BG,
     cargar_fuentes_windows,
     configurar_dpi_awareness
@@ -24,21 +24,21 @@ configurar_dpi_awareness()
 cargar_fuentes_windows()
 
 #backend bridge
-from interfaz.conexion_interfaz import PuenteLaser
-from interfaz.i18n import tr
+from ui.interface_bridge import PuenteLaser
+from ui.i18n import tr
 
 #visual components
-from interfaz.barra_superior import BarraSuperior
-from interfaz.panel_configuracion import PanelConfiguracion
-from interfaz.panel_general import PanelGeneral
-from interfaz.panel_derecho import PanelDerecho
-from interfaz.terminal_flotante import TerminalFlotante
+from ui.top_bar import BarraSuperior
+from ui.config_panel import PanelConfiguracion
+from ui.general_panel import PanelGeneral
+from ui.right_panel import PanelDerecho
+from ui.floating_terminal import TerminalFlotante
 
 #logic and event mixins
-from interfaz.gestion_datos import GestionDatosMixin
-from interfaz.eventos_interaccion import EventosInteraccionMixin
-from interfaz.renderizado_dual import RenderizadoDualMixin
-from interfaz.logica_ejecucion import LogicaEjecucionMixin
+from ui.data_management import GestionDatosMixin
+from ui.interaction_events import EventosInteraccionMixin
+from ui.dual_rendering import RenderizadoDualMixin
+from ui.execution_logic import LogicaEjecucionMixin
 
 
 class AppLaserCTk(

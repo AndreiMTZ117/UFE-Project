@@ -30,10 +30,10 @@ from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController, probe_daq_hardware
 from core.config_loader import get_volts_per_mm
-from database.gestor_db import GestorDB
-from database.recetas import GestorRecetas
-from database.trazabilidad import GestorTrazabilidad
-from interfaz.conexion_interfaz import PuenteLaser
+from database.db_manager import GestorDB
+from database.recipes import GestorRecetas
+from database.traceability import GestorTrazabilidad
+from ui.interface_bridge import PuenteLaser
 
 #global registry of temporary files for safe cleanup
 _TEMP_FILES_TO_CLEANUP: List[str] = []

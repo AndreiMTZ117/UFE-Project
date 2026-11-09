@@ -4,7 +4,7 @@
 import logging
 from typing import Callable, Optional
 
-from .config_galvo import (
+from .galvo_config import (
     VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
     TIPO_INTERFAZ_DAC
 )

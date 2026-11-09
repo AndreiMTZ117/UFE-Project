@@ -16,16 +16,16 @@ _DIR_RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _DIR_RAIZ not in sys.path:
     sys.path.insert(0, _DIR_RAIZ)
 
-from core.lector_dxf import LectorDXF, obtener_limites_dxf
-from core.generador_trayectorias import transform_and_scale_dxf
+from core.dxf_reader import LectorDXF, obtener_limites_dxf
+from core.trajectory_generator import transform_and_scale_dxf
 from core.GCodeParser import GCodeParser, TrajectoryBlock
 from core.PathOptimizer import PathOptimizer
 from core.GalvoSignalGenerator import GalvoSignalGenerator
 from core.NIDaqController import NIDaqController, probe_feedback_hardware
 from core.config_loader import ConfigError, get_daq_identity, get_volts_per_mm, load_hardware_config
-from database.recetas import GestorRecetas
-from database.trazabilidad import GestorTrazabilidad
-from interfaz.i18n import tr
+from database.recipes import GestorRecetas
+from database.traceability import GestorTrazabilidad
+from ui.i18n import tr
 
 try:
     from scipy import signal as scipy_signal
@@ -108,7 +108,7 @@ def calc_inertial_lag_ms(
 def load_hardware_profile() -> Dict[str, Any]:
     """load kinematic and geometric profile for thorlabs galvo"""
     try:
-        from hardware.config_galvo import (
+        from hardware.galvo_config import (
             CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
             CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
             ESCALA_DIBUJO, ROTAR_90_GRADOS,
@@ -139,7 +139,7 @@ def load_hardware_profile() -> Dict[str, Any]:
             "velocidad_viaje": VELOCIDAD_SALTO_MM_S,
         }
     except Exception as e:
-        print(f"[HAL] Error cargando config_galvo: {e}")
+        print(f"[HAL] Error cargando galvo_config: {e}")
         return {
             "clave": "thorlabs_galvo",
             "nombre": "Thorlabs Galvo Scanner (GVS112/M)",
@@ -291,7 +291,7 @@ class PuenteLaser:
                 return
             daq_probe = probe_daq_hardware(required_device=required)
             if daq_probe["available"]:
-                from hardware.controlador_thorlabs import ControladorThorlabsGVS
+                from hardware.thorlabs_controller import ControladorThorlabsGVS
                 self.controlador_hardware = ControladorThorlabsGVS(tipo_interfaz="NI_DAQ")
                 self.controlador_hardware.on_alerta = self._emitir_alerta_hw
                 self.es_simulacion = False
@@ -311,7 +311,7 @@ class PuenteLaser:
         """start virtual simulation environment"""
         self.motivo_simulacion = razon
         try:
-            from hardware.simulador_thorlabs import SimuladorThorlabsGVS
+            from hardware.thorlabs_simulator import SimuladorThorlabsGVS
             self.controlador_hardware = SimuladorThorlabsGVS()
             self.es_simulacion = True
             msg = f" ({razon})" if razon else ""

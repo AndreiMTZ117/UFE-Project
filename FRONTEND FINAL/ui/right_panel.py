@@ -6,7 +6,7 @@ import tkinter as tk
 import customtkinter as ctk
 from typing import Callable, List, Optional, Tuple
 
-from .constantes import (
+from .constants import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
     COLOR_YELLOW, COLOR_RED, COLOR_BLUE, COLOR_BLUE_FADED, COLOR_GREEN, COLOR_ORANGE,
     COLOR_PAUSE, COLOR_TIMER_BG, COLOR_BOX_BG, COLOR_MUTED,

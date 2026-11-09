@@ -4,7 +4,7 @@
 import os
 import threading
 from tkinter import messagebox
-from interfaz.i18n import tr
+from ui.i18n import tr
 
 
 class GestionDatosMixin:
@@ -22,7 +22,7 @@ class GestionDatosMixin:
             self.receta_activa = receta_def
             self.panel_config.set_recetas(nombres_recetas, seleccionada=receta_def["nombre"])
             self.panel_config.poblar_formulario(receta_def)
-            from .constantes import RECETAS_PREDETERMINADAS
+            from .constants import RECETAS_PREDETERMINADAS
             es_default = receta_def.get("nombre") in RECETAS_PREDETERMINADAS
             self.panel_config.set_delete_visible(not es_default)
 

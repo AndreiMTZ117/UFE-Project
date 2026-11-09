@@ -5,7 +5,7 @@ import time
 import math
 import threading
 
-from .config_galvo import (
+from .galvo_config import (
     CAMPO_X_MIN_MM, CAMPO_X_MAX_MM,
     CAMPO_Y_MIN_MM, CAMPO_Y_MAX_MM,
     VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """recipes crud operations"""
 
-from .gestor_db import GestorDB, gestor_global
+from .db_manager import GestorDB, gestor_global
 
 #canonical process modes for laser
 MODOS_PROCESO_VALIDOS = {"Cutting", "Welding", "Marking"}

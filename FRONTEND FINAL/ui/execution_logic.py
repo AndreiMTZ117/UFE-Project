@@ -4,9 +4,9 @@
 import time
 import threading
 from tkinter import messagebox
-from .conexion_interfaz import HARDWARE_CONFIG
+from .interface_bridge import HARDWARE_CONFIG
 from core.config_loader import get_volts_per_mm
-from interfaz.i18n import tr
+from ui.i18n import tr
 
 
 class LogicaEjecucionMixin:

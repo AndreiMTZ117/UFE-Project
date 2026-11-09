@@ -7,10 +7,10 @@ import tkinter as tk
 import customtkinter as ctk
 from typing import Callable, List, Optional, Tuple
 
-from .constantes import (
+from .constants import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
     COLOR_BLUE, COLOR_BLUE_FADED, COLOR_VECTOR_GRAY, COLOR_GRID, COLOR_ORANGE,
-    COLOR_YELLOW, COLOR_MUTED,
+    COLOR_YELLOW, COLOR_RED, COLOR_MUTED,
     FONT_TEACHERS, FONT_SEGOE, BRUTAL_CORNER, BRUTAL_BORDER,
     agregar_tooltip
 )

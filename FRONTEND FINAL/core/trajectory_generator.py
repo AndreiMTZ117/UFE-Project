@@ -2,7 +2,7 @@
 """9. dxf vector scaling and geometric mapping"""
 
 import math
-from .lector_dxf import obtener_limites_dxf
+from .dxf_reader import obtener_limites_dxf
 from .PathOptimizer import optimizar_y_unir_trazos, simplificar_trayectoria_rdp
 
 def transform_and_scale_dxf(trayectorias,

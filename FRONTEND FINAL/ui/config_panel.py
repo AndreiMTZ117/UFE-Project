@@ -4,7 +4,7 @@
 import customtkinter as ctk
 from typing import Callable, Dict, List, Optional, Any, Tuple
 
-from .constantes import (
+from .constants import (
     COLOR_CARD, COLOR_BORDER, COLOR_TEXT,
     COLOR_YELLOW, COLOR_RED, COLOR_BLUE, COLOR_PAUSE,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER,

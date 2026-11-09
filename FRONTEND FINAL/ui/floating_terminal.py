@@ -9,7 +9,7 @@ from datetime import datetime
 from tkinter import filedialog
 from typing import Callable, List, Dict, Optional, Any
 
-from .constantes import (
+from .constants import (
     COLOR_BORDER,
     COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_TERMINAL_BG,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
