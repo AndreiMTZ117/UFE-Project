@@ -58,7 +58,7 @@ It integrates a modular architecture that cleanly decouples human-machine intera
 
 ## ⚡ Key Architectural Features
 
-1. **Cyber-Brutalist HMI (`interfaz/`):**
+1. **Cyber-Brutalist HMI (`ui/`):**
    - Built on CustomTkinter with embedded modern typography (`BrunoAce`, `Teachers`).
    - Dual-canvas interactive vector rendering: original CAD input space vs. optical galvo target space.
    - Non-blocking asynchronous threading architecture (`PuenteLaser`) preventing UI freeze during high-frequency streaming.
@@ -79,7 +79,7 @@ It integrates a modular architecture that cleanly decouples human-machine intera
 4. **Hardware Abstraction Layer & Simulation (`core/NIDaqController.py`):**
    - Native integration with NI PXI-6229 and NI PXIe-1073 chassis via `nidaqmx`.
    - Optional closed-loop position readback tracking via differential analog inputs (AI0/AI1).
-   - Automatic fallback to high-fidelity virtual simulation mode (`simulador_thorlabs.py`) when hardware is disconnected, allowing complete offline development and operator training.
+   - Automatic fallback to high-fidelity virtual simulation mode (`thorlabs_simulator.py`) when hardware is disconnected, allowing complete offline development and operator training.
 
 5. **Industrial Relational Database (`database/`):**
    - SQLite3 with Write-Ahead Logging (`PRAGMA journal_mode=WAL;`) for high concurrency and zero database locks.
@@ -139,7 +139,7 @@ python test_system_full.py
 Launch the production user interface:
 
 ```powershell
-python iniciar_interfaz.py
+python main.py
 ```
 
 ### Quick Workflow:
@@ -156,7 +156,7 @@ python iniciar_interfaz.py
 ```text
 FRONTEND FINAL/
 │
-├── iniciar_interfaz.py            # Main application launcher (CustomTkinter GUI)
+├── main.py                        # Main application launcher (CustomTkinter GUI)
 ├── test_system_full.py            # Automated 8-phase end-to-end test battery
 ├── setup_environment.ps1          # Automated setup & environment deployment script
 ├── requirements.txt               # Pinned Python package dependencies
@@ -169,37 +169,40 @@ FRONTEND FINAL/
 │   ├── GalvoSignalGenerator.py    # 100 kS/s waveform generator & optical delays
 │   ├── NIDaqController.py         # Hardware-timed NI-DAQmx controller & virtual mock
 │   ├── config_loader.py           # Centralized configuration loader & fallback defaults
-│   ├── generador_trayectorias.py  # Geometric trajectory math
-│   └── lector_dxf.py              # Recursive DXF entity reader via ezdxf
+│   ├── trajectory_generator.py    # Geometric trajectory scaling and mapping
+│   └── dxf_reader.py              # Recursive DXF entity reader via ezdxf
 │
 ├── hardware/                      # Physical driver layer and deployment manuals
 │   ├── hardware_config.json       # DAQ channels, calibration (0.200 V/mm), and timing
-│   ├── config_galvo.py            # Kinematic limits, scan field, and default delays
-│   ├── controlador_thorlabs.py    # Driver abstraction for Thorlabs GVS112/M
-│   ├── simulador_thorlabs.py      # High-fidelity virtual kinematic simulator
+│   ├── galvo_config.py            # Kinematic limits, scan field, and default delays
+│   ├── thorlabs_controller.py     # Driver abstraction for Thorlabs GVS112/M
+│   ├── thorlabs_simulator.py      # High-fidelity virtual kinematic simulator
 │   ├── README_THORLABS.md         # Hardware deployment manual (English)
 │   └── README_THORLABS_CS.md      # Hardware deployment manual (Czech)
 │
 ├── database/                      # Persistent storage and audit trail
-│   ├── gestor_db.py               # SQLite3 engine with Write-Ahead Logging (WAL)
-│   ├── recetas.py                 # Polymer recipe management & queries
-│   ├── trazabilidad.py            # Production execution history logger
+│   ├── db_manager.py              # SQLite3 engine with Write-Ahead Logging (WAL)
+│   ├── recipes.py                 # Polymer recipe management & queries
+│   ├── traceability.py            # Production execution history logger
 │   └── laser_system.db            # Local SQLite3 database file
 │
-├── interfaz/                      # Graphical User Interface (Cyber-Brutalist HMI)
-│   ├── interfaz_app.py            # Main application frame & lifecycle coordinator
-│   ├── barra_superior.py          # Status bar, mode selector, and system clock
-│   ├── panel_general.py           # Left execution and manual jog control panel
-│   ├── panel_configuracion.py     # Kinematics, delays, and optical parameter panel
-│   ├── panel_derecho.py           # Right recipe management & audit log panel
-│   ├── renderizado_dual.py        # Vector dual-canvas preview (CAD vs. Galvo space)
-│   ├── terminal_flotante.py       # Floating real-time diagnostic console
-│   ├── conexion_interfaz.py       # Asynchronous threading worker (PuenteLaser)
-│   ├── constantes.py              # Visual design tokens, styles, and color constants
+├── ui/                            # Graphical User Interface (Cyber-Brutalist HMI)
+│   ├── app_interface.py           # Main application frame & lifecycle coordinator
+│   ├── top_bar.py                 # Status bar, mode selector, and system clock
+│   ├── general_panel.py           # Left execution and manual jog control panel
+│   ├── config_panel.py            # Kinematics, delays, and optical parameter panel
+│   ├── right_panel.py             # Right recipe management & audit log panel
+│   ├── data_management.py         # Recipe and file data management mixin
+│   ├── interaction_events.py      # User interaction and event handler mixin
+│   ├── dual_rendering.py          # Vector dual-canvas preview (CAD vs. Galvo space)
+│   ├── execution_logic.py         # Hardware execution and timing lifecycle mixin
+│   ├── floating_terminal.py       # Floating real-time diagnostic console
+│   ├── interface_bridge.py        # Asynchronous threading worker (PuenteLaser)
+│   ├── constants.py               # Visual design tokens, styles, and color constants
 │   ├── i18n.py                    # Multi-language dictionary (ES, EN, CS)
 │   └── fonts/                     # Embedded typography (BrunoAce, Teachers)
 │
-├── dxf/                           # Sample vector DXF blueprints
+├── dxf/                           # Sample vector DXF blueprints (apple, circle, etc.)
 └── gcode/                         # Pre-compiled ISO 6983 G-code trajectories
 ```
 

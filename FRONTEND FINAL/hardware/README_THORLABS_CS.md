@@ -15,7 +15,7 @@ Aplikace pro řízení laserového svazku je strukturována jako modulární bal
 ```text
 FRONTEND FINAL/
 │
-├── iniciar_interfaz.py            # Hlavní vstupní bod aplikace (Cyber-Brutalist HMI v CustomTkinter)
+├── main.py                        # Hlavní vstupní bod aplikace (Cyber-Brutalist HMI v CustomTkinter)
 ├── test_system_full.py            # 8fázová integrační testovací sada celého systému
 ├── setup_environment.ps1          # Automatizovaný instalační skript pro PowerShell
 ├── requirements.txt               # Přesně specifikované závislosti balíčků v Pythonu
@@ -28,33 +28,36 @@ FRONTEND FINAL/
 │   ├── GalvoSignalGenerator.py    # Deterministická syntéza vlnových průběhů (100 kS/s) a optických zpoždění
 │   ├── NIDaqController.py         # Hardwarem řízené FIFO streamování pro NI-DAQmx a simulační smyčka
 │   ├── config_loader.py           # Centralizovaný zavaděč konfigurace hardwaru a záložních hodnot
-│   ├── generador_trayectorias.py  # Geometrické funkce pro tvorbu trajektorií
-│   └── lector_dxf.py              # Rekurzivní čtení vektorových entit z DXF pomocí ezdxf
+│   ├── trajectory_generator.py    # Geometrické funkce a škálování trajektorií
+│   └── dxf_reader.py              # Rekurzivní čtení vektorových entit z DXF pomocí ezdxf
 │
 ├── hardware/
 │   ├── hardware_config.json       # Kanonická konfigurace kanálů DAQ, kalibrace (0.200 V/mm) a limity
-│   ├── config_galvo.py            # Kinematické limity galva, skenovací pole a výchozí zpoždění
-│   ├── controlador_thorlabs.py    # Hardwarová abstrakce pro ovladač Thorlabs GVS112/M
-│   ├── simulador_thorlabs.py      # Vysoce věrný virtuální simulační engine kinematiky
+│   ├── galvo_config.py            # Kinematické limity galva, skenovací pole a výchozí zpoždění
+│   ├── thorlabs_controller.py     # Hardwarová abstrakce pro ovladač Thorlabs GVS112/M
+│   ├── thorlabs_simulator.py      # Vysoce věrný virtuální simulační engine kinematiky
 │   ├── README_THORLABS.md         # Uživatelská a hardwarová příručka (anglicky)
 │   └── README_THORLABS_CS.md      # Uživatelská a hardwarová příručka (česky)
 │
 ├── database/
-│   ├── gestor_db.py               # SQLite3 databáze s režimem Write-Ahead Logging (WAL) a migracemi
-│   ├── recetas.py                 # Správa a ukládání receptur pro polymery (PMMA, PC, Nylon, PEEK)
-│   ├── trazabilidad.py            # Protokolování historie výroby a auditní záznamy (historial_produccion)
+│   ├── db_manager.py              # SQLite3 databáze s režimem Write-Ahead Logging (WAL) a migracemi
+│   ├── recipes.py                 # Správa a ukládání receptur pro polymery (PMMA, PC, Nylon, PEEK)
+│   ├── traceability.py            # Protokolování historie výroby a auditní záznamy (historial_produccion)
 │   └── laser_system.db            # Trvalý soubor databáze SQLite3
 │
-├── interfaz/
-│   ├── interfaz_app.py            # Hlavní aplikační okno CustomTkinter a koordinátor životního cyklu
-│   ├── barra_superior.py          # Stavový řádek, volič režimů a systémové hodiny
-│   ├── panel_general.py           # Levý ovládací panel (tlačítka spuštění, manuální krokování)
-│   ├── panel_configuracion.py     # Panel pro nastavení kinematiky, optických zpoždění a laseru
-│   ├── panel_derecho.py           # Pravý panel se správou receptur a auditním protokolem
-│   ├── renderizado_dual.py        # Vektorové plátno náhledu (původní CAD vs. výstupní prostor galva)
-│   ├── terminal_flotante.py       # Plovoucí diagnostická a záznamová konzole
-│   ├── conexion_interfaz.py       # Asynchronní vláknové propojení (PuenteLaser) mezi GUI a HAL
-│   ├── constantes.py              # Barevná paleta, typografické styly a konstanty rozhraní
+├── ui/
+│   ├── app_interface.py           # Hlavní aplikační okno CustomTkinter a koordinátor životního cyklu
+│   ├── top_bar.py                 # Stavový řádek, volič režimů a systémové hodiny
+│   ├── general_panel.py           # Levý ovládací panel (tlačítka spuštění, manuální krokování)
+│   ├── config_panel.py            # Panel pro nastavení kinematiky, optických zpoždění a laseru
+│   ├── right_panel.py             # Pravý panel se správou receptur a auditním protokolem
+│   ├── data_management.py         # Správa dat receptur a souborů (mixin)
+│   ├── interaction_events.py      # Zpracování uživatelských událostí (mixin)
+│   ├── dual_rendering.py          # Vektorové plátno náhledu (původní CAD vs. výstupní prostor galva)
+│   ├── execution_logic.py         # Řízení životního cyklu a provádění (mixin)
+│   ├── floating_terminal.py       # Plovoucí diagnostická a záznamová konzole
+│   ├── interface_bridge.py        # Asynchronní vláknové propojení (PuenteLaser) mezi GUI a HAL
+│   ├── constants.py               # Barevná paleta, typografické styly a konstanty rozhraní
 │   ├── i18n.py                    # Vícejazyčná podpora (španělština, angličtina, čeština)
 │   └── fonts/                     # Vložená typografie (BrunoAce-Regular, Teachers-Regular)
 │
@@ -178,7 +181,7 @@ Konkrétní přiřazení svorek na svorkovnici **NI SCB-68 / SCB-68A** pro difer
    - Diferenciální měření přes párované vstupy účinně eliminuje vysokofrekvenční elektromagnetické rušení (EMI) ze spínaných zdrojů vláknového laseru a spínacích proudů PWM servozesilovačů.
 3. **Softwarový sběr dat v DAQ:**
    - Podle konfigurace v `core/NIDaqController.py` a `hardware_config.json` vzorkuje úloha DAQ kanály `PXI1Slot5/ai0` a `PXI1Slot5/ai1` v režimu `TerminalConfiguration.DIFF` synchronně se vzorkovacími hodinami `/PXI1Slot5/ao/SampleClock` při 100 kS/s.
-   - Zaznamenaný průběh zpětné vazby se v modulu `interfaz/conexion_interfaz.py` porovnává s požadovanou trajektorií pro výpočet efektivní chyby sledování (`tracking_rms_um`), maximální odchylky (`tracking_max_um`) a fázového zpoždění (`tracking_lag_ms`), jež se ukládají do tabulky `historial_produccion`.
+   - Zaznamenaný průběh zpětné vazby se v modulu `ui/interface_bridge.py` porovnává s požadovanou trajektorií pro výpočet efektivní chyby sledování (`tracking_rms_um`), maximální odchylky (`tracking_max_um`) a fázového zpoždění (`tracking_lag_ms`), jež se ukládají do tabulky `historial_produccion`.
 
 ---
 
@@ -316,7 +319,7 @@ python test_system_full.py
 Spusťte produkční grafické rozhraní:
 
 ```powershell
-python iniciar_interfaz.py
+python main.py
 ```
 
 1. V rozevíracím seznamu zvolte ověřenou recepturu pro daný polymer (např. `Acrylic – Standard`, `Polycarbonate – High Precision` nebo `Nylon – Fast Cutting`).

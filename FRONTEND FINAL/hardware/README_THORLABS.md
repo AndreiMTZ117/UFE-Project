@@ -15,7 +15,7 @@ The laser steering application is structured as a modular Python package adherin
 ```text
 FRONTEND FINAL/
 │
-├── iniciar_interfaz.py            # Primary application entry point (Cyber-Brutalist CustomTkinter HMI)
+├── main.py                        # Primary application entry point (Cyber-Brutalist CustomTkinter HMI)
 ├── test_system_full.py            # 8-phase end-to-end integration test harness
 ├── setup_environment.ps1          # Automated PowerShell deployment & dependency setup
 ├── requirements.txt               # Pinned Python package dependencies
@@ -28,33 +28,36 @@ FRONTEND FINAL/
 │   ├── GalvoSignalGenerator.py    # Deterministic waveform generation (100 kS/s) & optical delays
 │   ├── NIDaqController.py         # Hardware-timed NI-DAQmx streaming engine & mock loopback
 │   ├── config_loader.py           # Centralized hardware configuration loader & fallback validator
-│   ├── generador_trayectorias.py  # Geometric trajectory generation utilities
-│   └── lector_dxf.py              # Recursive DXF entity extraction via ezdxf
+│   ├── trajectory_generator.py    # Geometric trajectory scaling and mapping utilities
+│   └── dxf_reader.py              # Recursive DXF entity extraction via ezdxf
 │
 ├── hardware/
 │   ├── hardware_config.json       # Canonical DAQ channels, calibration (0.200 V/mm), and timing limits
-│   ├── config_galvo.py            # Galvo kinematic limits, scan field, and default delays
-│   ├── controlador_thorlabs.py    # Hardware driver abstraction for Thorlabs GVS112/M
-│   ├── simulador_thorlabs.py      # High-fidelity virtual kinematic simulation engine
+│   ├── galvo_config.py            # Galvo kinematic limits, scan field, and default delays
+│   ├── thorlabs_controller.py     # Hardware driver abstraction for Thorlabs GVS112/M
+│   ├── thorlabs_simulator.py      # High-fidelity virtual kinematic simulation engine
 │   ├── README_THORLABS.md         # Hardware deployment manual (English)
 │   └── README_THORLABS_CS.md      # Hardware deployment manual (Czech)
 │
 ├── database/
-│   ├── gestor_db.py               # SQLite3 engine with Write-Ahead Logging (WAL) & schema migrations
-│   ├── recetas.py                 # Polymer recipe persistence (PMMA, PC, Nylon, PEEK)
-│   ├── trazabilidad.py            # Production audit trail & cycle logging (historial_produccion)
+│   ├── db_manager.py              # SQLite3 engine with Write-Ahead Logging (WAL) & schema migrations
+│   ├── recipes.py                 # Polymer recipe persistence (PMMA, PC, Nylon, PEEK)
+│   ├── traceability.py            # Production audit trail & cycle logging (historial_produccion)
 │   └── laser_system.db            # Persistent SQLite3 database file
 │
-├── interfaz/
-│   ├── interfaz_app.py            # Main CustomTkinter UI frame & lifecycle coordinator
-│   ├── barra_superior.py          # Status bar, mode selector, and system clock
-│   ├── panel_general.py           # Left control panel (execution controls, manual jogs)
-│   ├── panel_configuracion.py     # Kinematics, optical delay & laser parameter tuning panel
-│   ├── panel_derecho.py           # Right panel with tabbed recipe management & audit log
-│   ├── renderizado_dual.py        # Vector preview canvas (CAD original vs. Galvo output space)
-│   ├── terminal_flotante.py       # Draggable floating diagnostic & logging console
-│   ├── conexion_interfaz.py       # Asynchronous threading bridge (PuenteLaser) between GUI and HAL
-│   ├── constantes.py              # UI color palette, font styles & layout constants
+├── ui/
+│   ├── app_interface.py           # Main CustomTkinter UI frame & lifecycle coordinator
+│   ├── top_bar.py                 # Status bar, mode selector, and system clock
+│   ├── general_panel.py           # Left control panel (execution controls, manual jogs)
+│   ├── config_panel.py            # Kinematics, optical delay & laser parameter tuning panel
+│   ├── right_panel.py             # Right panel with tabbed recipe management & audit log
+│   ├── data_management.py         # Recipe and file data management mixin
+│   ├── interaction_events.py      # User interaction and event handler mixin
+│   ├── dual_rendering.py          # Vector preview canvas (CAD original vs. Galvo output space)
+│   ├── execution_logic.py         # Hardware execution and timing lifecycle mixin
+│   ├── floating_terminal.py       # Draggable floating diagnostic & logging console
+│   ├── interface_bridge.py        # Asynchronous threading bridge (PuenteLaser) between GUI and HAL
+│   ├── constants.py               # UI color palette, font styles & layout constants
 │   ├── i18n.py                    # Multi-language internationalization (Spanish, English, Czech)
 │   └── fonts/                     # Embedded typography (BrunoAce-Regular, Teachers-Regular)
 │
@@ -178,7 +181,7 @@ The specific pin assignments on the **NI SCB-68 / SCB-68A** connector block for 
    - Differential measurement through paired inputs cancels high-frequency common-mode electrical noise originating from the fiber laser switching supplies and servo amplifier PWM switching currents.
 3. **Software DAQ Acquisition:**
    - As configured in `core/NIDaqController.py` and `hardware_config.json`, the DAQ task samples `PXI1Slot5/ai0` and `PXI1Slot5/ai1` using `TerminalConfiguration.DIFF` synchronized with `/PXI1Slot5/ao/SampleClock` at 100 kS/s.
-   - The acquired feedback waveform is processed in `interfaz/conexion_interfaz.py` to calculate root-mean-square tracking error (`tracking_rms_um`), maximum dynamic lag (`tracking_max_um`), and phase lag (`tracking_lag_ms`) logged into `historial_produccion`.
+   - The acquired feedback waveform is processed in `ui/interface_bridge.py` to calculate root-mean-square tracking error (`tracking_rms_um`), maximum dynamic lag (`tracking_max_um`), and phase lag (`tracking_lag_ms`) logged into `historial_produccion`.
 
 ---
 
@@ -316,7 +319,7 @@ python test_system_full.py
 Launch the production graphical interface:
 
 ```powershell
-python iniciar_interfaz.py
+python main.py
 ```
 
 1. Select the validated polymer recipe from the recipe dropdown (e.g., `Acrylic – Standard`, `Polycarbonate – High Precision`, or `Nylon – Fast Cutting`).
