@@ -36,12 +36,14 @@ DEFAULT_HARDWARE_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "pincushion_kx": 0.0,
         "pincushion_ky": 0.0,
-        "field_half_width_mm": 193.5,
+        "field_half_width_mm": 187.5,
+        "field_half_height_mm": 191.5,
     },
     "lens_model": {
         "pincushion_kx": 0.0,
         "pincushion_ky": 0.0,
-        "field_half_width_mm": 193.5,
+        "field_half_width_mm": 187.5,
+        "field_half_height_mm": 191.5,
     },
 }
 

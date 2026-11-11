@@ -158,71 +158,11 @@ class GestorTrazabilidad:
             rows = conn.execute(sql, (limite, offset)).fetchall()
         return [self._db.fila_a_dict(r) for r in rows]
 
-    #alias for backwards compatibility
-    obtener_historial = listar_historial
-
     def obtener_registro(self, registro_id: int) -> dict:
         """get history record by id"""
         sql = "SELECT * FROM historial_produccion WHERE id = ?"
         with self._db.conexion() as conn:
             row = conn.execute(sql, (registro_id,)).fetchone()
-        return self._db.fila_a_dict(row)
-
-    def filtrar_por_operador(self, operador: str) -> list:
-        """filter records by operator"""
-        sql = """
-            SELECT * FROM historial_produccion
-            WHERE LOWER(operador) LIKE LOWER(?)
-            ORDER BY id DESC
-        """
-        with self._db.conexion() as conn:
-            rows = conn.execute(sql, (f"%{operador}%",)).fetchall()
-        return [self._db.fila_a_dict(r) for r in rows]
-
-    def filtrar_por_estado(self, estado: str) -> list:
-        """filter records by status"""
-        estado_norm = str(estado).strip().upper()
-        estado_clean = self.MAPA_ESTADOS.get(estado_norm, estado_norm)
-        sql = """
-            SELECT * FROM historial_produccion
-            WHERE estado = ?
-            ORDER BY id DESC
-        """
-        with self._db.conexion() as conn:
-            rows = conn.execute(sql, (estado_clean,)).fetchall()
-        return [self._db.fila_a_dict(r) for r in rows]
-
-    def filtrar_por_dxf(self, nombre_dxf: str) -> list:
-        """filter records by dxf filename"""
-        sql = """
-            SELECT * FROM historial_produccion
-            WHERE LOWER(archivo_dxf) LIKE LOWER(?)
-            ORDER BY id DESC
-        """
-        with self._db.conexion() as conn:
-            rows = conn.execute(sql, (f"%{nombre_dxf}%",)).fetchall()
-        return [self._db.fila_a_dict(r) for r in rows]
-
-    def contar_ciclos_por_estado(self) -> dict:
-        """count cycles grouped by status"""
-        sql = "SELECT estado, COUNT(*) as total FROM historial_produccion GROUP BY estado"
-        with self._db.conexion() as conn:
-            rows = conn.execute(sql).fetchall()
-        return {row["estado"]: row["total"] for row in rows}
-
-    def estadisticas_generales(self) -> dict:
-        """get aggregate production metrics"""
-        sql = """
-            SELECT
-                COUNT(*)                         AS total_ciclos,
-                AVG(duracion_segundos)           AS duracion_promedio_s,
-                SUM(duracion_segundos) / 3600.0  AS duracion_total_horas,
-                SUM(waypoints_totales)           AS waypoints_acumulados
-            FROM historial_produccion
-            WHERE estado = 'COMPLETADO'
-        """
-        with self._db.conexion() as conn:
-            row = conn.execute(sql).fetchone()
         return self._db.fila_a_dict(row)
 
     #helpers

@@ -281,7 +281,8 @@ def fusionar_trazos_contiguos(
             extended = False
             p_start, p_end = current[0], current[-1]
             if len(current) >= 3 and math.dist(p_start, p_end) <= tol_union:
-                current.append(p_start)
+                if math.dist(p_start, p_end) > 1e-9:
+                    current.append(p_start)
                 break
             for i in range(len(pool)):
                 other = pool[i]

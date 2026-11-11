@@ -53,37 +53,29 @@ class GestionDatosMixin:
             return
 
         self._cargando_dxf = True
-        if hasattr(self, "barra_superior") and hasattr(self.barra_superior, "set_bloqueo_carga"):
-            self.barra_superior.set_bloqueo_carga(True)
-
-        if hasattr(self, "terminal"):
-            self.terminal.log(tr("log_dxf_loading"))
+        self.barra_superior.set_bloqueo_carga(True)
+        self.terminal.log(tr("log_dxf_loading"))
 
         params = self.panel_config.obtener_datos_formulario()
 
         def _aplicar_exito(res):
             self._cargando_dxf = False
-            if hasattr(self, "barra_superior") and hasattr(self.barra_superior, "set_bloqueo_carga"):
-                self.barra_superior.set_bloqueo_carga(False)
-            if hasattr(self, "terminal"):
-                archivo = res.get('archivo', os.path.basename(ruta))
-                paths = res.get('num_trazos', 0)
-                points = res.get('num_waypoints', 0)
-                self.terminal.log(tr("log_dxf_loaded", file=archivo, paths=paths, points=points))
+            self.barra_superior.set_bloqueo_carga(False)
+            archivo = res.get('archivo', os.path.basename(ruta))
+            paths = res.get('num_trazos', 0)
+            points = res.get('num_waypoints', 0)
+            self.terminal.log(tr("log_dxf_loaded", file=archivo, paths=paths, points=points))
             self.trazos_completados.clear()
             self.trazos_pasadas_previas.clear()
             self.panel_general.limpiar_completados()
             self.panel_derecho.limpiar_progreso()
-            self._aplicar_limites_hardware()
             self._actualizar_vistas_canvases()
             self.panel_derecho.dibujar_gauges(0.0, 0.0)
 
         def _aplicar_error(e):
             self._cargando_dxf = False
-            if hasattr(self, "barra_superior") and hasattr(self.barra_superior, "set_bloqueo_carga"):
-                self.barra_superior.set_bloqueo_carga(False)
-            if hasattr(self, "terminal"):
-                self.terminal.log(tr("log_dxf_err", file=os.path.basename(ruta), err=e))
+            self.barra_superior.set_bloqueo_carga(False)
+            self.terminal.log(tr("log_dxf_err", file=os.path.basename(ruta), err=e))
             messagebox.showerror("DXF Error", f"Failed to load DXF file: {e}")
 
         if not asincrono:

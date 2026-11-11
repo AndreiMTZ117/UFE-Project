@@ -9,7 +9,6 @@ def transform_and_scale_dxf(trayectorias,
                                x_min_limit, x_max_limit,
                                y_min_limit, y_max_limit,
                                escala=0.75,
-                               rotar_90_grados=True,
                                rotacion_grados=None,
                                marco_ancho_cm=None,
                                marco_alto_cm=None,
@@ -22,8 +21,7 @@ def transform_and_scale_dxf(trayectorias,
                                base_ancho_cm=None,
                                base_alto_cm=None,
                                area_x_min=None, area_x_max=None,
-                               area_y_min=None, area_y_max=None,
-                               *args, **kwargs):
+                               area_y_min=None, area_y_max=None):
     """map dxf trajectories to hardware workspace with uniform scaling
 
     marco_*_cm: physical size covered by the full hardware range (calibration).

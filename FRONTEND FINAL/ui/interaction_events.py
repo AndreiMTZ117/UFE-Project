@@ -27,9 +27,8 @@ class EventosInteraccionMixin:
     def _on_com_seleccionado(self, val: str):
         """handle hardware detection, rescan and explicit simulation choice"""
         if val == self._OPCION_SIMULACION:
-            if hasattr(self.puente, "forzar_simulacion"):
-                self.puente.forzar_simulacion()
-        elif hasattr(self.puente, "detect_hardware"):
+            self.puente.forzar_simulacion()
+        else:
             self.puente.detect_hardware()
         conectado = self.puente.is_physically_connected()
         self.barra_superior.set_estado_com(conectado)
@@ -39,8 +38,7 @@ class EventosInteraccionMixin:
         motivo = getattr(self.puente, "motivo_simulacion", "")
         if not conectado and motivo:
             self.terminal.log(f"[HW] {motivo}")
-        if hasattr(self, "_iniciar_feedback_ui"):
-            self._iniciar_feedback_ui()
+        self._iniciar_feedback_ui()
 
     def _cb_alerta_hw(self, mensaje: str, critico: bool = False):
         """show hardware failure in terminal and dialog, safe to call from any thread"""
@@ -113,14 +111,6 @@ class EventosInteraccionMixin:
                 self.terminal.log(tr("log_recipe_sel", name=nombre_receta))
                 break
 
-    def _on_rotacion_cambiada(self, angulo: float):
-        """recalculate paths when rotation angle changes"""
-        if self.puente.is_running:
-            return
-        if self.puente.ruta_dxf_actual:
-            self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
-            self._actualizar_vistas_canvases()
-
     def _on_parametro_cambiado(self, clave: str, valor: float):
         """recalculate paths when scale rotation or tolerances change"""
         if self.puente.is_running:
@@ -138,12 +128,11 @@ class EventosInteraccionMixin:
         if self.puente.is_running or not self.receta_activa:
             return
 
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
-            tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
-            if tiene_err:
-                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
-                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
-                return
+        tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
+        if tiene_err:
+            msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
+            messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+            return
 
         nombre_receta = self.receta_activa.get("nombre", "Recipe")
         confirma = messagebox.askyesno(
@@ -167,12 +156,11 @@ class EventosInteraccionMixin:
         if self.puente.is_running:
             return
 
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
-            tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
-            if tiene_err:
-                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
-                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
-                return
+        tiene_err, errs, _ = self.panel_config.obtener_diagnostico_formulario()
+        if tiene_err:
+            msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
+            messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+            return
 
         dialog = ctk.CTkInputDialog(text=tr("dlg_new_recipe_prompt"), title=tr("dlg_new_recipe_title"))
         nombre = dialog.get_input()
@@ -235,8 +223,7 @@ class EventosInteraccionMixin:
         self.panel_derecho.set_centro(cx, cy)
         self.panel_general.set_centro(cx, cy)
         self.panel_derecho.actualizar_coordenadas(cx, cy)
-        if not self.puente.is_running:
-            self.puente.center_galvos()
+        self.puente.center_galvos()
         self.terminal.log(tr("log_home_set", x=x, y=y))
         if self.puente.ruta_dxf_actual:
             self.puente.recalculate_paths(self.panel_config.obtener_datos_formulario())
@@ -263,13 +250,4 @@ class EventosInteraccionMixin:
         else:
             self._actualizar_vistas_canvases()
             self.terminal.log(tr("log_base_set", w=ancho_cm, h=alto_cm, cx=cx, cy=cy))
-
-    def _aplicar_limites_hardware(self):
-        """apply dynamic hardware limits to canvas"""
-        self.panel_general.set_limites_hardware(
-            self.puente.x_min_limit,
-            self.puente.x_max_limit,
-            self.puente.y_min_limit,
-            self.puente.y_max_limit
-        )
 

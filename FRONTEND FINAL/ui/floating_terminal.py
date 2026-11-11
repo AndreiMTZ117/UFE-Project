@@ -11,7 +11,7 @@ from typing import Callable, List, Dict, Optional, Any
 
 from .constants import (
     COLOR_BORDER,
-    COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_TERMINAL_BG,
+    COLOR_GREEN, COLOR_YELLOW, COLOR_TERMINAL_BG,
     FONT_TEACHERS, BRUTAL_CORNER, BRUTAL_BORDER
 )
 from .i18n import tr, registrar_observador
@@ -458,23 +458,14 @@ class TerminalFlotante(ctk.CTkFrame):
 
     def actualizar_idioma(self):
         """update button and table texts on language change"""
-        if hasattr(self, "btn_history"):
-            self.btn_history.configure(text=tr("term_logs") if self._modo_historial else tr("term_history"))
-        if hasattr(self, "btn_export"):
-            self.btn_export.configure(text=tr("term_export"))
-        if hasattr(self, "btn_clear"):
-            self.btn_clear.configure(text=tr("term_clear"))
-        if hasattr(self, "btn_copy"):
-            self.btn_copy.configure(text=tr("term_copy"))
-        if hasattr(self, "_filtro_botones"):
-            if "ALL" in self._filtro_botones:
-                self._filtro_botones["ALL"].configure(text=tr("filter_all"))
-            if "ERROR" in self._filtro_botones:
-                self._filtro_botones["ERROR"].configure(text=f"🔴 {tr('filter_errors')}")
-            if "HW" in self._filtro_botones:
-                self._filtro_botones["HW"].configure(text=f"🔵 {tr('filter_hw')}")
-            if "TELEMETRY" in self._filtro_botones:
-                self._filtro_botones["TELEMETRY"].configure(text=f"🟣 {tr('filter_telemetry')}")
+        self.btn_history.configure(text=tr("term_logs") if self._modo_historial else tr("term_history"))
+        self.btn_export.configure(text=tr("term_export"))
+        self.btn_clear.configure(text=tr("term_clear"))
+        self.btn_copy.configure(text=tr("term_copy"))
+        self._filtro_botones["ALL"].configure(text=tr("filter_all"))
+        self._filtro_botones["ERROR"].configure(text=f"🔴 {tr('filter_errors')}")
+        self._filtro_botones["HW"].configure(text=f"🔵 {tr('filter_hw')}")
+        self._filtro_botones["TELEMETRY"].configure(text=f"🟣 {tr('filter_telemetry')}")
         if self._modo_historial:
             self._mostrar_historial()
 

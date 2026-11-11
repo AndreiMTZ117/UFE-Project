@@ -75,14 +75,6 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "Checking Hardware Feedback availability...",
         "CS": "Kontroluje se dostupnost zpětné vazby hardwaru...",
     },
-    "legend_measured": {
-        "EN": "Measured (Feedback)",
-        "CS": "Naměřeno (zpětná vazba)",
-    },
-    "legend_measured_desc": {
-        "EN": "Real mirror position from AI monitor",
-        "CS": "Skutečná poloha zrcadel z AI monitoru",
-    },
     "log_feedback_on": {
         "EN": "[Feedback] Hardware Feedback Tracking enabled.",
         "CS": "[Feedback] Sledování zpětné vazby hardwaru zapnuto.",
@@ -104,10 +96,6 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     "btn_save_recipe": {
         "EN": "💾 SAVE",
         "CS": "💾 ULOŽIT",
-    },
-    "btn_del_recipe": {
-        "EN": "🗑",
-        "CS": "🗑",
     },
     "tooltip_recipe": {
         "EN": "Active recipe: saved preset of cutting parameters (speeds, delays, tolerances).\nSelecting loads its values into the form.",
@@ -243,10 +231,6 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
     "btn_trace_box": {
         "EN": "TRACE BOX (FRAME)",
         "CS": "VYKRESLIT RÁM (RAMEC)",
-    },
-    "btn_framing_active": {
-        "EN": "FRAMING ACTIVE (G0)",
-        "CS": "OHRANIČENÍ AKTIVNÍ (G0)",
     },
     "btn_framing_stop": {
         "EN": "STOP",
@@ -384,28 +368,28 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "BASE DIMENSIONS",
         "CS": "ROZMĚRY ZÁKLADNY",
     },
-    "base_dim_width": {
-        "EN": "WIDTH (CM)",
-        "CS": "ŠÍŘKA (CM)",
-    },
-    "base_dim_height": {
-        "EN": "HEIGHT (CM)",
-        "CS": "VÝŠKA (CM)",
-    },
     "btn_apply": {
         "EN": "APPLY",
         "CS": "POUŽÍT",
     },
-    "btn_reset": {
-        "EN": "RESET",
-        "CS": "RESETOVAT",
+    "tooltip_legend_frame": {
+        "EN": "Toolpath line guide:\n• Gray: Target CAD geometry\n• Dashed Orange: Rapid traverse without laser\n• Blue: Laser-processed toolpath\n• Green dot: Real-time beam / cursor position",
+        "CS": "Vodítko drah nástroje:\n• Šedá: Cílová CAD geometrie\n• Oranžová přerušovaná: Rychlý přejezd bez laseru\n• Modrá: Vypálená dráha laseru\n• Zelený bod: Reálná poloha paprsku / kurzor",
     },
-    "tooltip_canvas_edit": {
-        "EN": "Click to edit work surface base dimensions (Width x Height).",
-        "CS": "Kliknutím upravíte rozměry základny pracovní plochy (Šířka x Výška).",
+    "tooltip_pill_x": {
+        "EN": "Width (X axis) of the physical base or workpiece, in centimeters.\nDefines the canvas scale and drawing placement area. Press Enter to apply.",
+        "CS": "Šířka (osa X) fyzické základny nebo obrobku v centimetrech.\nDefinuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití.",
+    },
+    "tooltip_pill_y": {
+        "EN": "Height (Y axis) of the physical base or workpiece, in centimeters.\nDefines the canvas scale and drawing placement area. Press Enter to apply.",
+        "CS": "Výška (osa Y) fyzické základny nebo obrobku v centimetrech.\nDefinuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití.",
     },
 
     #right panel telemetry and controls
+    "telem_header": {
+        "EN": "GALVANOMETER TELEMETRY",
+        "CS": "TELEMETRIE GALVANOMETRU",
+    },
     "gauge_trace": {
         "EN": "PATH TRACE",
         "CS": "PRŮBĚH TRASY",
@@ -462,17 +446,49 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "CALIBRATE HOME",
         "CS": "KALIBROVAT STŘED (HOME)",
     },
-    "home_cx": {
-        "EN": "CENTER X (CM)",
-        "CS": "STŘED X (CM)",
+    "tooltip_btn_start": {
+        "EN": "Start vector laser scanning with current recipe parameters.",
+        "CS": "Spustit vektorové laserové skenování s aktuálními parametry receptury.",
     },
-    "home_cy": {
-        "EN": "CENTER Y (CM)",
-        "CS": "STŘED Y (CM)",
+    "tooltip_btn_stop": {
+        "EN": "EMERGENCY STOP: aborts scanning immediately and shuts off laser.",
+        "CS": "NOUZOVÉ ZASTAVENÍ: okamžitě přeruší skenování a vypne laser.",
     },
-    "home_center_btn": {
-        "EN": "CENTER",
-        "CS": "VYCENTROVAT",
+    "tooltip_badge_status": {
+        "EN": "Current operational state of the scanning workstation.",
+        "CS": "Aktuální provozní stav skenovací pracovní stanice.",
+    },
+    "tooltip_box_vx": {
+        "EN": "Galvanometer Channel X instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.",
+        "CS": "Okamžité řídicí napětí zrcadla kanálu X galvanometru: ±0.000 V (-10.0V až +10.0V).\nÚměrné úhlu optického vychýlení.",
+    },
+    "tooltip_box_vy": {
+        "EN": "Galvanometer Channel Y instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.",
+        "CS": "Okamžité řídicí napětí zrcadla kanálu Y galvanometru: ±0.000 V (-10.0V až +10.0V).\nÚměrné úhlu optického vychýlení.",
+    },
+    "tooltip_pill_laser": {
+        "EN": "Real-time optical laser emission state:\n[LASER OFF] (rapid jumps) or ⚡ [LASER ACTIVE] (marking).",
+        "CS": "Stav optické emise laseru v reálném čase:\n[LASER OFF] (rychlé skoky) nebo ⚡ [LASER ACTIVE] (značení).",
+    },
+    "tooltip_zoom_in": {
+        "EN": "Increase laser tracking zoom (higher beam detail).",
+        "CS": "Zvýšit přiblížení sledování laseru (vyšší detail paprsku).",
+    },
+    "tooltip_zoom_out": {
+        "EN": "Decrease laser tracking zoom (wider surrounding area).",
+        "CS": "Snížit přiblížení sledování laseru (širší okolní oblast).",
+    },
+    "tooltip_home_x": {
+        "EN": "X coordinate of resting center (Home), in cm, within base area.",
+        "CS": "Souřadnice X klidového středu (Home) v cm v rámci základny.",
+    },
+    "tooltip_home_y": {
+        "EN": "Y coordinate of resting center (Home), in cm, within base area.",
+        "CS": "Souřadnice Y klidového středu (Home) v cm v rámci základny.",
+    },
+    "tooltip_home_apply": {
+        "EN": "Apply center (X, Y): moves resting point and recalculates drawing position.",
+        "CS": "Použít střed (X, Y): přesune klidový bod a přepočítá polohu kresby.",
     },
     "status_ready": {
         "EN": "READY",
@@ -772,22 +788,6 @@ _TEXTOS: Dict[str, Dict[str, str]] = {
         "EN": "Kinematic speeds must be greater than zero.",
         "CS": "Kinematické rychlosti musí být větší než nula.",
     },
-    "dlg_cancel_exec_title": {
-        "EN": "Cancel Execution",
-        "CS": "Zrušit provádění",
-    },
-    "dlg_cancel_exec_msg": {
-        "EN": "Are you sure you want to cancel the current cutting process?",
-        "CS": "Opravdu chcete zrušit aktuální proces řezání?",
-    },
-    "dlg_cancel_framing_title": {
-        "EN": "Cancel Framing",
-        "CS": "Zrušit ohraničení",
-    },
-    "dlg_cancel_framing_msg": {
-        "EN": "Are you sure you want to stop the framing process?\n\nThe optical head will be safely realigned to resting center (Home).",
-        "CS": "Opravdu chcete zastavit proces ohraničení?\n\nOptická hlava bude bezpečně vrácena do výchozího středu (Home).",
-    },
     "dlg_cycle_finished_title": {
         "EN": "Cycle Finished",
         "CS": "Cyklus dokončen",
@@ -980,9 +980,3 @@ def registrar_observador(callback: Callable[[], None]):
     """register callback observer for language changes"""
     if callback not in _observadores:
         _observadores.append(callback)
-
-
-def desregistrar_observador(callback: Callable[[], None]):
-    """unregister language change observer"""
-    if callback in _observadores:
-        _observadores.remove(callback)

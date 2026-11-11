@@ -201,7 +201,6 @@ class NIDaqController:
         #clamp voltages to protect servo amplifiers
         v_min_safe = max(AO_VOLTAGE_MIN, self.voltage_min)
         v_max_safe = min(AO_VOLTAGE_MAX, self.voltage_max)
-        voltages = np.clip(voltages, -10.0, 10.0)
         voltages = np.clip(voltages, v_min_safe, v_max_safe)
 
         gate = np.asarray(laser_gate_vector).reshape(-1)
@@ -467,8 +466,10 @@ def probe_daq_hardware(required_device: Optional[str] = None) -> Dict[str, Any]:
     """
     info: Dict[str, Any] = {
         "available": False,
+        "is_physical": False,
         "devices": [],
-        "description": "nidaqmx Python package not installed"
+        "description": "nidaqmx Python package not installed",
+        "label": "nidaqmx Python package not installed",
     }
     if not NIDAQMX_AVAILABLE or nidaqmx is None:
         return info

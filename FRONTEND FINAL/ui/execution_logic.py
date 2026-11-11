@@ -4,13 +4,34 @@
 import time
 import threading
 from tkinter import messagebox
-from .interface_bridge import HARDWARE_CONFIG
 from core.config_loader import get_volts_per_mm
 from ui.i18n import tr
 
 
 class LogicaEjecucionMixin:
     """mixin managing kinematic execution workflow and telemetry"""
+
+    def _validar_parametros_previos(self) -> bool:
+        """validate form parameters and show error or warning dialogs"""
+        tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
+        if tiene_err:
+            for err in errs:
+                self.terminal.log(f"[ERROR PARAM] {err}", "ERROR")
+            msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
+            messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
+            return False
+
+        if warns:
+            lineas_warn = [
+                f"• {w['label']}: {w['val']} {w['unit']} (Recommended: <= {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
+                for w in warns
+            ]
+            msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
+            if not messagebox.askyesno(tr("dlg_hw_limits_warn_title"), msg_warn):
+                return False
+            for w in warns:
+                self.terminal.log(f"[WARN HW] {w['label']} = {w['val']} {w['unit']} > Rec {w['rec_max']}: {w['warn_msg']}")
+        return True
 
     def _on_click_start(self):
         """start cutting or marking job after validating requirements"""
@@ -36,33 +57,11 @@ class LogicaEjecucionMixin:
                 return
 
             #3. validate kinematic parameters and hardware limits
-            if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
-                tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
-                if tiene_err:
-                    for err in errs:
-                        self.terminal.log(f"[ERROR PARAM] {err}", "ERROR")
-                    msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
-                    messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
-                    self._ejecutando_inicio = False
-                    return
-
-                if warns:
-                    lineas_warn = [
-                        f"• {w['label']}: {w['val']} {w['unit']} (Recommended: <= {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
-                        for w in warns
-                    ]
-                    msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
-                    if not messagebox.askyesno(tr("dlg_hw_limits_warn_title"), msg_warn):
-                        self._ejecutando_inicio = False
-                        return
-                    for w in warns:
-                        self.terminal.log(f"[WARN HW] {w['label']} = {w['val']} {w['unit']} > Rec {w['rec_max']}: {w['warn_msg']}")
-
-            params = self.panel_config.obtener_datos_formulario()
-            if params.get("velocidad_trazado", 0) <= 0 or params.get("velocidad_viaje", 0) <= 0:
-                messagebox.showwarning(tr("dlg_invalid_params_title"), tr("dlg_invalid_params_msg"))
+            if not self._validar_parametros_previos():
                 self._ejecutando_inicio = False
                 return
+
+            params = self.panel_config.obtener_datos_formulario()
 
             #prepare ui for active execution and clear previous markings
             self.panel_general.ocultar_frame_dxf()
@@ -85,7 +84,7 @@ class LogicaEjecucionMixin:
                 params["_receta_nombre"] = self.receta_activa.get("nombre", "Manual")
 
             self._pass_actual = 1
-            self._num_passes_total = int(params.get("num_passes", 1))
+            self._num_passes_total = int(params.get("num_pasadas", 1))
             self.puente.start_execution(
                 params_receta=params,
                 on_progress=self._cb_progreso,
@@ -100,8 +99,7 @@ class LogicaEjecucionMixin:
         """toggle pause or resume during execution"""
         is_paused = self.puente.toggle_pause()
         self.panel_derecho.set_estado_pausa(is_paused)
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_estado_pausa"):
-            self.panel_config.set_estado_pausa(is_paused)
+        self.panel_config.set_estado_pausa(is_paused)
         if is_paused:
             self.tiempo_ultima_pausa = time.time()
             if not self.puente.es_simulacion and getattr(self, "_pass_actual", 1) < getattr(self, "_num_passes_total", 1):
@@ -141,8 +139,7 @@ class LogicaEjecucionMixin:
         self.panel_derecho.actualizar_coordenadas(cx, cy)
         self.panel_derecho.redibujar_trace(pos_laser=(cx, cy))
         self.panel_derecho.set_modo_idle()
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_modo_framing"):
-            self.panel_config.set_modo_framing(False)
+        self.panel_config.set_modo_framing(False)
         self._set_bloqueo_edicion_ejecucion(False)
 
         #ensure mirrors parked at home
@@ -159,25 +156,8 @@ class LogicaEjecucionMixin:
             return
 
         #validate hardware limits
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "obtener_diagnostico_formulario"):
-            tiene_err, errs, warns = self.panel_config.obtener_diagnostico_formulario()
-            if tiene_err:
-                for err in errs:
-                    self.terminal.log(f"[ERROR PARAM] {err}", "ERROR")
-                msg = f"{tr('dlg_hw_limits_error_intro')}\n\n• " + "\n\n• ".join(errs)
-                messagebox.showerror(tr("dlg_hw_limits_error_title"), msg)
-                return
-
-            if warns:
-                lineas_warn = [
-                    f"• {w['label']}: {w['val']} {w['unit']} (Recommended: <= {w['rec_max']} {w['unit']})\n  ↳ {w['warn_msg']}"
-                    for w in warns
-                ]
-                msg_warn = f"{tr('dlg_hw_limits_warn_intro')}\n\n" + "\n\n".join(lineas_warn) + f"\n\n{tr('dlg_hw_limits_warn_prompt')}"
-                if not messagebox.askyesno(tr("dlg_hw_limits_warn_title"), msg_warn):
-                    return
-                for w in warns:
-                    self.terminal.log(f"[WARN HW] {w['label']} = {w['val']} {w['unit']} > Rec {w['rec_max']}: {w['warn_msg']}")
+        if not self._validar_parametros_previos():
+            return
 
         #1. show dashed framing box on canvas
         self.panel_general.mostrar_frame_dxf()
@@ -186,13 +166,11 @@ class LogicaEjecucionMixin:
         self._es_framing = True
         self.panel_derecho.set_modo_running()
         self.panel_derecho.set_estado_sistema("FRAMING")
-        if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_modo_framing"):
-            self.panel_config.set_modo_framing(True)
+        self.panel_config.set_modo_framing(True)
         self._set_bloqueo_edicion_ejecucion(True)
         self.tiempo_inicio_ejecucion = time.time()
         self.tiempo_pausa_acumulado = 0.0
         self.tiempo_ultima_pausa = 0.0
-        self._timer_after_id = self.after(200, self._actualizar_timer_loop)
 
         params = self.panel_config.obtener_datos_formulario()
         self.terminal.log(tr("log_framing_start"))
@@ -229,10 +207,8 @@ class LogicaEjecucionMixin:
             self.trazos_pasadas_previas.extend(self.trazos_completados)
 
         #3. fade previous passes on canvas
-        if hasattr(self.panel_general, "archivar_pasada_completada"):
-            self.panel_general.archivar_pasada_completada()
-        if hasattr(self.panel_derecho, "archivar_pasada_completada"):
-            self.panel_derecho.archivar_pasada_completada()
+        self.panel_general.archivar_pasada_completada()
+        self.panel_derecho.archivar_pasada_completada()
 
         #4. clear active traces for new pass
         self.trazos_completados.clear()
@@ -502,9 +478,7 @@ class LogicaEjecucionMixin:
             self.panel_derecho.redibujar_trace(pos_laser=(cx, cy))
 
             if es_framing:
-                self.panel_derecho.set_modo_idle()
-                if hasattr(self, "panel_config") and hasattr(self.panel_config, "set_modo_framing"):
-                    self.panel_config.set_modo_framing(False)
+                self.panel_config.set_modo_framing(False)
                 self.panel_derecho.dibujar_gauges(0.0, 0.0)
                 if estado in ("COMPLETADO", "COMPLETED"):
                     self.panel_derecho.set_estado_sistema("READY")
@@ -609,11 +583,7 @@ class LogicaEjecucionMixin:
 
     def _set_bloqueo_edicion_ejecucion(self, bloqueado: bool):
         """lock or unlock configurable controls during execution"""
-        if hasattr(self, 'barra_superior') and hasattr(self.barra_superior, 'set_bloqueo_ejecucion'):
-            self.barra_superior.set_bloqueo_ejecucion(bloqueado)
-        if hasattr(self, 'panel_config') and hasattr(self.panel_config, 'set_bloqueo_ejecucion'):
-            self.panel_config.set_bloqueo_ejecucion(bloqueado)
-        if hasattr(self, 'panel_general') and hasattr(self.panel_general, 'set_bloqueo_ejecucion'):
-            self.panel_general.set_bloqueo_ejecucion(bloqueado)
-        if hasattr(self, 'panel_derecho') and hasattr(self.panel_derecho, 'set_bloqueo_ejecucion'):
-            self.panel_derecho.set_bloqueo_ejecucion(bloqueado)
+        self.barra_superior.set_bloqueo_ejecucion(bloqueado)
+        self.panel_config.set_bloqueo_ejecucion(bloqueado)
+        self.panel_general.set_bloqueo_ejecucion(bloqueado)
+        self.panel_derecho.set_bloqueo_ejecucion(bloqueado)

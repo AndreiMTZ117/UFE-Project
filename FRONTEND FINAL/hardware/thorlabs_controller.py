@@ -4,10 +4,7 @@
 import logging
 from typing import Callable, Optional
 
-from .galvo_config import (
-    VELOCIDAD_MARCADO_MM_S, VELOCIDAD_SALTO_MM_S,
-    TIPO_INTERFAZ_DAC
-)
+from .galvo_config import TIPO_INTERFAZ_DAC
 
 logger = logging.getLogger(__name__)
 

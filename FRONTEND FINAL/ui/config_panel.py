@@ -13,62 +13,6 @@ from .constants import (
 from .i18n import tr, registrar_observador
 
 
-#parameter help tooltips
-_AYUDAS = {
-    "velocidad_trazado": (
-        "Beam speed while laser is ON (marking).\n"
-        "Lower speed = higher energy per mm (deeper mark) and slower trajectory."),
-    "velocidad_viaje": (
-        "Rapid travel speed between paths with laser OFF.\n"
-        "Higher value reduces cycle time but increases mirror stress."),
-    "duracion_min_segmento_ms": (
-        "Minimum duration for each marking segment.\n"
-        "Very short segments are extended to this duration to avoid excessive mirror acceleration."),
-    "duracion_min_viaje_ms": (
-        "Minimum duration for rapid travels with laser OFF.\n"
-        "Prevents abrupt galvanometer jumps between nearby paths."),
-    "laser_on_delay_ms": (
-        "Turn-on delay: elapsed time between mirror motion onset and optical emission.\n"
-        "Compensates for galvanometer inertia."),
-    "laser_off_delay_ms": (
-        "Turn-off delay: duration laser remains active after completing a path,\n"
-        "preventing unetched line ends."),
-    "mark_delay_ms": (
-        "Braking dwell time at the end of each marked path\n"
-        "to allow mirrors to settle before moving."),
-    "jump_delay_ms": (
-        "Settling dwell after a rapid jump (laser off)\n"
-        "before marking the next path."),
-    "modo_proceso": (
-        "Process operation mode: Cutting, Welding, or Marking.\n"
-        "Stored as a first-class attribute within each recipe preset."),
-    "num_pasadas": (
-        "Number of repeated execution passes over the vector paths.\n"
-        "Use multiple passes for cutting through thicker sheets."),
-    "cooling_delay_s": (
-        "Inter-pass thermal cooling dwell in seconds with LASER OFF.\n"
-        "Allows heat dissipation between consecutive cutting passes."),
-    "tolerancia_rdp": (
-        "Ramer-Douglas-Peucker geometric simplification tolerance in mm.\n"
-        "Set to 0.0 to disable simplification and preserve fine contours without deformation.\n"
-        "Higher values reduce node count for smoother mirror motion."),
-    "tolerancia_union": (
-        "Maximum distance between path endpoints to merge them\n"
-        "into a single continuous contour. Eliminates unnecessary jumps."),
-    "escala_dibujo": (
-        "Fraction of available area occupied by drawing (1.0 = 100%).\n"
-        "Reduce to leave clearance around workpiece."),
-    "rotacion_grados": (
-        "Drawing rotation in degrees (0° to 360°).\n"
-        "Rotates all trajectories around the geometric center."),
-    "invert_x": (
-        "Invert X: reflects horizontal coordinates across the center of workspace."),
-    "invert_y": (
-        "Invert Y: reflects vertical coordinates across the center of workspace."),
-    "swap_xy": (
-        "Swap XY: interchanges X and Y coordinates ((x, y) -> (y, x))."),
-}
-
 #multi-tier physical limits: recommended range vs physical hard limit
 _LIMITES_PARAMETROS = {
     "velocidad_trazado":        {"min": 0.01, "rec_max": 500.0,  "hard_max": 1200.0, "unit": "mm/s", "warn_key": "warn_velocidad_trazado"},
@@ -86,7 +30,6 @@ _LIMITES_PARAMETROS = {
     "escala_dibujo":            {"min": 0.01, "rec_max": 0.92,   "hard_max": 1.0,    "unit": "ratio","warn_key": "warn_escala_dibujo"},
     "rotacion_grados":          {"min": 0.0,  "rec_max": 360.0,  "hard_max": 360.0,  "unit": "°",    "warn_key": None},
 }
-_RANGOS_VALIDOS = {k: (v["min"], v["hard_max"]) for k, v in _LIMITES_PARAMETROS.items()}
 _PAREJAS_COMBINADAS = {
     "velocidad_trazado": "duracion_min_segmento_ms",
     "duracion_min_segmento_ms": "velocidad_trazado",
@@ -105,7 +48,6 @@ class PanelConfiguracion(ctk.CTkFrame):
         on_crear_receta: Optional[Callable[[], None]] = None,
         on_guardar_receta: Optional[Callable[[], None]] = None,
         on_eliminar_receta: Optional[Callable[[], None]] = None,
-        on_rotacion_cambiada: Optional[Callable[[float], None]] = None,
         on_parametro_cambiado: Optional[Callable[[str, Any], None]] = None,
         on_click_frame: Optional[Callable[[], None]] = None,
         on_click_pause_resume: Optional[Callable[[], None]] = None,
@@ -118,7 +60,6 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.on_crear_receta = on_crear_receta
         self.on_guardar_receta = on_guardar_receta
         self.on_eliminar_receta = on_eliminar_receta
-        self.on_rotacion_cambiada = on_rotacion_cambiada
         self.on_parametro_cambiado = on_parametro_cambiado
         self.on_click_frame = on_click_frame
         self.on_click_pause_resume = on_click_pause_resume
@@ -546,7 +487,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         return p_card
 
     #parameter visual validation
-    def _validar_campo(self, key: str, revalidar_pareja: bool = True):
+    def _validar_campo(self, key: str, revalidar_pareja: bool = True, notificar: bool = True):
         """validate field value against physical limits and apply visual border states"""
         if getattr(self, "bloqueado_ejecucion", False):
             return
@@ -563,33 +504,27 @@ class PanelConfiguracion(ctk.CTkFrame):
                     entry.configure(border_color=COLOR_RED, border_width=2)
                 elif val > cfg["rec_max"]:
                     entry.configure(border_color=COLOR_YELLOW, border_width=2)
-                    if self.on_parametro_cambiado:
+                    if notificar and self.on_parametro_cambiado:
                         self.on_parametro_cambiado(key, val)
-                    if key == "rotacion_grados" and self.on_rotacion_cambiada:
-                        self.on_rotacion_cambiada(val)
                 else:
                     entry.configure(border_color="#CBD5E1", border_width=1)
-                    if self.on_parametro_cambiado:
+                    if notificar and self.on_parametro_cambiado:
                         self.on_parametro_cambiado(key, val)
-                    if key == "rotacion_grados" and self.on_rotacion_cambiada:
-                        self.on_rotacion_cambiada(val)
             except ValueError:
                 entry.configure(border_color=COLOR_RED, border_width=2)
         else:
             try:
                 val = float(val_txt)
                 entry.configure(border_color="#CBD5E1", border_width=1)
-                if self.on_parametro_cambiado:
+                if notificar and self.on_parametro_cambiado:
                     self.on_parametro_cambiado(key, val)
-                if key == "rotacion_grados" and self.on_rotacion_cambiada:
-                    self.on_rotacion_cambiada(val)
             except ValueError:
                 entry.configure(border_color=COLOR_RED, border_width=2)
 
         if revalidar_pareja:
             pareja = _PAREJAS_COMBINADAS.get(key)
             if pareja:
-                self._validar_campo(pareja, revalidar_pareja=False)
+                self._validar_campo(pareja, revalidar_pareja=False, notificar=False)
             self._verificar_combinaciones_parametros()
 
     #internal callbacks
@@ -621,7 +556,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         """update process mode selected in form without overriding other parameters"""
         if getattr(self, "bloqueado_ejecucion", False):
             return
-        if hasattr(self, "opt_modo_proceso") and self.opt_modo_proceso.get() != val:
+        if self.opt_modo_proceso.get() != val:
             self.opt_modo_proceso.set(val)
 
         if self.on_parametro_cambiado:
@@ -659,11 +594,10 @@ class PanelConfiguracion(ctk.CTkFrame):
 
     def set_estado_pausa(self, pausado: bool):
         """update pause resume button text in config panel"""
-        if hasattr(self, "btn_frame_pause"):
-            if pausado:
-                self.btn_frame_pause.configure(text=f"▶ {tr('btn_resume')}", fg_color=COLOR_YELLOW)
-            else:
-                self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}", fg_color=COLOR_PAUSE)
+        if pausado:
+            self.btn_frame_pause.configure(text=f"▶ {tr('btn_resume')}", fg_color=COLOR_YELLOW)
+        else:
+            self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}", fg_color=COLOR_PAUSE)
 
     #control locking and data queries
     def set_bloqueo_ejecucion(self, bloqueado: bool):
@@ -671,21 +605,14 @@ class PanelConfiguracion(ctk.CTkFrame):
         self.bloqueado_ejecucion = bloqueado
         estado = "disabled" if bloqueado else "normal"
         self.opt_receta.configure(state=estado)
-        if hasattr(self, "btn_del_receta"):
-            self.btn_del_receta.configure(state=estado)
+        self.btn_del_receta.configure(state=estado)
         self.btn_new.configure(state=estado)
         self.btn_save.configure(state=estado)
-
-        if hasattr(self, "opt_modo_proceso"):
-            self.opt_modo_proceso.configure(state=estado)
-        if hasattr(self, "chk_invert_x"):
-            self.chk_invert_x.configure(state=estado)
-        if hasattr(self, "chk_invert_y"):
-            self.chk_invert_y.configure(state=estado)
-        if hasattr(self, "chk_swap_xy"):
-            self.chk_swap_xy.configure(state=estado)
-        if hasattr(self, "btn_frame"):
-            self.btn_frame.configure(state=estado)
+        self.opt_modo_proceso.configure(state=estado)
+        self.chk_invert_x.configure(state=estado)
+        self.chk_invert_y.configure(state=estado)
+        self.chk_swap_xy.configure(state=estado)
+        self.btn_frame.configure(state=estado)
 
         for entry in self.inputs.values():
             entry.configure(state=estado)
@@ -696,25 +623,21 @@ class PanelConfiguracion(ctk.CTkFrame):
             if key in receta:
                 entry.delete(0, "end")
                 entry.insert(0, str(receta[key]))
-                self._validar_campo(key)
+                self._validar_campo(key, revalidar_pareja=False, notificar=False)
 
         #process mode
-        if hasattr(self, "opt_modo_proceso"):
-            modo = receta.get("modo_proceso", "Cutting")
-            modo_display = tr("mode_cutting")
-            if modo in ("Welding", "Svařování"):
-                modo_display = tr("mode_welding")
-            elif modo in ("Marking", "Značení"):
-                modo_display = tr("mode_marking")
-            self.opt_modo_proceso.set(modo_display)
+        modo = receta.get("modo_proceso", "Cutting")
+        modo_display = tr("mode_cutting")
+        if modo in ("Welding", "Svařování"):
+            modo_display = tr("mode_welding")
+        elif modo in ("Marking", "Značení"):
+            modo_display = tr("mode_marking")
+        self.opt_modo_proceso.set(modo_display)
 
         #hardware check boxes
-        if hasattr(self, "var_invert_x"):
-            self.var_invert_x.set(bool(receta.get("invert_x", 0)))
-        if hasattr(self, "var_invert_y"):
-            self.var_invert_y.set(bool(receta.get("invert_y", 0)))
-        if hasattr(self, "var_swap_xy"):
-            self.var_swap_xy.set(bool(receta.get("swap_xy", 0)))
+        self.var_invert_x.set(bool(receta.get("invert_x", 0)))
+        self.var_invert_y.set(bool(receta.get("invert_y", 0)))
+        self.var_swap_xy.set(bool(receta.get("swap_xy", 0)))
 
         #rotation angle fallback
         if "rotacion_grados" in self.inputs and "rotacion_grados" not in receta:
@@ -724,7 +647,9 @@ class PanelConfiguracion(ctk.CTkFrame):
                 ang_val = "0"
             self.inputs["rotacion_grados"].delete(0, "end")
             self.inputs["rotacion_grados"].insert(0, ang_val)
-            self._validar_campo("rotacion_grados")
+            self._validar_campo("rotacion_grados", revalidar_pareja=False, notificar=False)
+
+        self._verificar_combinaciones_parametros()
 
     def obtener_datos_formulario(self) -> Dict:
         """read and cast form values to numerical and boolean types"""
@@ -763,21 +688,18 @@ class PanelConfiguracion(ctk.CTkFrame):
                 datos["tolerancia_rdp"] = 0.0
 
         #canonical process mode in english for backend and db
-        if hasattr(self, "opt_modo_proceso"):
-            modo_raw = str(self.opt_modo_proceso.get())
-            if modo_raw in ("Welding", "Svařování"):
-                datos["modo_proceso"] = "Welding"
-            elif modo_raw in ("Marking", "Značení"):
-                datos["modo_proceso"] = "Marking"
-            else:
-                datos["modo_proceso"] = "Cutting"
+        modo_raw = str(self.opt_modo_proceso.get())
+        if modo_raw in ("Welding", "Svařování"):
+            datos["modo_proceso"] = "Welding"
+        elif modo_raw in ("Marking", "Značení"):
+            datos["modo_proceso"] = "Marking"
         else:
             datos["modo_proceso"] = "Cutting"
 
         #hardware checkboxes
-        datos["invert_x"] = bool(self.var_invert_x.get()) if hasattr(self, "var_invert_x") else False
-        datos["invert_y"] = bool(self.var_invert_y.get()) if hasattr(self, "var_invert_y") else False
-        datos["swap_xy"] = bool(self.var_swap_xy.get()) if hasattr(self, "var_swap_xy") else False
+        datos["invert_x"] = bool(self.var_invert_x.get())
+        datos["invert_y"] = bool(self.var_invert_y.get())
+        datos["swap_xy"] = bool(self.var_swap_xy.get())
 
         #rotation in degrees
         if "rotacion_grados" in datos:
@@ -848,10 +770,7 @@ class PanelConfiguracion(ctk.CTkFrame):
             v_mark = float(datos.get("velocidad_trazado", 0))
             v_jump = float(datos.get("velocidad_viaje", 0))
             dur_min = float(datos.get("duracion_min_segmento_ms", 0))
-            dur_jump = float(datos.get("duracion_min_viaje_ms", 0))
             jump_delay = float(datos.get("jump_delay_ms", 0))
-            mark_delay = float(datos.get("mark_delay_ms", 0))
-            laser_on_delay = float(datos.get("laser_on_delay_ms", 0))
             cooling_delay = float(datos.get("cooling_delay_s", 0))
             num_passes = int(datos.get("num_pasadas", 1))
             rdp = float(datos.get("tolerancia_rdp", 0))
@@ -862,10 +781,7 @@ class PanelConfiguracion(ctk.CTkFrame):
         lbl_vmark = tr("param_velocidad_trazado")          # "Mark Speed"
         lbl_vjump = tr("param_velocidad_viaje")            # "Travel Speed"
         lbl_durmark = tr("param_duracion_min_segmento_ms") # "Min Mark Dwell"
-        lbl_durjump = tr("param_duracion_min_viaje_ms")    # "Min Jump Dwell"
         lbl_jdelay = tr("param_jump_delay_ms")             # "Jump Settling Delay"
-        lbl_mdelay = tr("param_mark_delay_ms")             # "Mark Settling Delay"
-        lbl_ondelay = tr("param_laser_on_delay_ms")        # "Laser ON Delay"
         lbl_passes = tr("param_num_pasadas")               # "Passes"
         lbl_cooling = tr("param_cooling_delay_s")          # "Cooling Delay"
         lbl_rdp = tr("param_tolerancia_rdp")               # "RDP Tolerance"
@@ -971,12 +887,9 @@ class PanelConfiguracion(ctk.CTkFrame):
 
     def actualizar_idioma(self):
         """update all labels dividers buttons and tooltips on language change"""
-        if hasattr(self, "lbl_sec"):
-            self.lbl_sec.configure(text=tr("recipe_parameters"))
-        if hasattr(self, "btn_new"):
-            self.btn_new.configure(text=tr("btn_new_recipe"))
-        if hasattr(self, "btn_save"):
-            self.btn_save.configure(text=tr("btn_save_recipe"))
+        self.lbl_sec.configure(text=tr("recipe_parameters"))
+        self.btn_new.configure(text=tr("btn_new_recipe"))
+        self.btn_save.configure(text=tr("btn_save_recipe"))
 
         #update dividers
         for div_key, lbl in self._div_labels.items():
@@ -999,58 +912,44 @@ class PanelConfiguracion(ctk.CTkFrame):
                 self._tooltips[key] = agregar_tooltip(p_card, ayuda)
 
         #process mode
-        if hasattr(self, "lbl_proc_title"):
-            self.lbl_proc_title.configure(text=tr("param_modo_proceso"))
-        if hasattr(self, "card_proc"):
-            agregar_tooltip(self.card_proc, tr("help_modo_proceso"))
+        self.lbl_proc_title.configure(text=tr("param_modo_proceso"))
+        agregar_tooltip(self.card_proc, tr("help_modo_proceso"))
 
-        if hasattr(self, "opt_modo_proceso"):
-            modo_actual = self.opt_modo_proceso.get()
-            canon = "Cutting"
-            if modo_actual in ("Welding", "Svařování"):
-                canon = "Welding"
-            elif modo_actual in ("Marking", "Značení"):
-                canon = "Marking"
+        modo_actual = self.opt_modo_proceso.get()
+        canon = "Cutting"
+        if modo_actual in ("Welding", "Svařování"):
+            canon = "Welding"
+        elif modo_actual in ("Marking", "Značení"):
+            canon = "Marking"
 
-            self.opt_modo_proceso.configure(values=[tr("mode_cutting"), tr("mode_welding"), tr("mode_marking")])
-            if canon == "Welding":
-                self.opt_modo_proceso.set(tr("mode_welding"))
-            elif canon == "Marking":
-                self.opt_modo_proceso.set(tr("mode_marking"))
-            else:
-                self.opt_modo_proceso.set(tr("mode_cutting"))
+        self.opt_modo_proceso.configure(values=[tr("mode_cutting"), tr("mode_welding"), tr("mode_marking")])
+        if canon == "Welding":
+            self.opt_modo_proceso.set(tr("mode_welding"))
+        elif canon == "Marking":
+            self.opt_modo_proceso.set(tr("mode_marking"))
+        else:
+            self.opt_modo_proceso.set(tr("mode_cutting"))
 
         #checkboxes and alignment
-        if hasattr(self, "lbl_axes_title"):
-            self.lbl_axes_title.configure(text=tr("sec_spatial_axes"))
-        if hasattr(self, "chk_invert_x"):
-            self.chk_invert_x.configure(text=tr("param_invert_x"))
-            agregar_tooltip(self.chk_invert_x, tr("help_invert_x"))
-        if hasattr(self, "chk_invert_y"):
-            self.chk_invert_y.configure(text=tr("param_invert_y"))
-            agregar_tooltip(self.chk_invert_y, tr("help_invert_y"))
-        if hasattr(self, "chk_swap_xy"):
-            self.chk_swap_xy.configure(text=tr("param_swap_xy"))
-            agregar_tooltip(self.chk_swap_xy, tr("help_swap_xy"))
+        self.lbl_axes_title.configure(text=tr("sec_spatial_axes"))
+        self.chk_invert_x.configure(text=tr("param_invert_x"))
+        agregar_tooltip(self.chk_invert_x, tr("help_invert_x"))
+        self.chk_invert_y.configure(text=tr("param_invert_y"))
+        agregar_tooltip(self.chk_invert_y, tr("help_invert_y"))
+        self.chk_swap_xy.configure(text=tr("param_swap_xy"))
+        agregar_tooltip(self.chk_swap_xy, tr("help_swap_xy"))
 
-        if hasattr(self, "btn_frame"):
-            self.btn_frame.configure(text=f"⛶ {tr('btn_trace_box')}")
-            agregar_tooltip(self.btn_frame, tr("tooltip_btn_frame"))
-        if hasattr(self, "btn_frame_pause"):
-            self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}")
-            agregar_tooltip(self.btn_frame_pause, tr("btn_pause_tooltip"))
-        if hasattr(self, "btn_frame_stop"):
-            self.btn_frame_stop.configure(text=f"⏹ {tr('btn_framing_stop')}")
-            agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))
+        self.btn_frame.configure(text=f"⛶ {tr('btn_trace_box')}")
+        agregar_tooltip(self.btn_frame, tr("tooltip_btn_frame"))
+        self.btn_frame_pause.configure(text=f"⏸ {tr('btn_pause')}")
+        agregar_tooltip(self.btn_frame_pause, tr("btn_pause_tooltip"))
+        self.btn_frame_stop.configure(text=f"⏹ {tr('btn_framing_stop')}")
+        agregar_tooltip(self.btn_frame_stop, tr("btn_framing_stop"))
 
-        if hasattr(self, "receta_box"):
-            agregar_tooltip(self.receta_box, tr("tooltip_recipe"))
-        if hasattr(self, "btn_del_receta"):
-            agregar_tooltip(self.btn_del_receta, tr("tooltip_btn_del"))
-        if hasattr(self, "btn_new"):
-            agregar_tooltip(self.btn_new, tr("tooltip_btn_new"))
-        if hasattr(self, "btn_save"):
-            agregar_tooltip(self.btn_save, tr("tooltip_btn_save"))
+        agregar_tooltip(self.receta_box, tr("tooltip_recipe"))
+        agregar_tooltip(self.btn_del_receta, tr("tooltip_btn_del"))
+        agregar_tooltip(self.btn_new, tr("tooltip_btn_new"))
+        agregar_tooltip(self.btn_save, tr("tooltip_btn_save"))
 
     def set_recetas(self, nombres: List[str], seleccionada: Optional[str] = None):
         """update recipe dropdown"""

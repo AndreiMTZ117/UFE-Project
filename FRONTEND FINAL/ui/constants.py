@@ -213,8 +213,17 @@ class ToolTip:
 
 
 def agregar_tooltip(widget, texto: str, **kwargs) -> ToolTip:
-    """attach hover tooltip to widget"""
-    return ToolTip(widget, texto, **kwargs)
+    """attach hover tooltip to widget or update existing tooltip text"""
+    existente = getattr(widget, "_tooltip_inst", None)
+    if isinstance(existente, ToolTip):
+        existente.texto = texto
+        return existente
+    inst = ToolTip(widget, texto, **kwargs)
+    try:
+        setattr(widget, "_tooltip_inst", inst)
+    except Exception:
+        pass
+    return inst
 
 
 def cargar_fuentes_windows():

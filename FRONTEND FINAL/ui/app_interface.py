@@ -80,8 +80,7 @@ class AppLaserCTk(
         #initial data loading
         self._cargar_datos_iniciales()
 
-        #set initial limits center and dimensions
-        self._aplicar_limites_hardware()
+        #set initial center and dimensions
         self._iniciar_feedback_ui()
         self.panel_derecho.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
         self.panel_general.set_centro(self.puente.centro_cm_x, self.puente.centro_cm_y)
@@ -163,7 +162,6 @@ class AppLaserCTk(
             on_crear_receta=self._on_crear_receta,
             on_guardar_receta=self._on_guardar_receta,
             on_eliminar_receta=self._on_eliminar_receta,
-            on_rotacion_cambiada=self._on_rotacion_cambiada,
             on_parametro_cambiado=self._on_parametro_cambiado,
             on_click_frame=self._on_click_frame,
             on_click_pause_resume=self._on_click_pause_resume,
@@ -230,16 +228,14 @@ class AppLaserCTk(
 
     def _on_viewport_zoom_cambiado(self, bbox_cm: Optional[Tuple[float, float, float, float]]):
         """synchronize zoom camera frame on main canvas"""
-        if hasattr(self, "panel_general"):
-            if bbox_cm is not None:
-                self.panel_general.actualizar_frustum_zoom(bbox_cm)
-            else:
-                self.panel_general.ocultar_frustum_zoom()
+        if bbox_cm is not None:
+            self.panel_general.actualizar_frustum_zoom(bbox_cm)
+        else:
+            self.panel_general.ocultar_frustum_zoom()
 
     def _on_idioma_cambiado(self, nuevo_idioma: str):
         """handle language change notification"""
-        if hasattr(self, 'terminal'):
-            self.terminal.log(tr("log_lang_changed"))
+        self.terminal.log(tr("log_lang_changed"))
 
 
 

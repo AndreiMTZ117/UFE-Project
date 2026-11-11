@@ -14,7 +14,7 @@ from .constants import (
     FONT_TEACHERS, FONT_SEGOE, BRUTAL_CORNER, BRUTAL_BORDER,
     agregar_tooltip
 )
-from .i18n import tr, registrar_observador, obtener_idioma
+from .i18n import tr, registrar_observador
 
 
 class PanelGeneral(ctk.CTkFrame):
@@ -136,14 +136,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.lbl_legend_pointer = ctk.CTkLabel(box_pointer, text=tr("legend_pointer"), font=f_leg, text_color=COLOR_TEXT)
         self.lbl_legend_pointer.pack(side="left", padx=(3, 2))
 
-        agregar_tooltip(
-            self.legend_frame,
-            "Toolpath line guide:\n"
-            "• Gray: Target CAD geometry\n"
-            "• Dashed Orange: Rapid traverse without laser\n"
-            "• Blue: Laser-processed toolpath\n"
-            "• Green dot: Real-time beam / cursor position"
-        )
+        agregar_tooltip(self.legend_frame, tr("tooltip_legend_frame"))
 
         #compact dropdown button
         self.btn_legend_toggle = ctk.CTkButton(
@@ -203,9 +196,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.entry_dim_x.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
 
         ctk.CTkLabel(self.pill_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left", padx=(2, 8), pady=2)
-        agregar_tooltip(self.pill_x, "Width (X axis) of the physical base or workpiece, in centimeters.\n"
-                                     "Defines the canvas scale and drawing placement area. "
-                                     "Press Enter to apply.")
+        agregar_tooltip(self.pill_x, tr("tooltip_pill_x"))
 
         #editable y dimension
         self.pill_y = ctk.CTkFrame(
@@ -235,9 +226,7 @@ class PanelGeneral(ctk.CTkFrame):
         self.entry_dim_y.bind("<FocusOut>", lambda e: self._cb_dimensiones_cambiadas())
 
         ctk.CTkLabel(self.pill_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left", padx=(2, 8), pady=2)
-        agregar_tooltip(self.pill_y, "Height (Y axis) of the physical base or workpiece, in centimeters.\n"
-                                     "Defines the canvas scale and drawing placement area. "
-                                     "Press Enter to apply.")
+        agregar_tooltip(self.pill_y, tr("tooltip_pill_y"))
 
         #canvas card container
         self.card_general = ctk.CTkFrame(
@@ -311,13 +300,6 @@ class PanelGeneral(ctk.CTkFrame):
         except Exception:
             pass
 
-    def set_limites_hardware(self, x_min: float, x_max: float, y_min: float, y_max: float):
-        """set absolute hardware limits for canvas mapping"""
-        self._maq_x_min = x_min
-        self._maq_x_max = x_max
-        self._maq_y_min = y_min
-        self._maq_y_max = y_max
-
     def set_centro(self, x: float, y: float):
         """set physical home center coordinates"""
         try:
@@ -371,16 +353,16 @@ class PanelGeneral(ctk.CTkFrame):
         try:
             rango_w = float(self.ancho_base_cm)
             if rango_w <= 0 or math.isnan(rango_w) or math.isinf(rango_w):
-                rango_w = 38.7
+                rango_w = 37.5
         except Exception:
-            rango_w = 38.7
+            rango_w = 37.5
 
         try:
             rango_h = float(self.alto_base_cm)
             if rango_h <= 0 or math.isnan(rango_h) or math.isinf(rango_h):
-                rango_h = 39.5
+                rango_h = 38.3
         except Exception:
-            rango_h = 39.5
+            rango_h = 38.3
 
         #strict 1 to 1 isometric scale
         self._escala_pixel = min(avail_w / rango_w, avail_h / rango_h) * 0.96
@@ -544,10 +526,15 @@ class PanelGeneral(ctk.CTkFrame):
 
     def mostrar_frame_dxf(self, bbox_cm: Optional[Tuple[float, float, float, float]] = None):
         """compute and display dxf bounding box framing overlay"""
-        if bbox_cm is not None:
-            self.frame_box_cm = bbox_cm
-            self._dibujar_frame_dxf(self.canvas)
-            return
+        if bbox_cm is None:
+            pts = [pt for trazo in self.trazos_actuales for pt in trazo if pt and len(pt) >= 2]
+            if not pts:
+                return
+            xs = [pt[0] for pt in pts]
+            ys = [pt[1] for pt in pts]
+            bbox_cm = (min(xs), min(ys), max(xs), max(ys))
+        self.frame_box_cm = bbox_cm
+        self._dibujar_frame_dxf(self.canvas)
 
     def _dibujar_frame_dxf(self, c: tk.Canvas):
         """draw dxf bounding box framing in dashed orange"""
@@ -904,21 +891,18 @@ class PanelGeneral(ctk.CTkFrame):
             self.legend_popup.lift()
         except Exception:
             pass
-        if hasattr(self, "btn_legend_toggle"):
-            self.btn_legend_toggle.configure(
-                fg_color=COLOR_YELLOW,
-                text=f"{tr('legend_btn_guide')}"
-            )
+        self.btn_legend_toggle.configure(
+            fg_color=COLOR_YELLOW,
+            text=f"{tr('legend_btn_guide')}"
+        )
 
     def _cerrar_popup_leyenda(self):
         self._popup_abierto = False
-        if hasattr(self, "legend_popup"):
-            self.legend_popup.place_forget()
-        if hasattr(self, "btn_legend_toggle"):
-            self.btn_legend_toggle.configure(
-                fg_color=COLOR_CARD,
-                text=f"{tr('legend_btn_guide')}"
-            )
+        self.legend_popup.place_forget()
+        self.btn_legend_toggle.configure(
+            fg_color=COLOR_CARD,
+            text=f"{tr('legend_btn_guide')}"
+        )
 
     def _on_header_configure(self, event):
         ancho = event.width
@@ -943,74 +927,28 @@ class PanelGeneral(ctk.CTkFrame):
 
     def actualizar_idioma(self):
         """update central panel titles legends and tooltips on language change"""
-        if hasattr(self, "lbl_title"):
-            self.lbl_title.configure(text=tr("canvas_title"))
-        if hasattr(self, "lbl_legend_guide"):
-            self.lbl_legend_guide.configure(text=tr("legend_guide"))
-        if hasattr(self, "lbl_legend_jump"):
-            self.lbl_legend_jump.configure(text=tr("legend_jump"))
-        if hasattr(self, "lbl_legend_trail"):
-            self.lbl_legend_trail.configure(text=tr("legend_trace"))
-        if hasattr(self, "lbl_legend_pointer"):
-            self.lbl_legend_pointer.configure(text=tr("legend_pointer"))
+        self.lbl_title.configure(text=tr("canvas_title"))
+        self.lbl_legend_guide.configure(text=tr("legend_guide"))
+        self.lbl_legend_jump.configure(text=tr("legend_jump"))
+        self.lbl_legend_trail.configure(text=tr("legend_trace"))
+        self.lbl_legend_pointer.configure(text=tr("legend_pointer"))
 
-        if hasattr(self, "btn_legend_toggle"):
-            self.btn_legend_toggle.configure(text=f"{tr('legend_btn_guide')}")
-            agregar_tooltip(self.btn_legend_toggle, tr("legend_btn_tooltip"))
+        self.btn_legend_toggle.configure(text=f"{tr('legend_btn_guide')}")
+        agregar_tooltip(self.btn_legend_toggle, tr("legend_btn_tooltip"))
 
-        if hasattr(self, "lbl_popup_title"):
-            self.lbl_popup_title.configure(text=f"ℹ {tr('legend_popup_title')}")
-        if hasattr(self, "lbl_pop_guide"):
-            self.lbl_pop_guide.configure(text=tr("legend_guide"))
-        if hasattr(self, "lbl_pop_guide_desc"):
-            self.lbl_pop_guide_desc.configure(text=tr("legend_guide_desc"))
-        if hasattr(self, "lbl_pop_jump"):
-            self.lbl_pop_jump.configure(text=tr("legend_jump"))
-        if hasattr(self, "lbl_pop_jump_desc"):
-            self.lbl_pop_jump_desc.configure(text=tr("legend_jump_desc"))
-        if hasattr(self, "lbl_pop_trail"):
-            self.lbl_pop_trail.configure(text=tr("legend_trace"))
-        if hasattr(self, "lbl_pop_trail_desc"):
-            self.lbl_pop_trail_desc.configure(text=tr("legend_trace_desc"))
-        if hasattr(self, "lbl_pop_pointer"):
-            self.lbl_pop_pointer.configure(text=tr("legend_pointer"))
-        if hasattr(self, "lbl_pop_pointer_desc"):
-            self.lbl_pop_pointer_desc.configure(text=tr("legend_pointer_desc"))
+        self.lbl_popup_title.configure(text=f"ℹ {tr('legend_popup_title')}")
+        self.lbl_pop_guide.configure(text=tr("legend_guide"))
+        self.lbl_pop_guide_desc.configure(text=tr("legend_guide_desc"))
+        self.lbl_pop_jump.configure(text=tr("legend_jump"))
+        self.lbl_pop_jump_desc.configure(text=tr("legend_jump_desc"))
+        self.lbl_pop_trail.configure(text=tr("legend_trace"))
+        self.lbl_pop_trail_desc.configure(text=tr("legend_trace_desc"))
+        self.lbl_pop_pointer.configure(text=tr("legend_pointer"))
+        self.lbl_pop_pointer_desc.configure(text=tr("legend_pointer_desc"))
 
-        if hasattr(self, "lbl_area"):
-            self.lbl_area.configure(text=f"{tr('base_dim_title')}:")
+        self.lbl_area.configure(text=f"{tr('base_dim_title')}:")
 
-        if hasattr(self, "legend_frame"):
-            agregar_tooltip(
-                self.legend_frame,
-                "Toolpath line guide:\n"
-                "• Gray: Target CAD geometry\n"
-                "• Dashed Orange: Rapid traverse without laser\n"
-                "• Blue: Laser-processed toolpath\n"
-                "• Green dot: Real-time beam / cursor position"
-                if obtener_idioma() == "EN" else
-                "Vodítko drah nástroje:\n"
-                "• Šedá: Cílová CAD geometrie\n"
-                "• Oranžová přerušovaná: Rychlý přejezd bez laseru\n"
-                "• Modrá: Vypálená dráha laseru\n"
-                "• Zelený bod: Reálná poloha paprsku / kurzor"
-            )
-        if hasattr(self, "pill_x"):
-            agregar_tooltip(
-                self.pill_x,
-                "Width (X axis) of the physical base or workpiece, in centimeters.\n"
-                "Defines the canvas scale and drawing placement area. Press Enter to apply."
-                if obtener_idioma() == "EN" else
-                "Šířka (osa X) fyzické základny nebo obrobku v centimetrech.\n"
-                "Definuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití."
-            )
-        if hasattr(self, "pill_y"):
-            agregar_tooltip(
-                self.pill_y,
-                "Height (Y axis) of the physical base or workpiece, in centimeters.\n"
-                "Defines the canvas scale and drawing placement area. Press Enter to apply."
-                if obtener_idioma() == "EN" else
-                "Výška (osa Y) fyzické základny nebo obrobku v centimetrech.\n"
-                "Definuje měřítko plátna a oblast umístění kresby. Stiskněte Enter pro použití."
-            )
+        agregar_tooltip(self.legend_frame, tr("tooltip_legend_frame"))
+        agregar_tooltip(self.pill_x, tr("tooltip_pill_x"))
+        agregar_tooltip(self.pill_y, tr("tooltip_pill_y"))
 

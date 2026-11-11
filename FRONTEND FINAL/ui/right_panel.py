@@ -52,18 +52,18 @@ class PanelDerecho(ctk.CTkFrame):
         self.trazos_completados: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self.trazos_pasadas_previas: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self._trazos_bboxes: Optional[List[Tuple[float, float, float, float]]] = None
-        self.centro_home = (19.35, 19.75)
-        self.pos_laser_actual = (19.35, 19.75)
+        self.centro_home = (18.75, 19.15)
+        self.pos_laser_actual = (18.75, 19.15)
         self._ultimo_estado = "READY"
 
         #free navigation and tracking camera mode
         self.modo_auto_centrado = True
-        self.centro_camara_cm = (19.35, 19.75)
+        self.centro_camara_cm = (18.75, 19.15)
         self._pan_iniciado = False
         self._pan_arrastrando = False
         self._pan_start_x = 0
         self._pan_start_y = 0
-        self._pan_cam_start = (19.35, 19.75)
+        self._pan_cam_start = (18.75, 19.15)
 
         self.pct_trace = 0.0
         self.pct_total = 0.0
@@ -121,7 +121,7 @@ class PanelDerecho(ctk.CTkFrame):
             height=42
         )
         self.btn_start.pack(fill="both", expand=True)
-        agregar_tooltip(self.btn_start, "Start vector laser scanning with current recipe parameters.")
+        agregar_tooltip(self.btn_start, tr("tooltip_btn_start"))
 
         #running mode widgets
         self.running_box = ctk.CTkFrame(self.action_box, fg_color="transparent")
@@ -159,7 +159,7 @@ class PanelDerecho(ctk.CTkFrame):
             height=42
         )
         self.btn_stop.pack(side="left", padx=(0, 6))
-        agregar_tooltip(self.btn_stop, "EMERGENCY STOP: aborts scanning immediately and shuts off laser.")
+        agregar_tooltip(self.btn_stop, tr("tooltip_btn_stop"))
 
         self.timer_box = ctk.CTkFrame(
             self.running_box,
@@ -192,13 +192,14 @@ class PanelDerecho(ctk.CTkFrame):
         header_telem = ctk.CTkFrame(self.card_telemetria, fg_color="transparent")
         header_telem.pack(fill="x", padx=8, pady=(6, 2))
 
-        ctk.CTkLabel(
+        self.lbl_telem_header = ctk.CTkLabel(
             header_telem,
-            text="GALVANOMETER TELEMETRY",
+            text=tr("telem_header"),
             font=self.f_head,
             text_color=COLOR_TEXT,
             anchor="w"
-        ).pack(side="left")
+        )
+        self.lbl_telem_header.pack(side="left")
 
         #system status badge
         self.badge_status = ctk.CTkLabel(
@@ -212,7 +213,7 @@ class PanelDerecho(ctk.CTkFrame):
             pady=1
         )
         self.badge_status.pack(side="right")
-        agregar_tooltip(self.badge_status, "Current operational state of the scanning workstation.")
+        agregar_tooltip(self.badge_status, tr("tooltip_badge_status"))
 
         #dmm voltage boxes
         row_dmm = ctk.CTkFrame(self.card_telemetria, fg_color="transparent")
@@ -245,7 +246,7 @@ class PanelDerecho(ctk.CTkFrame):
             text_color=COLOR_TEXT
         )
         self.lbl_vx.pack(anchor="e", padx=6, pady=(0, 2))
-        agregar_tooltip(self.box_vx, "Galvanometer Channel X instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.")
+        agregar_tooltip(self.box_vx, tr("tooltip_box_vx"))
 
         #dmm y box
         self.box_vy = ctk.CTkFrame(
@@ -274,7 +275,7 @@ class PanelDerecho(ctk.CTkFrame):
             text_color=COLOR_TEXT
         )
         self.lbl_vy.pack(anchor="e", padx=6, pady=(0, 2))
-        agregar_tooltip(self.box_vy, "Galvanometer Channel Y instantaneous mirror drive voltage: ±0.000 V (-10.0V to +10.0V).\nProportional to optical deflection angle.")
+        agregar_tooltip(self.box_vy, tr("tooltip_box_vy"))
 
         #laser emission state pill
         self.pill_laser = ctk.CTkFrame(
@@ -295,7 +296,7 @@ class PanelDerecho(ctk.CTkFrame):
             text_color=COLOR_MUTED
         )
         self.lbl_laser_state.place(relx=0.5, rely=0.5, anchor="center")
-        agregar_tooltip(self.pill_laser, "Real-time optical laser emission state:\n[LASER OFF] (rapid jumps) or ⚡ [LASER ACTIVE] (marking).")
+        agregar_tooltip(self.pill_laser, tr("tooltip_pill_laser"))
 
         #circular progress gauges
         self.card_gauges = ctk.CTkFrame(
@@ -344,8 +345,8 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold
         )
         self.btn_auto_center.pack(side="right", padx=(0, 6))
-        agregar_tooltip(self.btn_zoom_mas, "Increase laser tracking zoom (higher beam detail).")
-        agregar_tooltip(self.btn_zoom_menos, "Decrease laser tracking zoom (wider surrounding area).")
+        agregar_tooltip(self.btn_zoom_mas, tr("tooltip_zoom_in"))
+        agregar_tooltip(self.btn_zoom_menos, tr("tooltip_zoom_out"))
         agregar_tooltip(self.btn_auto_center, tr("btn_auto_center_tooltip"))
         self._actualizar_titulo_zoom()
 
@@ -377,7 +378,7 @@ class PanelDerecho(ctk.CTkFrame):
 
         self.lbl_coord_live = ctk.CTkLabel(
             self.coord_badge,
-            text="x = 19.35 cm  |  y = 19.75 cm",
+            text="x = 18.75 cm  |  y = 19.15 cm",
             font=self.f_bold,
             text_color=COLOR_TEXT,
             padx=10,
@@ -417,7 +418,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_x.insert(0, "19.35")
+        self.entry_home_x.insert(0, "18.75")
         self.entry_home_x.pack(side="left", padx=4)
         self.entry_home_x.bind("<Return>", lambda e: self._cb_aplicar_centro())
         ctk.CTkLabel(row_x, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
@@ -437,7 +438,7 @@ class PanelDerecho(ctk.CTkFrame):
             font=self.f_bold,
             text_color=COLOR_TEXT
         )
-        self.entry_home_y.insert(0, "19.75")
+        self.entry_home_y.insert(0, "19.15")
         self.entry_home_y.pack(side="left", padx=4)
         self.entry_home_y.bind("<Return>", lambda e: self._cb_aplicar_centro())
         ctk.CTkLabel(row_y, text="cm", font=self.f_regular, text_color=COLOR_TEXT).pack(side="left")
@@ -458,9 +459,9 @@ class PanelDerecho(ctk.CTkFrame):
         )
         self.btn_set_home.pack(fill="x", padx=12, pady=(4, 8))
 
-        agregar_tooltip(self.entry_home_x, "X coordinate of resting center (Home), in cm, within base area.")
-        agregar_tooltip(self.entry_home_y, "Y coordinate of resting center (Home), in cm, within base area.")
-        agregar_tooltip(self.btn_set_home, "Apply center (X, Y): moves resting point and recalculates drawing position.")
+        agregar_tooltip(self.entry_home_x, tr("tooltip_home_x"))
+        agregar_tooltip(self.entry_home_y, tr("tooltip_home_y"))
+        agregar_tooltip(self.btn_set_home, tr("tooltip_home_apply"))
 
     #laser tracking zoom
     def _actualizar_titulo_zoom(self):
@@ -487,11 +488,10 @@ class PanelDerecho(ctk.CTkFrame):
         self._notificar_viewport()
 
     def _actualizar_estilo_boton_centrado(self):
-        if hasattr(self, "btn_auto_center"):
-            if self.modo_auto_centrado:
-                self.btn_auto_center.configure(fg_color=COLOR_YELLOW, hover_color=COLOR_YELLOW)
-            else:
-                self.btn_auto_center.configure(fg_color=COLOR_CARD, hover_color=COLOR_YELLOW)
+        if self.modo_auto_centrado:
+            self.btn_auto_center.configure(fg_color=COLOR_YELLOW, hover_color=COLOR_YELLOW)
+        else:
+            self.btn_auto_center.configure(fg_color=COLOR_CARD, hover_color=COLOR_YELLOW)
 
     def _on_pan_start(self, event):
         self._pan_iniciado = True
@@ -635,10 +635,8 @@ class PanelDerecho(ctk.CTkFrame):
         """lock or unlock right panel controls during execution"""
         self.bloqueado_ejecucion = bloqueado
         estado = "disabled" if bloqueado else "normal"
-        if hasattr(self, "btn_start"):
-            self.btn_start.configure(state=estado)
-        if hasattr(self, "btn_home"):
-            self.btn_home.configure(state=estado)
+        self.btn_start.configure(state=estado)
+        self.btn_home.configure(state=estado)
 
     #control modes and telemetry states
     def set_modo_running(self):
@@ -871,7 +869,7 @@ class PanelDerecho(ctk.CTkFrame):
                     self._trazos_bboxes = bboxes
 
                 #rapid jump g0 lines
-                hx, hy = getattr(self, "centro_home", (19.35, 19.75))
+                hx, hy = getattr(self, "centro_home", (18.75, 19.15))
                 pos_salto = (hx, hy)
                 viajes = []
                 for ruta in self.trazos_actuales:
@@ -925,37 +923,25 @@ class PanelDerecho(ctk.CTkFrame):
                     if len(coords) >= 4:
                         c.create_line(coords, fill=COLOR_VECTOR_GRAY, width=3.0, capstyle="round")
 
-                #spatial culling for previous passes
-                for segmento in getattr(self, "trazos_pasadas_previas", []):
-                    if not segmento or len(segmento) < 2:
-                        continue
-                    p1, p2 = segmento[0], segmento[1]
-                    if not p1 or not p2 or len(p1) < 2 or len(p2) < 2:
-                        continue
-                    if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x) or \
-                       (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
-                        continue
-                    px1 = cx + (p1[0] - cam_x) * zoom_factor
-                    py1 = cy - (p1[1] - cam_y) * zoom_factor
-                    px2 = cx + (p2[0] - cam_x) * zoom_factor
-                    py2 = cy - (p2[1] - cam_y) * zoom_factor
-                    c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE_FADED, width=3.5, capstyle="round")
-
-                #spatial culling for completed segments of active pass
-                for segmento in self.trazos_completados:
-                    if not segmento or len(segmento) < 2:
-                        continue
-                    p1, p2 = segmento[0], segmento[1]
-                    if not p1 or not p2 or len(p1) < 2 or len(p2) < 2:
-                        continue
-                    if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x) or \
-                       (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
-                        continue
-                    px1 = cx + (p1[0] - cam_x) * zoom_factor
-                    py1 = cy - (p1[1] - cam_y) * zoom_factor
-                    px2 = cx + (p2[0] - cam_x) * zoom_factor
-                    py2 = cy - (p2[1] - cam_y) * zoom_factor
-                    c.create_line(px1, py1, px2, py2, fill=COLOR_BLUE, width=4.5, capstyle="round")
+                #spatial culling for previous passes and completed segments of active pass
+                for lista_segs, color_seg, ancho_seg in (
+                    (getattr(self, "trazos_pasadas_previas", []), COLOR_BLUE_FADED, 3.5),
+                    (self.trazos_completados, COLOR_BLUE, 4.5),
+                ):
+                    for segmento in lista_segs:
+                        if not segmento or len(segmento) < 2:
+                            continue
+                        p1, p2 = segmento[0], segmento[1]
+                        if not p1 or not p2 or len(p1) < 2 or len(p2) < 2:
+                            continue
+                        if (p1[0] < min_x and p2[0] < min_x) or (p1[0] > max_x and p2[0] > max_x) or \
+                           (p1[1] < min_y and p2[1] < min_y) or (p1[1] > max_y and p2[1] > max_y):
+                            continue
+                        px1 = cx + (p1[0] - cam_x) * zoom_factor
+                        py1 = cy - (p1[1] - cam_y) * zoom_factor
+                        px2 = cx + (p2[0] - cam_x) * zoom_factor
+                        py2 = cy - (p2[1] - cam_y) * zoom_factor
+                        c.create_line(px1, py1, px2, py2, fill=color_seg, width=ancho_seg, capstyle="round")
 
                 #live segment from last drawn anchor to laser pointer
                 if self.ancla_vivo is not None and len(self.ancla_vivo) >= 2:
@@ -977,29 +963,32 @@ class PanelDerecho(ctk.CTkFrame):
 
     def actualizar_idioma(self):
         """update labels buttons tooltips and gauges on language change"""
-        if hasattr(self, "btn_start"):
-            self.btn_start.configure(text=tr("btn_start"))
-        if hasattr(self, "btn_stop"):
-            self.btn_stop.configure(text=tr("btn_stop"))
-        if hasattr(self, "btn_pause_resume"):
-            if getattr(self, "_esta_pausado", False):
-                self.btn_pause_resume.configure(text=tr("btn_resume"))
-            else:
-                self.btn_pause_resume.configure(text=tr("btn_pause"))
-            if hasattr(self, "tooltip_pause") and self.tooltip_pause:
-                self.tooltip_pause.texto = tr("btn_resume_tooltip") if getattr(self, "_esta_pausado", False) else tr("btn_pause_tooltip")
-        if hasattr(self, "btn_home"):
-            agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
-        if hasattr(self, "btn_auto_center"):
-            agregar_tooltip(self.btn_auto_center, tr("btn_auto_center_tooltip"))
-        if hasattr(self, "btn_set_home"):
-            self.btn_set_home.configure(text=tr("btn_apply"))
-        if hasattr(self, "lbl_center_title"):
-            self.lbl_center_title.configure(text=tr("home_title"))
-        if hasattr(self, "lbl_chan_x"):
-            self.lbl_chan_x.configure(text=tr("dmm_x"))
-        if hasattr(self, "lbl_chan_y"):
-            self.lbl_chan_y.configure(text=tr("dmm_y"))
+        self.btn_start.configure(text=tr("btn_start"))
+        agregar_tooltip(self.btn_start, tr("tooltip_btn_start"))
+        self.btn_stop.configure(text=tr("btn_stop"))
+        agregar_tooltip(self.btn_stop, tr("tooltip_btn_stop"))
+        if getattr(self, "_esta_pausado", False):
+            self.btn_pause_resume.configure(text=tr("btn_resume"))
+        else:
+            self.btn_pause_resume.configure(text=tr("btn_pause"))
+        if hasattr(self, "tooltip_pause") and self.tooltip_pause:
+            self.tooltip_pause.texto = tr("btn_resume_tooltip") if getattr(self, "_esta_pausado", False) else tr("btn_pause_tooltip")
+        self.lbl_telem_header.configure(text=tr("telem_header"))
+        agregar_tooltip(self.badge_status, tr("tooltip_badge_status"))
+        agregar_tooltip(self.box_vx, tr("tooltip_box_vx"))
+        agregar_tooltip(self.box_vy, tr("tooltip_box_vy"))
+        agregar_tooltip(self.pill_laser, tr("tooltip_pill_laser"))
+        agregar_tooltip(self.btn_zoom_mas, tr("tooltip_zoom_in"))
+        agregar_tooltip(self.btn_zoom_menos, tr("tooltip_zoom_out"))
+        agregar_tooltip(self.btn_home, tr("btn_home_tooltip"))
+        agregar_tooltip(self.btn_auto_center, tr("btn_auto_center_tooltip"))
+        self.btn_set_home.configure(text=tr("btn_apply"))
+        agregar_tooltip(self.entry_home_x, tr("tooltip_home_x"))
+        agregar_tooltip(self.entry_home_y, tr("tooltip_home_y"))
+        agregar_tooltip(self.btn_set_home, tr("tooltip_home_apply"))
+        self.lbl_center_title.configure(text=tr("home_title"))
+        self.lbl_chan_x.configure(text=tr("dmm_x"))
+        self.lbl_chan_y.configure(text=tr("dmm_y"))
 
         self._actualizar_titulo_zoom()
         self.dibujar_gauges()
